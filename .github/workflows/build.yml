@@ -36,6 +36,12 @@ jobs:
             libffi-dev \
             libssl-dev
 
+      - name: Install Android Build Tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "build-tools;35.0.0"
+
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
