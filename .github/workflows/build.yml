@@ -55,6 +55,9 @@ jobs:
           ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
+          ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+            ~/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
+
           ln -sfn "$ANDROID_HOME/platform-tools" \
             ~/.buildozer/android/platform/android-sdk/platform-tools
 
@@ -63,6 +66,14 @@ jobs:
 
           ln -sfn "$ANDROID_HOME/build-tools" \
             ~/.buildozer/android/platform/android-sdk/build-tools
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+          echo "SDK contents:"
+          ls -la ~/.buildozer/android/platform/android-sdk
+
+          echo "sdkmanager:"
+          ls -la ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
       - name: Build APK
         run: |
