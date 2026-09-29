@@ -36,11 +36,20 @@ jobs:
             libffi-dev \
             libssl-dev
 
-      - name: Install Android Build Tools
+      - name: Install Android SDK tools
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
+            "platforms;android-35" \
             "build-tools;35.0.0"
+
+      - name: Configure Buildozer
+        run: |
+          mkdir -p ~/.buildozer/android/platform/android-sdk
+          ln -sfn "$ANDROID_HOME/platform-tools" ~/.buildozer/android/platform/android-sdk/platform-tools
+          ln -sfn "$ANDROID_HOME/platforms" ~/.buildozer/android/platform/android-sdk/platforms
+          ln -sfn "$ANDROID_HOME/build-tools" ~/.buildozer/android/platform/android-sdk/build-tools
+          ln -sfn "$ANDROID_HOME/cmdline-tools" ~/.buildozer/android/platform/android-sdk/cmdline-tools
 
       - name: Install Buildozer
         run: |
@@ -48,7 +57,9 @@ jobs:
           python -m pip install buildozer cython==0.29.37
 
       - name: Build APK
-        run: buildozer android debug
+        run: |
+          buildozer android clean
+          buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
