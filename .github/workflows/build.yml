@@ -31,17 +31,26 @@ jobs:
             autoconf \
             automake \
             libtool \
+            libtool-bin \
+            m4 \
             pkg-config \
             zlib1g-dev \
             libffi-dev \
             libssl-dev
+
+      - name: Prepare Autotools
+        run: |
+          libtoolize --force --copy
+          autoreconf --version
+          autoconf --version
+          automake --version
+          libtool --version
 
       - name: Install Android Build Tools
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-33" \
-            "platforms;android-35" \
             "build-tools;35.0.0"
 
       - name: Install Buildozer
@@ -67,14 +76,6 @@ jobs:
 
           ln -sfn "$ANDROID_HOME/build-tools" \
             ~/.buildozer/android/platform/android-sdk/build-tools
-
-          echo "ANDROID_HOME=$ANDROID_HOME"
-
-          echo "SDK contents:"
-          ls -la ~/.buildozer/android/platform/android-sdk
-
-          echo "sdkmanager:"
-          ls -la ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
       - name: Build APK
         run: |
