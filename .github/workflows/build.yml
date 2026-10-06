@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -22,6 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             build-essential \
             git \
@@ -32,21 +33,19 @@ jobs:
             automake \
             libtool \
             libtool-bin \
-            m4 \
+            libltdl-dev \
             pkg-config \
             zlib1g-dev \
             libffi-dev \
-            libssl-dev
+            libssl-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo6 \
+            cmake \
+            gettext \
+            autopoint
 
-      - name: Prepare Autotools
-        run: |
-          libtoolize --force --copy
-          autoreconf --version
-          autoconf --version
-          automake --version
-          libtool --version
-
-      - name: Install Android Build Tools
+      - name: Install Android SDK packages
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
@@ -58,7 +57,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install buildozer cython==0.29.37
 
-      - name: Configure Buildozer
+      - name: Configure Buildozer SDK
         run: |
           mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin
 
@@ -79,6 +78,7 @@ jobs:
 
       - name: Build APK
         run: |
+          buildozer android clean
           buildozer android debug
 
       - name: Upload APK
@@ -86,3 +86,4 @@ jobs:
         with:
           name: JARVIS-APK
           path: bin/*.apk
+          if-no-files-found: error
