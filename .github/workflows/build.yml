@@ -6,21 +6,27 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
+          set -e
+
           sudo apt-get update
 
           sudo apt-get install -y \
@@ -45,44 +51,167 @@ jobs:
             gettext \
             autopoint
 
+      - name: Check Java and Android SDK
+        run: |
+          set -e
+
+          echo "===== JAVA ====="
+          java -version
+
+          echo "===== PYTHON ====="
+          python --version
+
+          echo "===== PIP ====="
+          python -m pip --version
+
+          echo "===== ANDROID HOME ====="
+          echo "$ANDROID_HOME"
+          test -d "$ANDROID_HOME"
+
+          echo "===== SDKMANAGER ====="
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+
       - name: Install Android SDK packages
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+          set -e
+
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;35.0.0"
 
+      - name: Show Android SDK packages
+        run: |
+          echo "===== PLATFORMS ====="
+          ls -la "$ANDROID_HOME/platforms"
+
+          echo "===== BUILD TOOLS ====="
+          ls -la "$ANDROID_HOME/build-tools"
+
+          echo "===== ANDROID-33 ====="
+          test -d "$ANDROID_HOME/platforms/android-33"
+
+          echo "===== BUILD-TOOLS 35.0.0 ====="
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
+
+      - name: Configure Buildozer
+        run: |
+          set -e
+
+          echo "===== BUILDOSER SDK PATH ====="
+
+          if grep -q '^android.sdk_path' buildozer.spec; then
+            sed -i "s|^android.sdk_path.*|android.sdk_path = $ANDROID_HOME|" buildozer.spec
+          else
+            printf '\nandroid.sdk_path = %s\n' "$ANDROID_HOME" >> buildozer.spec
+          fi
+
+          if grep -q '^android.accept_sdk_license' buildozer.spec; then
+            sed -i 's|^android.accept_sdk_license.*|android.accept_sdk_license = True|' buildozer.spec
+          else
+            printf 'android.accept_sdk_license = True\n' >> buildozer.spec
+          fi
+
+          if grep -q '^android.skip_update' buildozer.spec; then
+            sed -i 's|^android.skip_update.*|android.skip_update = True|' buildozer.spec
+          else
+            printf 'android.skip_update = True\n' >> buildozer.spec
+          fi
+
+          echo "===== BUILDOSER SPEC ANDROID SETTINGS ====="
+          grep -E '^(android.sdk_path|android.accept_sdk_license|android.skip_update)' buildozer.spec || true
+
       - name: Install Buildozer
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install buildozer cython==0.29.37
+          set -e
 
-      - name: Configure Buildozer SDK
-        run: |
-          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install \
+            buildozer==1.6.0 \
+            cython==0.29.37
 
-          ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-
-          ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
-            ~/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
-
-          ln -sfn "$ANDROID_HOME/platform-tools" \
-            ~/.buildozer/android/platform/android-sdk/platform-tools
-
-          ln -sfn "$ANDROID_HOME/platforms" \
-            ~/.buildozer/android/platform/android-sdk/platforms
-
-          ln -sfn "$ANDROID_HOME/build-tools" \
-            ~/.buildozer/android/platform/android-sdk/build-tools
+          buildozer --version
+          cython --version
 
       - name: Build APK
+        id: build_apk
+        continue-on-error: true
+        shell: bash
         run: |
-          buildozer android debug
+          set -o pipefail
+
+          rm -f build.log
+
+          echo "======================================"
+          echo "        JARVIS ANDROID BUILD"
+          echo "======================================"
+
+          buildozer -v android debug 2>&1 | tee build.log
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+
+          echo "Buildozer exit code: ${BUILD_STATUS}"
+          echo "exit_code=${BUILD_STATUS}" >> "$GITHUB_OUTPUT"
+
+          exit "${BUILD_STATUS}"
+
+      - name: Show build error
+        if: steps.build_apk.outcome == 'failure'
+        shell: bash
+        run: |
+          echo ""
+          echo "======================================"
+          echo "        JARVIS BUILD FAILED"
+          echo "======================================"
+
+          echo ""
+          echo "===== LAST 200 LOG LINES ====="
+          tail -n 200 build.log || true
+
+          echo ""
+          echo "===== IMPORTANT ERROR LINES ====="
+          grep -Ein \
+            'error:|error |failed|failure|exception|traceback|returned non-zero|exit code|no such file|not found|command failed|sh\.ErrorReturnCode' \
+            build.log | tail -n 100 || true
+
+      - name: Check APK
+        if: steps.build_apk.outcome == 'success'
+        run: |
+          set -e
+
+          echo "===== BIN DIRECTORY ====="
+          ls -lah bin || true
+
+          test -n "$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
+
+          echo ""
+          echo "======================================"
+          echo "        JARVIS APK CREATED"
+          echo "======================================"
+
+          find bin -maxdepth 1 -type f -name '*.apk' -print
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        if: steps.build_apk.outcome == 'success'
+        uses: actions/upload-artifact@v7
         with:
           name: JARVIS-APK
           path: bin/*.apk
           if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: JARVIS-build-log
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: Final build status
+        if: steps.build_apk.outcome == 'failure'
+        run: |
+          echo "JARVIS APK build failed."
+          echo "The full build.log was uploaded as an artifact."
+          exit 1
