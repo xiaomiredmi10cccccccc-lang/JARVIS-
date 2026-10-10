@@ -14,7 +14,7 @@ fullscreen = 0
 requirements = python3,kivy
 
 p4a.branch = develop
-p4a.commit = 9a7694e
+# p4a.commit = HEAD
 
 android.api = 33
 android.minapi = 24
