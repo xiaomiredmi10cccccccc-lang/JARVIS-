@@ -1,13 +1,11 @@
-
-# ============================================================
-# JARVIS AI — Intelligent Futuristic Android Interface
-# Kivy + Buildozer | Tajik / Russian / English
-# ============================================================
-
+# -*- coding: utf-8 -*-
+"""
+JARVIS Android Assistant
+Kivy + Buildozer compatible. Core commands work offline.
+"""
 from datetime import datetime
 import math
 import os
-import random
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -15,792 +13,707 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
-from kivy.animation import Animation
-
-from kivy.uix.floatlayout import FloatLayout
+from kivy.graphics import Color, Ellipse, Line, Rectangle
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
-from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.widget import Widget
 
 
-# -------------------- COLORS --------------------
+THEMES = [
+    {"name": "IRON HUD", "accent": "#38D9FF", "accent2": "#167DFF",
+     "background": "#050B14", "panel": "#0B1928", "text": "#EAFBFF"},
+    {"name": "NEURAL CORE", "accent": "#62F5C8", "accent2": "#26B89B",
+     "background": "#04110F", "panel": "#0A211D", "text": "#E4FFF7"},
+    {"name": "HOLOGRAPHIC", "accent": "#C18CFF", "accent2": "#55CFFF",
+     "background": "#0B0718", "panel": "#19112D", "text": "#F5EEFF"},
+    {"name": "MINIMAL AI", "accent": "#F1F4F8", "accent2": "#8A9AAF",
+     "background": "#101318", "panel": "#1B2028", "text": "#F5F7FA"},
+    {"name": "JARVIS SPHERE", "accent": "#54B7FF", "accent2": "#2C5CFF",
+     "background": "#030914", "panel": "#09182C", "text": "#E8F5FF"},
+]
 
-BG = "#050B16"
-PANEL = "#0B1728"
-CYAN = "#35DDF5"
-BLUE = "#168DFF"
-WHITE = "#E7F7FF"
-MUTED = "#7999B5"
-AMBER = "#FFB547"
-GREEN = "#39E6A0"
-RED = "#FF657A"
-
-
-# -------------------- LANGUAGES --------------------
+LANGUAGES = {
+    "Тоҷикӣ": "tg",
+    "Русский": "ru",
+    "English": "en",
+}
 
 TEXTS = {
     "tg": {
-        "title": "JARVIS",
-        "subtitle": "ЁРДАМЧИИ ИНТЕЛЛЕКТУАЛӢ",
-        "ready": "СИСТЕМА ОМОДА АСТ",
-        "thinking": "ТАҲЛИЛ КАРДА ИСТОДАМ...",
-        "listen": "МИКРОФОН",
-        "command": "ФАРМОН",
-        "themes": "Мавзӯъ",
-        "language": "Забон",
-        "voice": "Овоз",
-        "settings": "ТАНЗИМОТ",
-        "system": "ҲОЛАТИ СИСТЕМА",
+        "ready": "ҶАРВИС ОМОДА АСТ",
         "online": "Система фаъол аст",
-        "clock": "ВАҚТИ МАҲАЛЛӢ",
-        "status": "ҲОЛАТ",
-        "classic": "JARVIS Classic",
-        "aura": "Aura",
-        "input": "Фармони худро нависед...",
-        "send": "ИҶРО",
-        "close": "ПӮШИДАН",
-        "welcome": "Салом! Ман JARVIS ҳастам.",
-        "help": "Фармонҳои дастрас",
-        "unknown": "Ин фармон ҳоло дастгирӣ намешавад.",
-        "saved": "Танзимот нигоҳ дошта шуд.",
-        "mic_info": "Барои шинохти воқеии овоз интегратсияи Android SpeechRecognizer лозим аст.",
-        "commands": "салом, соат, сана, ҳолат, мавзӯъ, кӯмак",
-        "theme_names": [
-            "IRON HUD", "NEURAL CORE", "HOLOGRAPHIC",
-            "MINIMAL AI", "JARVIS SPHERE"
-        ],
-        "status_ready": "ОМОДА",
+        "welcome": "Салом! Ман JARVIS ҳастам. Чӣ кор кунам?",
+        "input": "Фармонро нависед...",
+        "send": "ФИРИСТОДАН",
+        "settings": "Танзимоти JARVIS",
+        "language": "Забон",
+        "theme": "Тарҳи интерфейс",
+        "voice": "Профили овоз",
+        "close": "Пӯшидан",
+        "status": "Ҳолати система",
+        "commands": "Фармонҳо: салом, соат, сана, ҳолат, мавзӯъ, кӯмак",
+        "help": "Ман ҳоло фармонҳои асосии офлайнро иҷро карда метавонам",
+        "unknown": "Ин фармон ҳоло дастгирӣ намешавад. Барои рӯйхати фармонҳо «кӯмак» нависед.",
+        "mic": "Шинохти овоз ҳанӯз пайваст нашудааст.",
+        "response": "Ҷавоби JARVIS",
+        "time": "Вақти ҳозира",
+        "date": "Санаи имрӯз",
+        "system": "Ҳолат: онлайн\nМуҳаррик: Kivy\nПайвасти интернет: аз ҷониби система муайян карда намешавад",
+        "voice_note": "Интихоби профил ҳоло танҳо номи профилро нигоҳ медорад; синтези овоз ҳанӯз пайваст нашудааст.",
     },
     "ru": {
-        "title": "JARVIS",
-        "subtitle": "ИНТЕЛЛЕКТУАЛЬНЫЙ ПОМОЩНИК",
-        "ready": "СИСТЕМА ГОТОВА",
-        "thinking": "АНАЛИЗИРУЮ...",
-        "listen": "МИКРОФОН",
-        "command": "КОМАНДА",
-        "themes": "Тема",
-        "language": "Язык",
-        "voice": "Голос",
-        "settings": "НАСТРОЙКИ",
-        "system": "СОСТОЯНИЕ СИСТЕМЫ",
+        "ready": "JARVIS ГОТОВ",
         "online": "Система активна",
-        "clock": "МЕСТНОЕ ВРЕМЯ",
-        "status": "СТАТУС",
-        "classic": "JARVIS Classic",
-        "aura": "Aura",
+        "welcome": "Здравствуйте! Я JARVIS. Чем могу помочь?",
         "input": "Введите команду...",
-        "send": "ВЫПОЛНИТЬ",
-        "close": "ЗАКРЫТЬ",
-        "welcome": "Привет! Я JARVIS.",
-        "help": "Доступные команды",
-        "unknown": "Эта команда пока не поддерживается.",
-        "saved": "Настройки сохранены.",
-        "mic_info": "Для настоящего распознавания речи нужна интеграция Android SpeechRecognizer.",
-        "commands": "привет, время, дата, статус, тема, помощь",
-        "theme_names": [
-            "IRON HUD", "NEURAL CORE", "HOLOGRAPHIC",
-            "MINIMAL AI", "JARVIS SPHERE"
-        ],
-        "status_ready": "ГОТОВ",
+        "send": "ОТПРАВИТЬ",
+        "settings": "Настройки JARVIS",
+        "language": "Язык",
+        "theme": "Дизайн интерфейса",
+        "voice": "Голосовой профиль",
+        "close": "Закрыть",
+        "status": "Состояние системы",
+        "commands": "Команды: привет, время, дата, статус, тема, помощь",
+        "help": "Сейчас я выполняю основные офлайн-команды",
+        "unknown": "Эта команда пока не поддерживается. Напишите «помощь» для списка команд.",
+        "mic": "Распознавание речи ещё не подключено.",
+        "response": "Ответ JARVIS",
+        "time": "Текущее время",
+        "date": "Сегодняшняя дата",
+        "system": "Состояние: онлайн\nДвижок: Kivy\nПодключение к интернету: не проверяется приложением",
+        "voice_note": "Сейчас профиль только сохраняет выбранное имя; синтез речи ещё не подключён.",
     },
     "en": {
-        "title": "JARVIS",
-        "subtitle": "INTELLIGENT ASSISTANT",
-        "ready": "SYSTEM READY",
-        "thinking": "ANALYZING...",
-        "listen": "MICROPHONE",
-        "command": "COMMAND",
-        "themes": "Theme",
+        "ready": "JARVIS IS READY",
+        "online": "System online",
+        "welcome": "Hello! I am JARVIS. How can I help?",
+        "input": "Type a command...",
+        "send": "SEND",
+        "settings": "JARVIS Settings",
         "language": "Language",
-        "voice": "Voice",
-        "settings": "SETTINGS",
-        "system": "SYSTEM STATUS",
-        "online": "System is active",
-        "clock": "LOCAL TIME",
-        "status": "STATUS",
-        "classic": "JARVIS Classic",
-        "aura": "Aura",
-        "input": "Enter your command...",
-        "send": "EXECUTE",
-        "close": "CLOSE",
-        "welcome": "Hello! I am JARVIS.",
-        "help": "Available commands",
-        "unknown": "This command is not supported yet.",
-        "saved": "Settings saved.",
-        "mic_info": "Real speech recognition requires Android SpeechRecognizer integration.",
-        "commands": "hello, time, date, status, theme, help",
-        "theme_names": [
-            "IRON HUD", "NEURAL CORE", "HOLOGRAPHIC",
-            "MINIMAL AI", "JARVIS SPHERE"
-        ],
-        "status_ready": "READY",
+        "theme": "Interface design",
+        "voice": "Voice profile",
+        "close": "Close",
+        "status": "System status",
+        "commands": "Commands: hello, time, date, status, theme, help",
+        "help": "I can currently run basic offline commands",
+        "unknown": "This command is not supported yet. Type 'help' for available commands.",
+        "mic": "Speech recognition has not been connected yet.",
+        "response": "JARVIS response",
+        "time": "Current time",
+        "date": "Today's date",
+        "system": "State: online\nEngine: Kivy\nInternet connectivity is not checked by this app",
+        "voice_note": "The selected profile name is saved, but speech synthesis is not connected yet.",
     },
 }
 
 
-# -------------------- THEMES --------------------
-
-THEMES = [
-    {
-        "name": "IRON HUD",
-        "bg": "#050B16",
-        "panel": "#0B1728",
-        "accent": "#35DDF5",
-        "secondary": "#168DFF",
-    },
-    {
-        "name": "NEURAL CORE",
-        "bg": "#080817",
-        "panel": "#15132C",
-        "accent": "#B68AFF",
-        "secondary": "#725CFF",
-    },
-    {
-        "name": "HOLOGRAPHIC",
-        "bg": "#041513",
-        "panel": "#092923",
-        "accent": "#50FFD0",
-        "secondary": "#15BDAA",
-    },
-    {
-        "name": "MINIMAL AI",
-        "bg": "#101318",
-        "panel": "#202630",
-        "accent": "#E7F7FF",
-        "secondary": "#819DB9",
-    },
-    {
-        "name": "JARVIS SPHERE",
-        "bg": "#100A05",
-        "panel": "#27170C",
-        "accent": "#FFB547",
-        "secondary": "#FF7835",
-    },
-]
+def hex_color(value):
+    return get_color_from_hex(value)
 
 
-# -------------------- HELPERS --------------------
-
-def rgba(hex_color, alpha=1):
-    color = get_color_from_hex(hex_color)
-    return color[:3] + [alpha]
-
-
-def make_label(text="", size=14, color=WHITE, bold=False, **kwargs):
-    return Label(
+def make_label(text="", size=14, color="#EAFBFF", bold=False, **kwargs):
+    label = Label(
         text=text,
         font_size=dp(size),
-        color=rgba(color),
+        color=hex_color(color) if isinstance(color, str) and color.startswith("#") else color,
         bold=bold,
         halign="center",
         valign="middle",
         **kwargs
     )
+    label.bind(size=lambda instance, value: setattr(instance, "text_size", value))
+    return label
 
 
-# -------------------- REACTOR ANIMATION --------------------
-
-class Reactor(Widget):
-    def __init__(self, **kwargs):
+class AnimatedCore(Widget):
+    """Lightweight canvas-only visual; no external images or libraries."""
+    def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
-        self.angle = 0
-        self.pulse = 0
-        self.accent = CYAN
-        self.secondary = BLUE
-        self.theme_index = 0
-        self.bind(pos=self.draw, size=self.draw)
-        Clock.schedule_interval(self.animate, 1 / 30)
+        self.theme_index = theme_index
+        self.phase = 0.0
+        self.bind(pos=self.redraw, size=self.redraw)
+        Clock.schedule_interval(self.animate, 1 / 24)
+        self.redraw()
 
     def animate(self, dt):
-        self.angle = (self.angle + 24 * dt) % 360
-        self.pulse += dt * 2.2
-        self.draw()
+        self.phase = (self.phase + dt * 0.8) % (math.pi * 2)
+        self.redraw()
 
-    def draw(self, *args):
+    def set_theme(self, index):
+        self.theme_index = index
+        self.redraw()
+
+    def redraw(self, *_):
         self.canvas.clear()
-
         if self.width <= 0 or self.height <= 0:
             return
-
-        cx = self.x + self.width / 2
-        cy = self.y + self.height / 2
-        radius = min(self.width, self.height) * 0.39
-
-        pulse = 1 + math.sin(self.pulse) * 0.025
-
+        theme = THEMES[self.theme_index]
+        accent = hex_color(theme["accent"])
+        accent2 = hex_color(theme["accent2"])
+        cx, cy = self.center
+        radius = min(self.width, self.height) * 0.36
         with self.canvas:
-            from kivy.graphics import Color, Ellipse, Line
+            # Outer rings
+            Color(*accent, 0.18)
+            Line(circle=(cx, cy, radius * 1.18), width=dp(1.0))
+            Color(*accent, 0.7)
+            Line(circle=(cx, cy, radius), width=dp(1.5))
+            Color(*accent2, 0.65)
+            Line(circle=(cx, cy, radius * 0.78), width=dp(1.0))
+            # Rotating arc markers
+            for i in range(12):
+                angle = self.phase + i * math.pi / 6
+                r1, r2 = radius * 1.02, radius * (1.12 if i % 3 == 0 else 1.07)
+                x1, y1 = cx + math.cos(angle) * r1, cy + math.sin(angle) * r1
+                x2, y2 = cx + math.cos(angle) * r2, cy + math.sin(angle) * r2
+                Color(*accent, 0.95 if i % 3 == 0 else 0.45)
+                Line(points=[x1, y1, x2, y2], width=dp(2 if i % 3 == 0 else 1))
+            if self.theme_index == 0:  # IRON HUD: reactor core and crosshair
+                Color(*accent2, 0.16)
+                Ellipse(pos=(cx-radius*0.48, cy-radius*0.48), size=(radius*0.96, radius*0.96))
+                Color(*accent, 0.9)
+                Line(points=[cx-radius*0.62, cy, cx+radius*0.62, cy], width=dp(1))
+                Line(points=[cx, cy-radius*0.62, cx, cy+radius*0.62], width=dp(1))
+                Color(*accent, 0.9)
+                Line(circle=(cx, cy, radius*0.36), width=dp(2))
+                Color(*accent2, 0.8)
+                Ellipse(pos=(cx-radius*0.16, cy-radius*0.16), size=(radius*0.32, radius*0.32))
+            elif self.theme_index == 1:  # NEURAL CORE: node connections
+                points = []
+                for i in range(8):
+                    a = self.phase * 0.35 + i * math.pi / 4
+                    points.append((cx + math.cos(a) * radius * (0.35 if i % 2 else 0.68),
+                                   cy + math.sin(a) * radius * (0.35 if i % 2 else 0.68)))
+                Color(*accent, 0.5)
+                for i in range(len(points)):
+                    x1, y1 = points[i]
+                    x2, y2 = points[(i + 1) % len(points)]
+                    Line(points=[x1, y1, x2, y2], width=dp(1))
+                    Color(*accent2, 0.9)
+                    Ellipse(pos=(x1-dp(4), y1-dp(4)), size=(dp(8), dp(8)))
+                    Color(*accent, 0.5)
+                Color(*accent, 0.85)
+                Ellipse(pos=(cx-dp(9), cy-dp(9)), size=(dp(18), dp(18)))
+            elif self.theme_index == 2:  # HOLOGRAPHIC: layered diamond geometry
+                for j in range(3):
+                    rr = radius * (0.42 + j * 0.2)
+                    angle = self.phase * (1 if j % 2 == 0 else -1)
+                    pts = []
+                    for k in range(5):
+                        a = angle + k * math.pi / 2
+                        pts.extend([cx + math.cos(a)*rr, cy + math.sin(a)*rr])
+                    pts.extend(pts[:2])
+                    Color(*(accent if j % 2 == 0 else accent2), 0.7-j*0.12)
+                    Line(points=pts, width=dp(1.3))
+                Color(*accent2, 0.22)
+                Ellipse(pos=(cx-radius*0.28, cy-radius*0.28), size=(radius*0.56, radius*0.56))
+            elif self.theme_index == 3:  # MINIMAL AI: clean concentric geometry
+                Color(*accent, 0.9)
+                Line(circle=(cx, cy, radius*0.64), width=dp(1))
+                Line(circle=(cx, cy, radius*0.28), width=dp(1))
+                Color(*accent, 0.95)
+                Ellipse(pos=(cx-dp(3), cy-dp(3)), size=(dp(6), dp(6)))
+                Color(*accent2, 0.5)
+                Line(points=[cx-radius*0.9, cy-radius*0.9, cx+radius*0.9, cy+radius*0.9], width=dp(0.6))
+            else:  # JARVIS SPHERE: luminous orb with latitude curves
+                Color(*accent2, 0.20)
+                Ellipse(pos=(cx-radius*0.58, cy-radius*0.58), size=(radius*1.16, radius*1.16))
+                Color(*accent, 0.9)
+                Line(circle=(cx, cy, radius*0.58), width=dp(1.6))
+                for scale in (0.28, 0.48):
+                    Color(*accent, 0.45)
+                    Line(ellipse=(cx-radius*0.58, cy-radius*scale, radius*1.16, radius*scale*2), width=dp(1))
+                Color(*accent, 0.75)
+                Line(ellipse=(cx-radius*0.26, cy-radius*0.58, radius*0.52, radius*1.16), width=dp(1))
 
-            Color(*rgba(self.accent, 0.08))
-            Ellipse(
-                pos=(cx - radius * pulse, cy - radius * pulse),
-                size=(radius * 2 * pulse, radius * 2 * pulse)
-            )
-
-            for i in range(5):
-                r = radius * (0.35 + i * 0.16)
-                alpha = 0.85 - i * 0.11
-
-                Color(*rgba(
-                    self.accent if i % 2 == 0 else self.secondary,
-                    alpha
-                ))
-                Line(
-                    circle=(cx, cy, r, self.angle + i * 13,
-                            self.angle + 260 + i * 13),
-                    width=dp(1.1 if i % 2 == 0 else 0.65)
-                )
-
-            Color(*rgba(self.accent, 0.7))
-            Line(
-                circle=(cx, cy, radius * 0.29),
-                width=dp(1.4)
-            )
-
-            Color(*rgba(self.secondary, 0.85))
-            Line(
-                circle=(cx, cy, radius * 0.17,
-                        -self.angle * 1.8,
-                        270 - self.angle * 1.8),
-                width=dp(1.4)
-            )
-
-            Color(*rgba(self.accent, 0.95))
-            Ellipse(
-                pos=(cx - radius * 0.075, cy - radius * 0.075),
-                size=(radius * 0.15, radius * 0.15)
-            )
-
-            for i in range(16):
-                a = math.radians(self.angle + i * 22.5)
-                r1 = radius * 0.84
-                r2 = radius * (0.91 if i % 4 == 0 else 0.87)
-
-                x1 = cx + math.cos(a) * r1
-                y1 = cy + math.sin(a) * r1
-                x2 = cx + math.cos(a) * r2
-                y2 = cy + math.sin(a) * r2
-
-                Color(*rgba(self.accent, 0.9))
-                Line(points=[x1, y1, x2, y2], width=dp(1.3))
-
-
-# -------------------- MAIN APPLICATION --------------------
 
 class JarvisApp(App):
-
     def build(self):
-        self.title = "JARVIS AI"
-
-        self.store = JsonStore(
-            os.path.join(self.user_data_dir, "jarvis_settings.json")
-        )
-
+        self.title = "JARVIS"
+        self.store = JsonStore(os.path.join(self.user_data_dir, "jarvis_settings.json"))
         self.language = "tg"
         self.theme_index = 0
-        self.voice_index = 0
-        self.status_text = ""
-        self._load_settings()
+        self.voice_profile = "JARVIS Classic"
+        self.last_response = ""
+        self.command_history = []
+        self.load_settings()
 
-        self.root_ui = FloatLayout()
-        self.main_box = BoxLayout(
-            orientation="vertical",
-            padding=[dp(15), dp(12), dp(15), dp(12)],
-            spacing=dp(8)
-        )
+        Window.clearcolor = hex_color(THEMES[self.theme_index]["background"])
+        self.root_layout = FloatLayout()
+        with self.root_layout.canvas.before:
+            self.bg_color = Color(*hex_color(THEMES[self.theme_index]["background"]))
+            self.bg_rect = Rectangle(pos=self.root_layout.pos, size=self.root_layout.size)
+        self.root_layout.bind(pos=self.update_background, size=self.update_background)
+        self.build_interface()
+        return self.root_layout
 
-        self.root_ui.add_widget(self.main_box)
+    def update_background(self, *_):
+        self.bg_rect.pos = self.root_layout.pos
+        self.bg_rect.size = self.root_layout.size
 
-        self._build_header()
-        self._build_reactor()
-        self._build_status()
-        self._build_controls()
-        self._build_footer()
+    def t(self, key):
+        return TEXTS.get(self.language, TEXTS["tg"]).get(key, key)
 
-        self.apply_theme()
-        self.refresh_text()
-
-        Clock.schedule_interval(self.update_clock, 1)
-
-        return self.root_ui
-
-    # -------------------- SETTINGS --------------------
-
-    def _load_settings(self):
+    def load_settings(self):
         if self.store.exists("settings"):
             data = self.store.get("settings")
             self.language = data.get("language", "tg")
-            self.theme_index = data.get("theme_index", 0)
-            self.voice_index = data.get("voice_index", 0)
-
-        if self.language not in TEXTS:
+            self.theme_index = int(data.get("theme_index", 0)) % len(THEMES)
+            self.voice_profile = data.get("voice_profile", "JARVIS Classic")
+        if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
 
-        self.theme_index = max(0, min(4, int(self.theme_index)))
-        self.voice_index = max(0, min(1, int(self.voice_index)))
-
     def save_settings(self):
-        self.store.put(
-            "settings",
-            language=self.language,
-            theme_index=self.theme_index,
-            voice_index=self.voice_index
-        )
+        self.store.put("settings", language=self.language,
+                       theme_index=self.theme_index,
+                       voice_profile=self.voice_profile)
 
-    def tr(self, key):
-        return TEXTS[self.language].get(key, key)
+    def update_colors(self):
+        theme = THEMES[self.theme_index]
+        Window.clearcolor = hex_color(theme["background"])
+        self.bg_color.rgba = hex_color(theme["background"])
 
-    # -------------------- HEADER --------------------
-
-    def _build_header(self):
-        self.header = BoxLayout(
-            orientation="vertical",
-            size_hint_y=None,
-            height=dp(75),
-            spacing=dp(2)
-        )
-
-        self.title_label = make_label(
-            "JARVIS", 29, CYAN, True
-        )
-
-        self.subtitle_label = make_label(
-            "", 10, MUTED
-        )
-
-        self.header.add_widget(self.title_label)
-        self.header.add_widget(self.subtitle_label)
-        self.main_box.add_widget(self.header)
-
-    # -------------------- REACTOR --------------------
-
-    def _build_reactor(self):
-        self.reactor_area = BoxLayout(
-            orientation="vertical",
-            size_hint_y=0.42,
-            spacing=dp(2)
-        )
-
-        self.reactor = Reactor()
-        self.reactor_area.add_widget(self.reactor)
-
-        self.reactor_caption = make_label(
-            "J.A.R.V.I.S. CORE", 11, CYAN, True
-        )
-
-        self.reactor_area.add_widget(self.reactor_caption)
-        self.main_box.add_widget(self.reactor_area)
-
-    # -------------------- STATUS --------------------
-
-    def _build_status(self):
-        self.status_panel = BoxLayout(
-            orientation="vertical",
-            size_hint_y=None,
-            height=dp(75),
-            padding=dp(8),
-            spacing=dp(4)
-        )
-
-        self.status_label = make_label("", 13, GREEN, True)
-        self.clock_label = make_label("", 12, MUTED)
-        self.message_label = make_label(
-            "", 11, WHITE
-        )
-
-        self.status_panel.add_widget(self.status_label)
-        self.status_panel.add_widget(self.clock_label)
-        self.status_panel.add_widget(self.message_label)
-
-        self.main_box.add_widget(self.status_panel)
-
-    # -------------------- BUTTONS --------------------
-
-    def _make_button(self, text, callback, color=None):
-        color = color or CYAN
-
-        button = Button(
+    def make_button(self, text, callback, color=None, height=44):
+        theme = THEMES[self.theme_index]
+        accent = color or theme["accent"]
+        btn = Button(
             text=text,
             size_hint_y=None,
-            height=dp(46),
+            height=dp(height),
+            font_size=dp(13),
+            bold=True,
+            color=hex_color(theme["background"]),
             background_normal="",
             background_down="",
-            background_color=rgba(PANEL),
-            color=rgba(color),
-            font_size=dp(12),
-            bold=True
+            background_color=hex_color(accent),
         )
+        btn.bind(on_release=callback)
+        return btn
 
-        with button.canvas.before:
-            from kivy.graphics import Color, Line, RoundedRectangle
+    def make_panel(self, padding=12, spacing=8, orientation="vertical"):
+        theme = THEMES[self.theme_index]
+        panel = BoxLayout(orientation=orientation, padding=dp(padding),
+                          spacing=dp(spacing), size_hint_y=None)
+        panel.bind(minimum_height=panel.setter("height"))
+        with panel.canvas.before:
+            Color(*hex_color(theme["panel"]))
+            panel.bg = Rectangle(pos=panel.pos, size=panel.size)
+        panel.bind(pos=lambda w, v: setattr(w.bg, "pos", w.pos),
+                   size=lambda w, v: setattr(w.bg, "size", w.size))
+        return panel
 
-            button._bg_color = Color(*rgba(PANEL))
-            button._bg_rect = RoundedRectangle(
-                pos=button.pos,
-                size=button.size,
-                radius=[dp(8)]
+    def build_interface(self):
+        self.root_layout.clear_widgets()
+        theme = THEMES[self.theme_index]
+        main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        self.root_layout.add_widget(main)
+
+        # Header: title and single settings icon
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
+        title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
+        title.size_hint_x = 0.72
+        settings_btn = Button(text="⚙", size_hint_x=None, width=dp(54),
+                              font_size=dp(27), color=hex_color(theme["accent"]),
+                              background_normal="", background_color=(0, 0, 0, 0))
+        settings_btn.bind(on_release=self.show_settings)
+        header.add_widget(title)
+        header.add_widget(Widget())
+        header.add_widget(settings_btn)
+        main.add_widget(header)
+
+        self.status_label = make_label(self.t("ready"), 12, theme["accent"], True,
+                                       size_hint_y=None, height=dp(25))
+        main.add_widget(self.status_label)
+
+        # Main visual zone changes structure for each theme.
+        self.visual_area = BoxLayout(orientation="vertical", spacing=dp(8))
+        main.add_widget(self.visual_area)
+        self.build_theme_layout()
+
+        # Response panel
+        response_panel = BoxLayout(orientation="vertical", padding=dp(10),
+                                   spacing=dp(4), size_hint_y=None, height=dp(94))
+        with response_panel.canvas.before:
+            Color(*hex_color(theme["panel"]))
+            response_panel.bg = Rectangle(pos=response_panel.pos, size=response_panel.size)
+        response_panel.bind(pos=lambda w, v: setattr(w.bg, "pos", w.pos),
+                            size=lambda w, v: setattr(w.bg, "size", w.size))
+        self.response_title = make_label(self.t("response"), 10, theme["accent"], True,
+                                          size_hint_y=None, height=dp(18))
+        self.response_label = make_label(self.last_response or self.t("welcome"), 13,
+                                         theme["text"], False)
+        response_scroll = ScrollView(do_scroll_x=False)
+        response_scroll.add_widget(self.response_label)
+        response_panel.add_widget(self.response_title)
+        response_panel.add_widget(response_scroll)
+        main.add_widget(response_panel)
+
+        # Command bar remains at the bottom in every design.
+        command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
+                                size_hint_y=None, height=dp(52))
+        self.command_input = TextInput(
+            hint_text=self.t("input"), multiline=False, size_hint_x=1,
+            font_size=dp(15), foreground_color=hex_color(theme["text"]),
+            hint_text_color=hex_color(theme["accent2"]),
+            cursor_color=hex_color(theme["accent"]),
+            background_normal="", background_active="",
+            background_color=hex_color(theme["panel"]),
+            padding=[dp(10), dp(13), dp(10), dp(10)],
+        )
+        self.command_input.bind(on_text_validate=self.send_command)
+        send_btn = Button(text="➤", size_hint_x=None, width=dp(58),
+                          font_size=dp(23), color=hex_color(theme["background"]),
+                          background_normal="", background_color=hex_color(theme["accent"]))
+        send_btn.bind(on_release=self.send_command)
+        command_row.add_widget(self.command_input)
+        command_row.add_widget(send_btn)
+        main.add_widget(command_row)
+
+        footer = make_label(self.t("online") + "  •  " + THEMES[self.theme_index]["name"],
+                            10, theme["accent2"], False, size_hint_y=None, height=dp(20))
+        main.add_widget(footer)
+        self.footer_label = footer
+
+    def build_theme_layout(self):
+        self.visual_area.clear_widgets()
+        theme = THEMES[self.theme_index]
+        index = self.theme_index
+
+        if index == 0:  # IRON HUD: visual + technical side panels
+            top = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(45))
+            top.add_widget(self.metric_card("CORE", "98.7%", theme["accent"]))
+            top.add_widget(self.metric_card("LINK", "ONLINE", theme["accent2"]))
+            top.add_widget(self.metric_card("MODE", "READY", theme["accent"]))
+            self.visual_area.add_widget(top)
+            self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
+            self.visual_area.add_widget(make_label("◈  TACTICAL SYSTEM  ◈", 11, theme["accent"], True,
+                                                   size_hint_y=None, height=dp(24)))
+        elif index == 1:  # NEURAL CORE: network label + node matrix + core
+            self.visual_area.add_widget(make_label("NEURAL NETWORK / ACTIVE", 12, theme["accent"], True,
+                                                   size_hint_y=None, height=dp(26)))
+            nodes = GridLayout(cols=3, spacing=dp(6), size_hint_y=None, height=dp(92))
+            for label in ("INPUT NODE", "MEMORY", "REASONING",
+                          "LANGUAGE", "COMMAND", "OUTPUT"):
+                nodes.add_widget(self.metric_card("●", label, theme["accent"]))
+            self.visual_area.add_widget(nodes)
+            self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
+        elif index == 2:  # HOLOGRAPHIC: stacked transparent-looking projection panels
+            holo = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(58))
+            holo.add_widget(self.metric_card("PROJECTION", "ACTIVE", theme["accent"]))
+            holo.add_widget(self.metric_card("HOLO LINK", "STABLE", theme["accent2"]))
+            self.visual_area.add_widget(holo)
+            self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
+            self.visual_area.add_widget(make_label("〔 HOLOGRAPHIC INTERFACE 〕", 12, theme["accent"], True,
+                                                   size_hint_y=None, height=dp(28)))
+        elif index == 3:  # MINIMAL AI: clean typography and short info
+            self.visual_area.add_widget(Widget(size_hint_y=0.12))
+            self.visual_area.add_widget(make_label("JARVIS", 32, theme["text"], True,
+                                                   size_hint_y=None, height=dp(52)))
+            self.visual_area.add_widget(make_label("Personal AI interface", 13, theme["accent2"],
+                                                   size_hint_y=None, height=dp(28)))
+            self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
+         elif index == 4:  # JARVIS SPHERE
+            self.visual_area.add_widget(
+                make_label(
+                    "JARVIS NEURAL SPHERE",
+                    13,
+                    theme["accent"],
+                    True,
+                    size_hint_y=None,
+                    height=dp(30),
+                )
+            )
+            self.visual_area.add_widget(
+                AnimatedCore(index, size_hint_y=1)
+            )
+            self.visual_area.add_widget(
+                make_label(
+                    "CORE SYSTEM • ACTIVE",
+                    11,
+                    theme["accent2"],
+                    True,
+                    size_hint_y=None,
+                    height=dp(25),
+                )
             )
 
-            button._border_color = Color(*rgba(color, 0.75))
-            button._border = Line(
-                rounded_rectangle=(
-                    button.x, button.y, button.width,
-                    button.height, dp(8)
-                ),
-                width=dp(1)
-            )
-
-        def update_shape(instance, value):
-            instance._bg_rect.pos = instance.pos
-            instance._bg_rect.size = instance.size
-            instance._border.rounded_rectangle = (
-                instance.x, instance.y, instance.width,
-                instance.height, dp(8)
-            )
-
-        button.bind(pos=update_shape, size=update_shape)
-        button.bind(on_release=callback)
-
-        return button
-
-    def _build_controls(self):
-        self.controls = BoxLayout(
-            orientation="vertical",
-            spacing=dp(7),
-            size_hint_y=None,
-            height=dp(158)
-        )
-
-        row1 = BoxLayout(spacing=dp(7))
-        self.command_button = self._make_button(
-            "", self.open_command, CYAN
-        )
-        self.mic_button = self._make_button(
-            "", self.show_microphone_info, GREEN
-        )
-
-        row1.add_widget(self.command_button)
-        row1.add_widget(self.mic_button)
-
-        row2 = BoxLayout(spacing=dp(7))
-        self.theme_button = self._make_button(
-            "", self.next_theme, AMBER
-        )
-        self.language_button = self._make_button(
-            "", self.next_language, CYAN
-        )
-
-        row2.add_widget(self.theme_button)
-        row2.add_widget(self.language_button)
-
-        row3 = BoxLayout(spacing=dp(7))
-        self.voice_button = self._make_button(
-            "", self.next_voice, GREEN
-        )
-        self.settings_button = self._make_button(
-            "", self.show_settings, WHITE
-        )
-
-        row3.add_widget(self.voice_button)
-        row3.add_widget(self.settings_button)
-
-        self.controls.add_widget(row1)
-        self.controls.add_widget(row2)
-        self.controls.add_widget(row3)
-
-        self.main_box.add_widget(self.controls)
-
-    # -------------------- FOOTER --------------------
-
-    def _build_footer(self):
-        self.footer = make_label(
-            "JARVIS AI  •  ANDROID INTERFACE",
-            9, MUTED
-        )
-        self.footer.size_hint_y = None
-        self.footer.height = dp(22)
-
-        self.main_box.add_widget(self.footer)
-
-    # -------------------- UPDATE UI --------------------
-
-    def refresh_text(self):
-        self.title_label.text = self.tr("title")
-        self.subtitle_label.text = self.tr("subtitle")
-        self.status_label.text = (
-            "●  " + self.tr("ready")
-        )
-        self.command_button.text = (
-            "⌘  " + self.tr("command")
-        )
-        self.mic_button.text = (
-            "◉  " + self.tr("listen")
-        )
-        self.theme_button.text = (
-            "◈  " + self.tr("themes")
-        )
-        self.language_button.text = (
-            "文  " + self.tr("language")
-        )
-        self.voice_button.text = (
-            "♫  " + self.tr("voice")
-        )
-        self.settings_button.text = (
-            "⚙  " + self.tr("settings")
-        )
-
-        self.reactor_caption.text = (
-            "J.A.R.V.I.S. CORE  /  " +
-            self.tr("status_ready")
-        )
-
-        voices = ["classic", "aura"]
-        self.voice_button.text = (
-            "♫  " + self.tr(voices[self.voice_index])
-        )
-
-        self.update_clock(0)
-
-    def update_clock(self, dt):
-        now = datetime.now()
-
-        if hasattr(self, "clock_label"):
-            self.clock_label.text = (
-                self.tr("clock") + "   " +
-                now.strftime("%H:%M:%S") + "   •   " +
-                now.strftime("%d.%m.%Y")
-            )
-
-    # -------------------- APPLY THEME --------------------
-
-    def apply_theme(self):
+    def metric_card(self, title, value, color):
         theme = THEMES[self.theme_index]
 
-        Window.clearcolor = rgba(theme["bg"])
-
-        self.reactor.accent = theme["accent"]
-        self.reactor.secondary = theme["secondary"]
-
-        self.title_label.color = rgba(theme["accent"])
-        self.reactor_caption.color = rgba(theme["accent"])
-
-        for button in (
-            self.command_button,
-            self.mic_button,
-            self.theme_button,
-            self.language_button,
-            self.voice_button,
-            self.settings_button
-        ):
-            button.background_color = rgba(theme["panel"])
-
-        self.save_settings()
-
-    # -------------------- THEME CONTROL --------------------
-
-    def next_theme(self, *args):
-        self.theme_index = (self.theme_index + 1) % len(THEMES)
-        self.apply_theme()
-        self.refresh_text()
-
-        self.show_message(
-            THEMES[self.theme_index]["name"]
-        )
-
-    # -------------------- LANGUAGE CONTROL --------------------
-
-    def next_language(self, *args):
-        languages = ["tg", "ru", "en"]
-        index = languages.index(self.language)
-        self.language = languages[(index + 1) % len(languages)]
-
-        self.save_settings()
-        self.refresh_text()
-        self.show_message(self.tr("saved"))
-
-    # -------------------- VOICE PROFILE --------------------
-
-    def next_voice(self, *args):
-        self.voice_index = (self.voice_index + 1) % 2
-        self.save_settings()
-        self.refresh_text()
-
-        self.show_message(
-            self.tr(["classic", "aura"][self.voice_index])
-        )
-
-    # -------------------- STATUS MESSAGE --------------------
-
-    def show_message(self, message):
-        self.message_label.text = str(message)
-
-        Animation.cancel_all(self.message_label)
-        self.message_label.opacity = 0
-        Animation(opacity=1, duration=0.3).start(
-            self.message_label
-        )
-
-    # -------------------- COMMAND INPUT --------------------
-
-    def open_command(self, *args):
-        content = BoxLayout(
+        card = BoxLayout(
             orientation="vertical",
-            spacing=dp(10),
-            padding=dp(12)
+            padding=dp(5),
+            spacing=dp(3),
         )
 
-        input_box = TextInput(
-            hint_text=self.tr("input"),
-            multiline=False,
-            size_hint_y=None,
-            height=dp(48),
-            font_size=dp(16),
-            foreground_color=rgba(WHITE),
-            background_color=rgba(PANEL),
-            cursor_color=rgba(CYAN)
+        with card.canvas.before:
+            Color(*hex_color(theme["panel"]))
+            card.bg = Rectangle(
+                pos=card.pos,
+                size=card.size,
+            )
+
+        card.bind(
+            pos=lambda w, v: setattr(w.bg, "pos", w.pos),
+            size=lambda w, v: setattr(w.bg, "size", w.size),
         )
 
-        result_label = make_label(
-            self.tr("welcome"), 12, CYAN
+        card.add_widget(
+            make_label(
+                title,
+                10,
+                color,
+                True,
+            )
         )
 
-        buttons = BoxLayout(
-            size_hint_y=None,
-            height=dp(45),
-            spacing=dp(8)
+        card.add_widget(
+            make_label(
+                value,
+                11,
+                theme["text"],
+                True,
+            )
         )
 
-        popup = Popup(
-            title="JARVIS AI",
-            content=content,
-            size_hint=(0.92, 0.48),
-            auto_dismiss=True,
-            separator_color=rgba(CYAN)
-        )
+        return card
 
-        def execute(*_):
-            command = input_box.text.strip()
+    def send_command(self, *_):
+        command = self.command_input.text.strip()
 
-            if not command:
-                return
+        if not command:
+            return
 
-            answer = self.process_command(command)
-            result_label.text = answer
-            self.show_message(answer)
+        self.command_input.text = ""
+        self.command_history.append(command)
 
-        execute_button = self._make_button(
-            self.tr("send"), execute, GREEN
-        )
-        close_button = self._make_button(
-            self.tr("close"), popup.dismiss, AMBER
-        )
+        response = self.process_command(command)
+        self.last_response = response
+        self.response_label.text = response
 
-      
-        buttons.add_widget(execute_button)
-        buttons.add_widget(close_button)
-
-        content.add_widget(input_box)
-        content.add_widget(result_label)
-        content.add_widget(buttons)
-
-        input_box.bind(on_text_validate=execute)
-
-        popup.open()
-        input_box.focus = True
-
-    # -------------------- COMMAND PROCESSOR --------------------
+        self.status_label.text = self.t("ready")
 
     def process_command(self, command):
         cmd = command.lower().strip()
-        now = datetime.now()
+        theme = THEMES[self.theme_index]
 
-        if any(x in cmd for x in ["салом", "привет", "hello", "hi"]):
-            return self.tr("welcome")
+        greetings = (
+            "салом", "салом алейкум", "ассалом",
+            "привет", "здравствуй", "здравствуйте",
+            "hello", "hi", "hey",
+        )
 
-        if any(x in cmd for x in ["соат", "время", "time"]):
-            return now.strftime("%H:%M:%S")
+        if any(word in cmd for word in greetings):
+            return self.t("welcome")
 
-        if any(x in cmd for x in ["сана", "дата", "date"]):
-            return now.strftime("%d.%m.%Y")
-
-        if any(x in cmd for x in ["ҳолат", "статус", "status"]):
+        if cmd in ("соат", "время", "time", "соат чанд"):
             return (
-                self.tr("online") + "\n"
-                + self.tr("ready") + "\n"
-                + THEMES[self.theme_index]["name"]
+                self.t("time")
+                + ": "
+                + datetime.now().strftime("%H:%M:%S")
             )
 
-        if any(x in cmd for x in ["мавзӯъ", "тема", "theme"]):
-            self.next_theme()
-            return THEMES[self.theme_index]["name"]
+        if cmd in ("сана", "дата", "date", "today"):
+            return (
+                self.t("date")
+                + ": "
+                + datetime.now().strftime("%d.%m.%Y")
+            )
 
-        if any(x in cmd for x in ["кӯмак", "помощь", "help"]):
-            return self.tr("help") + ":\n" + self.tr("commands")
+        if cmd in (
+            "ҳолат", "статус", "status",
+            "system", "система",
+        ):
+            return self.t("system")
 
-        return self.tr("unknown")
+        if cmd in (
+            "кӯмак", "помощь", "help",
+            "команды", "фармонҳо",
+        ):
+            return (
+                self.t("commands")
+                + "\n\n"
+                + self.t("help")
+            )
 
-    # -------------------- MICROPHONE --------------------
+        if cmd in (
+            "мавзӯъ", "тема", "theme",
+            "дизайн", "тарҳ",
+        ):
+            self.show_settings()
+            return self.t("theme")
 
-    def show_microphone_info(self, *args):
-        self.show_message(self.tr("mic_info"))
+        if cmd in ("забон", "язык", "language"):
+            self.show_settings()
+            return self.t("language")
 
-        popup = Popup(
-            title=self.tr("listen"),
-            content=make_label(self.tr("mic_info"), 14, WHITE),
-            size_hint=(0.88, 0.34)
-        )
-        popup.open()
+        if cmd in ("овоз", "голос", "voice"):
+            self.show_settings()
+            return self.t("voice_note")
 
-    # -------------------- SETTINGS --------------------
+        if cmd in (
+            "пок", "clear", "тоза",
+            "очистить",
+        ):
+            self.last_response = ""
+            self.response_label.text = ""
+            return self.t("welcome")
 
-    def show_settings(self, *args):
+        return self.t("unknown")
+
+    def show_settings(self, *_):
+        theme = THEMES[self.theme_index]
+
         content = BoxLayout(
             orientation="vertical",
-            spacing=dp(12),
-            padding=dp(16)
+            spacing=dp(10),
+            padding=dp(12),
         )
 
-        info = make_label(
-            self.tr("system") + "\n\n"
-            + self.tr("online") + "\n\n"
-            + "Theme: " + THEMES[self.theme_index]["name"]
-            + "\nLanguage: " + self.language.upper(),
-            13,
-            CYAN
+        content.add_widget(
+            make_label(
+                self.t("settings"),
+                18,
+                theme["accent"],
+                True,
+                size_hint_y=None,
+                height=dp(40),
+            )
         )
 
-        content.add_widget(info)
-
-        popup = Popup(
-            title=self.tr("settings"),
-            content=content,
-            size_hint=(0.88, 0.46)
+        content.add_widget(
+            make_label(
+                self.t("language"),
+                13,
+                theme["text"],
+                True,
+                size_hint_y=None,
+                height=dp(25),
+            )
         )
 
-        close_button = self._make_button(
-            self.tr("close"),
+        for name, code in LANGUAGES.items():
+            button = self.make_button(
+                name,
+                lambda instance, selected=code:
+                    self.change_language(selected),
+                height=38,
+            )
+            content.add_widget(button)
+
+        content.add_widget(
+            make_label(
+                self.t("theme"),
+                13,
+                theme["text"],
+                True,
+                size_hint_y=None,
+                height=dp(25),
+            )
+        )
+
+        for i, item in enumerate(THEMES):
+            button = self.make_button(
+                item["name"],
+                lambda instance, selected=i:
+                    self.change_theme(selected),
+                color=item["accent"],
+                height=38,
+            )
+            content.add_widget(button)
+
+        content.add_widget(
+            make_label(
+                self.t("voice"),
+                13,
+                theme["text"],
+                True,
+                size_hint_y=None,
+                height=dp(25),
+            )
+        )
+
+        for profile in (
+            "JARVIS Classic",
+            "JARVIS Calm",
+            "JARVIS Robotic",
+        ):
+            button = self.make_button(
+                profile,
+                lambda instance, selected=profile:
+                    self.change_voice(selected),
+                height=38,
+            )
+            content.add_widget(button)
+
+        close_button = self.make_button(
+            self.t("close"),
             lambda *_: popup.dismiss(),
-            AMBER
+            height=42,
         )
         content.add_widget(close_button)
+
+        scroll = ScrollView(
+            do_scroll_x=False,
+            bar_width=dp(4),
+        )
+        scroll.add_widget(content)
+
+        popup = Popup(
+            title="JARVIS",
+            content=scroll,
+            size_hint=(0.92, 0.85),
+            auto_dismiss=True,
+            background_color=hex_color(theme["background"]),
+        )
+
+        self.settings_popup = popup
         popup.open()
 
-    # -------------------- ANDROID LIFECYCLE --------------------
+    def change_language(self, language):
+        if language not in ("tg", "ru", "en"):
+            return
 
-    def on_pause(self):
+        self.language = language
         self.save_settings()
-        return True
+        self.build_interface()
 
-    def on_resume(self):
-        self.refresh_text()
+        if hasattr(self, "settings_popup"):
+            self.settings_popup.dismiss()
 
-    def on_stop(self):
+    def change_theme(self, index):
+        if not 0 <= index < len(THEMES):
+            return
+
+        self.theme_index = index
         self.save_settings()
+        self.update_colors()
+        self.build_interface()
+
+        if hasattr(self, "settings_popup"):
+            self.settings_popup.dismiss()
+
+    def change_voice(self, profile):
+        self.voice_profile = profile
+        self.save_settings()
+
+        self.last_response = (
+            self.t("voice_note")
+            + "\n"
+            + profile
+        )
+
+        self.build_interface()
+
+        if hasattr(self, "settings_popup"):
+            self.settings_popup.dismiss()
 
 
 if __name__ == "__main__":
