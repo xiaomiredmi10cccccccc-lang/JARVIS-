@@ -1,2 +1,5 @@
 .buildozer/
 python-for-android/
+
+__pycache__/
+main.py.backup
