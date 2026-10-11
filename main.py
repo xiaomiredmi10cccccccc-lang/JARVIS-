@@ -419,7 +419,7 @@ class JarvisApp(App):
             self.visual_area.add_widget(make_label("Personal AI interface", 13, theme["accent2"],
                                                    size_hint_y=None, height=dp(28)))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
-         elif index == 4:  # JARVIS SPHERE
+        elif index == 4:  # JARVIS SPHERE
             self.visual_area.add_widget(
                 make_label(
                     "JARVIS NEURAL SPHERE",
