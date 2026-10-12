@@ -23,7 +23,29 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
+import sys
+import traceback
 
+
+def write_crash_log(exc_type, exc_value, exc_tb):
+    try:
+        log_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        base = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(base, "jarvis_crash.log"), "w", encoding="utf-8") as f:
+            f.write(log_text)
+        try:
+            from android.storage import primary_external_storage_path
+            ext = primary_external_storage_path()
+            with open(os.path.join(ext, "jarvis_crash.log"), "w", encoding="utf-8") as f:
+                f.write(log_text)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+
+sys.excepthook = write_crash_log
 
 THEMES = [
     {"name": "IRON HUD", "accent": "#38D9FF", "accent2": "#167DFF",
@@ -575,4 +597,7 @@ class JarvisApp(App):
 
 
 if __name__ == "__main__":
-    JarvisApp().run()
+    try:
+        JarvisApp().run()
+    except Exception:
+        write_crash_log(*sys.exc_info())
