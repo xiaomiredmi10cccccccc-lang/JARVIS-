@@ -13,12 +13,12 @@ fullscreen = 0
 
 requirements = python3,kivy
 
-p4a.branch = develop
+#p4a.branch = develop
 # p4a.commit = HEAD
 
 android.api = 33
 android.minapi = 24
-android.ndk = 28c
+android.ndk = 25b
 android.ndk_api = 24
 android.archs = arm64-v8a
 
