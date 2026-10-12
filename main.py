@@ -155,8 +155,8 @@ class AnimatedCore(Widget):
         if self.width <= 0 or self.height <= 0:
             return
         theme = THEMES[self.theme_index]
-        accent = hex_color(theme["accent"])
-        accent2 = hex_color(theme["accent2"])
+        accent = hex_color(theme["accent"])[:3]
+        accent2 = hex_color(theme["accent2"])[:3]
         cx, cy = self.center
         radius = min(self.width, self.height) * 0.36
         with self.canvas:
@@ -419,301 +419,159 @@ class JarvisApp(App):
             self.visual_area.add_widget(make_label("Personal AI interface", 13, theme["accent2"],
                                                    size_hint_y=None, height=dp(28)))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
-        elif index == 4:  # JARVIS SPHERE
-            self.visual_area.add_widget(
-                make_label(
-                    "JARVIS NEURAL SPHERE",
-                    13,
-                    theme["accent"],
-                    True,
-                    size_hint_y=None,
-                    height=dp(30),
-                )
-            )
-            self.visual_area.add_widget(
-                AnimatedCore(index, size_hint_y=1)
-            )
-            self.visual_area.add_widget(
-                make_label(
-                    "CORE SYSTEM • ACTIVE",
-                    11,
-                    theme["accent2"],
-                    True,
-                    size_hint_y=None,
-                    height=dp(25),
-                )
-            )
+            self.visual_area.add_widget(make_label("READY  /  WAITING FOR COMMAND", 10,
+                                                   theme["accent"], True, size_hint_y=None, height=dp(24)))
+            self.visual_area.add_widget(Widget(size_hint_y=0.1))
+        else:  # JARVIS SPHERE: large orb + orbital status chips
+            self.visual_area.add_widget(make_label("SPHERICAL AI CORE", 12, theme["accent"], True,
+                                                   size_hint_y=None, height=dp(24)))
+            self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
+            orbit = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
+            orbit.add_widget(self.metric_card("●", "STABLE", theme["accent"]))
+            orbit.add_widget(self.metric_card("◌", "SCANNING", theme["accent2"]))
+            orbit.add_widget(self.metric_card("✧", "READY", theme["accent"]))
+            self.visual_area.add_widget(orbit)
 
-    def metric_card(self, title, value, color):
+    def metric_card(self, heading, value, color):
         theme = THEMES[self.theme_index]
-
-        card = BoxLayout(
-            orientation="vertical",
-            padding=dp(5),
-            spacing=dp(3),
-        )
-
+        card = BoxLayout(orientation="vertical", padding=dp(4), spacing=dp(1))
         with card.canvas.before:
             Color(*hex_color(theme["panel"]))
-            card.bg = Rectangle(
-                pos=card.pos,
-                size=card.size,
-            )
-
-        card.bind(
-            pos=lambda w, v: setattr(w.bg, "pos", w.pos),
-            size=lambda w, v: setattr(w.bg, "size", w.size),
-        )
-
-        card.add_widget(
-            make_label(
-                title,
-                10,
-                color,
-                True,
-            )
-        )
-
-        card.add_widget(
-            make_label(
-                value,
-                11,
-                theme["text"],
-                True,
-            )
-        )
-
+            card.bg = Rectangle(pos=card.pos, size=card.size)
+            Color(*hex_color(color)[:3], 0.7)
+            card.line = Line(rectangle=(card.x, card.y, card.width, card.height), width=dp(1))
+        card.bind(pos=lambda w, v: self.update_card_canvas(w),
+                  size=lambda w, v: self.update_card_canvas(w))
+        card.add_widget(make_label(heading, 9, color, True))
+        card.add_widget(make_label(value, 9, theme["text"], False))
         return card
 
-    def send_command(self, *_):
-        command = self.command_input.text.strip()
+    def update_card_canvas(self, card):
+        card.bg.pos = card.pos
+        card.bg.size = card.size
+        card.line.rectangle = (card.x, card.y, card.width, card.height)
 
+    def show_response(self, message):
+        self.last_response = message
+        if hasattr(self, "response_label"):
+            self.response_label.text = message
+
+    def send_command(self, *_):
+        if not hasattr(self, "command_input"):
+            return
+        command = self.command_input.text.strip()
         if not command:
             return
-
         self.command_input.text = ""
-        self.command_history.append(command)
-
-        response = self.process_command(command)
-        self.last_response = response
-        self.response_label.text = response
-
+        answer = self.process_command(command)
+        self.show_response(answer)
         self.status_label.text = self.t("ready")
 
     def process_command(self, command):
         cmd = command.lower().strip()
-        theme = THEMES[self.theme_index]
+        now = datetime.now()
 
-        greetings = (
-            "салом", "салом алейкум", "ассалом",
-            "привет", "здравствуй", "здравствуйте",
-            "hello", "hi", "hey",
-        )
-
+        greetings = ("салом", "салом алейкум", "привет", "здравствуй", "hello", "hi", "hey")
         if any(word in cmd for word in greetings):
             return self.t("welcome")
-
-        if cmd in ("соат", "время", "time", "соат чанд"):
-            return (
-                self.t("time")
-                + ": "
-                + datetime.now().strftime("%H:%M:%S")
-            )
-
-        if cmd in ("сана", "дата", "date", "today"):
-            return (
-                self.t("date")
-                + ": "
-                + datetime.now().strftime("%d.%m.%Y")
-            )
-
-        if cmd in (
-            "ҳолат", "статус", "status",
-            "system", "система",
-        ):
-            return self.t("system")
-
-        if cmd in (
-            "кӯмак", "помощь", "help",
-            "команды", "фармонҳо",
-        ):
-            return (
-                self.t("commands")
-                + "\n\n"
-                + self.t("help")
-            )
-
-        if cmd in (
-            "мавзӯъ", "тема", "theme",
-            "дизайн", "тарҳ",
-        ):
-            self.show_settings()
-            return self.t("theme")
-
-        if cmd in ("забон", "язык", "language"):
-            self.show_settings()
-            return self.t("language")
-
-        if cmd in ("овоз", "голос", "voice"):
-            self.show_settings()
-            return self.t("voice_note")
-
-        if cmd in (
-            "пок", "clear", "тоза",
-            "очистить",
-        ):
-            self.last_response = ""
-            self.response_label.text = ""
-            return self.t("welcome")
-
+        if any(word in cmd for word in ("соат", "время", "time", "clock")):
+            return self.t("time") + ": " + now.strftime("%H:%M:%S")
+        if any(word in cmd for word in ("сана", "дата", "date", "today")):
+            return self.t("date") + ": " + now.strftime("%d.%m.%Y")
+        if any(word in cmd for word in ("ҳолат", "статус", "status", "system")):
+            return self.t("system") + "\n\n" + THEMES[self.theme_index]["name"]
+        if any(word in cmd for word in ("мавзӯъ", "тема", "theme", "design")):
+            self.next_theme()
+            return "Interface: " + THEMES[self.theme_index]["name"]
+        if any(word in cmd for word in ("кӯмак", "помощь", "help", "команд")):
+            return self.t("help") + "\n" + self.t("commands")
+        if any(word in cmd for word in ("овоз", "голос", "voice", "microphone", "микрофон")):
+            return self.t("mic") + "\n" + self.t("voice_note")
         return self.t("unknown")
 
-    def show_settings(self, *_):
-        theme = THEMES[self.theme_index]
-
-        content = BoxLayout(
-            orientation="vertical",
-            spacing=dp(10),
-            padding=dp(12),
-        )
-
-        content.add_widget(
-            make_label(
-                self.t("settings"),
-                18,
-                theme["accent"],
-                True,
-                size_hint_y=None,
-                height=dp(40),
-            )
-        )
-
-        content.add_widget(
-            make_label(
-                self.t("language"),
-                13,
-                theme["text"],
-                True,
-                size_hint_y=None,
-                height=dp(25),
-            )
-        )
-
-        for name, code in LANGUAGES.items():
-            button = self.make_button(
-                name,
-                lambda instance, selected=code:
-                    self.change_language(selected),
-                height=38,
-            )
-            content.add_widget(button)
-
-        content.add_widget(
-            make_label(
-                self.t("theme"),
-                13,
-                theme["text"],
-                True,
-                size_hint_y=None,
-                height=dp(25),
-            )
-        )
-
-        for i, item in enumerate(THEMES):
-            button = self.make_button(
-                item["name"],
-                lambda instance, selected=i:
-                    self.change_theme(selected),
-                color=item["accent"],
-                height=38,
-            )
-            content.add_widget(button)
-
-        content.add_widget(
-            make_label(
-                self.t("voice"),
-                13,
-                theme["text"],
-                True,
-                size_hint_y=None,
-                height=dp(25),
-            )
-        )
-
-        for profile in (
-            "JARVIS Classic",
-            "JARVIS Calm",
-            "JARVIS Robotic",
-        ):
-            button = self.make_button(
-                profile,
-                lambda instance, selected=profile:
-                    self.change_voice(selected),
-                height=38,
-            )
-            content.add_widget(button)
-
-        close_button = self.make_button(
-            self.t("close"),
-            lambda *_: popup.dismiss(),
-            height=42,
-        )
-        content.add_widget(close_button)
-
-        scroll = ScrollView(
-            do_scroll_x=False,
-            bar_width=dp(4),
-        )
-        scroll.add_widget(content)
-
-        popup = Popup(
-            title="JARVIS",
-            content=scroll,
-            size_hint=(0.92, 0.85),
-            auto_dismiss=True,
-            background_color=hex_color(theme["background"]),
-        )
-
-        self.settings_popup = popup
-        popup.open()
-
-    def change_language(self, language):
-        if language not in ("tg", "ru", "en"):
-            return
-
-        self.language = language
-        self.save_settings()
-        self.build_interface()
-
-        if hasattr(self, "settings_popup"):
-            self.settings_popup.dismiss()
-
-    def change_theme(self, index):
-        if not 0 <= index < len(THEMES):
-            return
-
-        self.theme_index = index
+    def next_theme(self, *_):
+        self.theme_index = (self.theme_index + 1) % len(THEMES)
         self.save_settings()
         self.update_colors()
         self.build_interface()
 
-        if hasattr(self, "settings_popup"):
-            self.settings_popup.dismiss()
+    def show_settings(self, *_):
+        theme = THEMES[self.theme_index]
+        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
+        title = make_label(self.t("settings"), 17, theme["accent"], True,
+                           size_hint_y=None, height=dp(30))
+        content.add_widget(title)
 
-    def change_voice(self, profile):
-        self.voice_profile = profile
+        content.add_widget(make_label(self.t("theme"), 12, theme["text"], True,
+                                      size_hint_y=None, height=dp(24)))
+        for i, item in enumerate(THEMES):
+            btn = Button(
+                text=("✓  " if i == self.theme_index else "") + item["name"],
+                size_hint_y=None, height=dp(39), font_size=dp(12),
+                color=hex_color(item["text"]), background_normal="",
+                background_color=hex_color(item["panel"]),
+            )
+            btn.bind(on_release=lambda instance, ix=i: self.choose_theme(ix, popup))
+            content.add_widget(btn)
+
+        content.add_widget(make_label(self.t("language"), 12, theme["text"], True,
+                                      size_hint_y=None, height=dp(24)))
+        language_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
+        for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
+            btn = Button(text=label, font_size=dp(11), background_normal="",
+                         background_color=hex_color(theme["accent"] if self.language == code else theme["panel"]),
+                         color=hex_color(theme["background"] if self.language == code else theme["text"]))
+            btn.bind(on_release=lambda instance, c=code: self.choose_language(c, popup))
+            language_row.add_widget(btn)
+        content.add_widget(language_row)
+
+        content.add_widget(make_label(self.t("voice") + ": " + self.voice_profile,
+                                      12, theme["text"], False, size_hint_y=None, height=dp(28)))
+        voice_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
+        for name in ("JARVIS Classic", "Aura"):
+            btn = Button(text=name, font_size=dp(11), background_normal="",
+                         background_color=hex_color(theme["panel"]),
+                         color=hex_color(theme["accent"]))
+            btn.bind(on_release=lambda instance, n=name: self.choose_voice(n, popup))
+            voice_row.add_widget(btn)
+        content.add_widget(voice_row)
+
+        content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
+        close_btn = self.make_button(self.t("close"), lambda *_: popup.dismiss(), theme["accent"], 40)
+        content.add_widget(close_btn)
+        popup = Popup(title="", content=content, size_hint=(0.92, 0.88),
+                      auto_dismiss=True, separator_height=0)
+        popup.open()
+
+    def choose_theme(self, index, popup):
+        self.theme_index = index
+        self.save_settings()
+        popup.dismiss()
+        self.update_colors()
+        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
+
+    def choose_language(self, code, popup):
+        self.language = code
+        self.save_settings()
+        popup.dismiss()
+        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
+
+    def choose_voice(self, name, popup):
+        self.voice_profile = name
+        self.save_settings()
+        popup.dismiss()
+        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
+        Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
+
+    def on_pause(self):
+        self.save_settings()
+        return True
+
+    def on_resume(self):
         self.save_settings()
 
-        self.last_response = (
-            self.t("voice_note")
-            + "\n"
-            + profile
-        )
-
-        self.build_interface()
-
-        if hasattr(self, "settings_popup"):
-            self.settings_popup.dismiss()
+    def on_stop(self):
+        self.save_settings()
 
 
 if __name__ == "__main__":
