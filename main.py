@@ -2,7 +2,7 @@
 """
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Core commands work offline.
-Includes crash logger for debugging on mobile without PC.
+Includes crash logger saving directly to /sdcard/Download/ for mobile debugging.
 """
 from datetime import datetime
 import math
@@ -28,7 +28,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
 
-# Системаи сабти хатогиҳо барои дидани сабаби крош дар телефон
+# Системаи сабти хатогиҳо бевосита ба папкаи Download дар телефони мобилӣ
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -36,12 +36,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     
     error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
     try:
-        app = App.get_running_app()
-        if app and hasattr(app, 'user_data_dir'):
-            log_path = os.path.join(app.user_data_dir, "crash_log.txt")
-        else:
-            log_path = "crash_log.txt"
-        
+        log_path = "/sdcard/Download/jarvis_crash_log.txt"
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "w", encoding="utf-8") as f:
             f.write(error_msg)
     except Exception as e:
