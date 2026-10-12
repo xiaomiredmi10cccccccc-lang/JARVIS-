@@ -11,7 +11,7 @@ version = 0.1
 orientation = portrait
 fullscreen = 0
 
-requirements = python3,kivy,charset-normalizer==3.3.2
+requirements = python3,kivy
 
 #p4a.branch = develop
 # p4a.commit = HEAD
