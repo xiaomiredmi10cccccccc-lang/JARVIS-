@@ -142,13 +142,13 @@ def hex_color(value):
 
 
 def make_label(text="", size=14, color="#EAFBFF", bold=False, **kwargs):
+    kwargs.setdefault("halign", "center")
+    kwargs.setdefault("valign", "middle")
     label = Label(
         text=text,
         font_size=dp(size),
         color=hex_color(color) if isinstance(color, str) and color.startswith("#") else color,
         bold=bold,
-        halign="center",
-        valign="middle",
         **kwargs
     )
     label.bind(size=lambda instance, value: setattr(instance, "text_size", value))
@@ -578,6 +578,9 @@ class JarvisApp(App):
         self.save_settings()
         popup.dismiss()
         Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
+
+    def choose_language_code(self, code, popup):
+        pass
 
     def choose_voice(self, name, popup):
         self.voice_profile = name
