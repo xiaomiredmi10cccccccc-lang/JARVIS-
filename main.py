@@ -131,17 +131,26 @@ def hex_color(value):
     return get_color_from_hex(value)
 
 
-def make_label(text="", size=14, color="#EAFBFF", bold=False, **kwargs):
+def make_label(text="", size=14, color=WHITE, bold=False, **kwargs):
+    halign = kwargs.pop("halign", "left")
+    valign = kwargs.pop("valign", "middle")
+
     label = Label(
         text=text,
-        font_size=dp(size),
-        color=hex_color(color) if isinstance(color, str) and color.startswith("#") else color,
+        font_size=size,
+        color=color,
         bold=bold,
-        halign="center",
-        valign="middle",
+        halign=halign,
+        valign=valign,
         **kwargs
     )
-    label.bind(size=lambda instance, value: setattr(instance, "text_size", value))
+
+    label.bind(
+        size=lambda instance, value: setattr(
+            instance, "text_size", value
+        )
+    )
+
     return label
 
 
