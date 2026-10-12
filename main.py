@@ -3,6 +3,7 @@
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Core commands work offline.
 Includes crash logger saving directly to /sdcard/Download/ for mobile debugging.
+Only characters present in the default Roboto font are used (no missing-glyph boxes).
 """
 from datetime import datetime
 import math
@@ -33,7 +34,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-    
+
     error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
     try:
         log_path = "/sdcard/Download/jarvis_crash_log.txt"
@@ -42,8 +43,9 @@ def handle_exception(exc_type, exc_value, exc_traceback):
             f.write(error_msg)
     except Exception as e:
         print("Error saving log:", e)
-        
+
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
 
 sys.excepthook = handle_exception
 
@@ -60,6 +62,8 @@ THEMES = [
     {"name": "JARVIS SPHERE", "accent": "#54B7FF", "accent2": "#2C5CFF",
      "background": "#030914", "panel": "#09182C", "text": "#E8F5FF"},
 ]
+
+VOICES = ("JARVIS Classic", "Aura")
 
 LANGUAGES = {
     "Тоҷикӣ": "tg",
@@ -89,6 +93,14 @@ TEXTS = {
         "date": "Санаи имрӯз",
         "system": "Ҳолат: онлайн\nМуҳаррик: Kivy\nПайвасти интернет: аз ҷониби система муайян карда намешавад",
         "voice_note": "Интихоби профил ҳоло танҳо номи профилро нигоҳ медорад; синтези овоз ҳанӯз пайваст нашудааст.",
+        "set": "ТАНЗИМ",
+        "sec_theme": "Танзими интерфейс",
+        "sec_lang": "Танзими забон",
+        "sec_voice": "Тони садо",
+        "title_theme": "Намудҳои интерфейс",
+        "title_lang": "Забонҳо",
+        "title_voice": "Мисолҳои садо",
+        "back": "Бозгашт",
     },
     "ru": {
         "ready": "JARVIS ГОТОВ",
@@ -111,6 +123,14 @@ TEXTS = {
         "date": "Сегодняшняя дата",
         "system": "Состояние: онлайн\nДвижок: Kivy\nПодключение к интернету: не проверяется приложением",
         "voice_note": "Сейчас профиль только сохраняет выбранное имя; синтез речи ещё не подключён.",
+        "set": "НАСТР.",
+        "sec_theme": "Настройка интерфейса",
+        "sec_lang": "Настройка языка",
+        "sec_voice": "Тон голоса",
+        "title_theme": "Виды интерфейса",
+        "title_lang": "Языки",
+        "title_voice": "Примеры голоса",
+        "back": "Назад",
     },
     "en": {
         "ready": "JARVIS IS READY",
@@ -133,6 +153,14 @@ TEXTS = {
         "date": "Today's date",
         "system": "State: online\nEngine: Kivy\nInternet connectivity is not checked by this app",
         "voice_note": "The selected profile name is saved, but speech synthesis is not connected yet.",
+        "set": "SET",
+        "sec_theme": "Interface settings",
+        "sec_lang": "Language settings",
+        "sec_voice": "Voice tone",
+        "title_theme": "Interface styles",
+        "title_lang": "Languages",
+        "title_voice": "Voice samples",
+        "back": "Back",
     },
 }
 
@@ -162,8 +190,15 @@ class AnimatedCore(Widget):
         self.theme_index = theme_index
         self.phase = 0.0
         self.bind(pos=self.redraw, size=self.redraw)
-        Clock.schedule_interval(self.animate, 1 / 24)
+        self._event = Clock.schedule_interval(self.animate, 1 / 24)
         self.redraw()
+
+    def on_parent(self, widget, parent):
+        # Stop the animation timer when the widget is removed (theme change),
+        # so old cores do not keep running in the background.
+        if parent is None and getattr(self, "_event", None):
+            self._event.cancel()
+            self._event = None
 
     def animate(self, dt):
         self.phase = (self.phase + dt * 0.8) % (math.pi * 2)
@@ -338,13 +373,14 @@ class JarvisApp(App):
         main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         self.root_layout.add_widget(main)
 
-        # Header: title and single settings icon
+        # Header: title and settings button (plain text, no special glyphs)
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
-        title.size_hint_x = 0.72
-        settings_btn = Button(text="⚙", size_hint_x=None, width=dp(54),
-                              font_size=dp(27), color=hex_color(theme["accent"]),
-                              background_normal="", background_color=(0, 0, 0, 0))
+        title.size_hint_x = 0.6
+        settings_btn = Button(text=self.t("set"), size_hint_x=None, width=dp(84),
+                              font_size=dp(13), bold=True, color=hex_color(theme["accent"]),
+                              background_normal="", background_down="",
+                              background_color=hex_color(theme["panel"]))
         settings_btn.bind(on_release=self.show_settings)
         header.add_widget(title)
         header.add_widget(Widget())
@@ -391,15 +427,16 @@ class JarvisApp(App):
             padding=[dp(10), dp(13), dp(10), dp(10)],
         )
         self.command_input.bind(on_text_validate=self.send_command)
-        send_btn = Button(text="➤", size_hint_x=None, width=dp(58),
-                          font_size=dp(23), color=hex_color(theme["background"]),
-                          background_normal="", background_color=hex_color(theme["accent"]))
+        send_btn = Button(text=">", size_hint_x=None, width=dp(58),
+                          font_size=dp(28), bold=True, color=hex_color(theme["background"]),
+                          background_normal="", background_down="",
+                          background_color=hex_color(theme["accent"]))
         send_btn.bind(on_release=self.send_command)
         command_row.add_widget(self.command_input)
         command_row.add_widget(send_btn)
         main.add_widget(command_row)
 
-        footer = make_label(self.t("online") + "  •  " + THEMES[self.theme_index]["name"],
+        footer = make_label(self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"],
                             10, theme["accent2"], False, size_hint_y=None, height=dp(20))
         main.add_widget(footer)
         self.footer_label = footer
@@ -408,6 +445,7 @@ class JarvisApp(App):
         self.visual_area.clear_widgets()
         theme = THEMES[self.theme_index]
         index = self.theme_index
+        dot = "\u2022"  # bullet is present in Roboto
 
         if index == 0:  # IRON HUD: visual + technical side panels
             top = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(45))
@@ -416,7 +454,7 @@ class JarvisApp(App):
             top.add_widget(self.metric_card("MODE", "READY", theme["accent"]))
             self.visual_area.add_widget(top)
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
-            self.visual_area.add_widget(make_label("◈  TACTICAL SYSTEM  ◈", 11, theme["accent"], True,
+            self.visual_area.add_widget(make_label("//  TACTICAL SYSTEM  //", 11, theme["accent"], True,
                                                    size_hint_y=None, height=dp(24)))
         elif index == 1:  # NEURAL CORE: network label + node matrix + core
             self.visual_area.add_widget(make_label("NEURAL NETWORK / ACTIVE", 12, theme["accent"], True,
@@ -424,7 +462,7 @@ class JarvisApp(App):
             nodes = GridLayout(cols=3, spacing=dp(6), size_hint_y=None, height=dp(92))
             for label in ("INPUT NODE", "MEMORY", "REASONING",
                           "LANGUAGE", "COMMAND", "OUTPUT"):
-                nodes.add_widget(self.metric_card("●", label, theme["accent"]))
+                nodes.add_widget(self.metric_card(dot, label, theme["accent"]))
             self.visual_area.add_widget(nodes)
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
         elif index == 2:  # HOLOGRAPHIC: stacked transparent-looking projection panels
@@ -433,7 +471,7 @@ class JarvisApp(App):
             holo.add_widget(self.metric_card("HOLO LINK", "STABLE", theme["accent2"]))
             self.visual_area.add_widget(holo)
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
-            self.visual_area.add_widget(make_label("〔 HOLOGRAPHIC INTERFACE 〕", 12, theme["accent"], True,
+            self.visual_area.add_widget(make_label("[ HOLOGRAPHIC INTERFACE ]", 12, theme["accent"], True,
                                                    size_hint_y=None, height=dp(28)))
         elif index == 3:  # MINIMAL AI: clean typography and short info
             self.visual_area.add_widget(Widget(size_hint_y=0.12))
@@ -450,9 +488,9 @@ class JarvisApp(App):
                                                    size_hint_y=None, height=dp(24)))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1))
             orbit = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
-            orbit.add_widget(self.metric_card("●", "STABLE", theme["accent"]))
-            orbit.add_widget(self.metric_card("◌", "SCANNING", theme["accent2"]))
-            orbit.add_widget(self.metric_card("✧", "READY", theme["accent"]))
+            orbit.add_widget(self.metric_card(dot, "STABLE", theme["accent"]))
+            orbit.add_widget(self.metric_card("o", "SCANNING", theme["accent2"]))
+            orbit.add_widget(self.metric_card("+", "READY", theme["accent"]))
             self.visual_area.add_widget(orbit)
 
     def metric_card(self, heading, value, color):
@@ -519,52 +557,69 @@ class JarvisApp(App):
         self.build_interface()
 
     def show_settings(self, *_):
+        self.open_section("main")
+
+    def open_section(self, section):
+        """Settings are split into folders: main menu -> theme / language / voice."""
+        old = getattr(self, "settings_popup", None)
+        if old is not None:
+            old.dismiss()
         theme = THEMES[self.theme_index]
         content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
-        title = make_label(self.t("settings"), 17, theme["accent"], True,
-                           size_hint_y=None, height=dp(30))
-        content.add_widget(title)
+        titles = {"main": "settings", "theme": "title_theme",
+                  "language": "title_lang", "voice": "title_voice"}
+        content.add_widget(make_label(self.t(titles[section]), 17, theme["accent"], True,
+                                      size_hint_y=None, height=dp(30)))
 
-        content.add_widget(make_label(self.t("theme"), 12, theme["text"], True,
-                                      size_hint_y=None, height=dp(24)))
-        for i, item in enumerate(THEMES):
+        def option(text, active, callback, height=48, fg_inactive=None):
             btn = Button(
-                text=("✓  " if i == self.theme_index else "") + item["name"],
-                size_hint_y=None, height=dp(39), font_size=dp(12),
-                color=hex_color(item["text"]), background_normal="",
-                background_color=hex_color(item["panel"]),
+                text=text, size_hint_y=None, height=dp(height), font_size=dp(13), bold=active,
+                background_normal="", background_down="",
+                background_color=hex_color(theme["accent"] if active else theme["panel"]),
+                color=hex_color(theme["background"] if active else (fg_inactive or theme["text"])),
             )
-            btn.bind(on_release=lambda instance, ix=i: self.choose_theme(ix, popup))
+            btn.bind(on_release=callback)
             content.add_widget(btn)
 
-        content.add_widget(make_label(self.t("language"), 12, theme["text"], True,
-                                      size_hint_y=None, height=dp(24)))
-        language_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
-        for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
-            btn = Button(text=label, font_size=dp(11), background_normal="",
-                         background_color=hex_color(theme["accent"] if self.language == code else theme["panel"]),
-                         color=hex_color(theme["background"] if self.language == code else theme["text"]))
-            btn.bind(on_release=lambda instance, c=code: self.choose_language(c, popup))
-            language_row.add_widget(btn)
-        content.add_widget(language_row)
+        if section == "main":
+            for key, target in (("sec_theme", "theme"), ("sec_lang", "language"),
+                                ("sec_voice", "voice")):
+                option(self.t(key), False,
+                       lambda inst, s=target: self.open_section(s),
+                       height=58, fg_inactive=theme["accent"])
+            content.add_widget(Widget())
+        elif section == "theme":
+            for i, item in enumerate(THEMES):
+                option(item["name"], i == self.theme_index,
+                       lambda inst, ix=i: self.choose_theme(ix, self.settings_popup))
+            content.add_widget(Widget())
+        elif section == "language":
+            for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
+                option(label, self.language == code,
+                       lambda inst, c=code: self.choose_language(c, self.settings_popup),
+                       height=54)
+            content.add_widget(Widget())
+        else:  # voice
+            for name in VOICES:
+                option(name, self.voice_profile == name,
+                       lambda inst, n=name: self.choose_voice(n, self.settings_popup),
+                       height=54)
+            content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
+            content.add_widget(Widget())
 
-        content.add_widget(make_label(self.t("voice") + ": " + self.voice_profile,
-                                      12, theme["text"], False, size_hint_y=None, height=dp(28)))
-        voice_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
-        for name in ("JARVIS Classic", "Aura"):
-            btn = Button(text=name, font_size=dp(11), background_normal="",
-                         background_color=hex_color(theme["panel"]),
-                         color=hex_color(theme["accent"]))
-            btn.bind(on_release=lambda instance, n=name: self.choose_voice(n, popup))
-            voice_row.add_widget(btn)
-        content.add_widget(voice_row)
+        nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        if section != "main":
+            nav.add_widget(self.make_button(self.t("back"),
+                                            lambda *_: self.open_section("main"),
+                                            theme["accent2"], 44))
+        nav.add_widget(self.make_button(self.t("close"),
+                                        lambda *_: self.settings_popup.dismiss(),
+                                        theme["accent"], 44))
+        content.add_widget(nav)
 
-        content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
-        close_btn = self.make_button(self.t("close"), lambda *_: popup.dismiss(), theme["accent"], 40)
-        content.add_widget(close_btn)
-        popup = Popup(title="", content=content, size_hint=(0.92, 0.88),
-                      auto_dismiss=True, separator_height=0)
-        popup.open()
+        self.settings_popup = Popup(title="", content=content, size_hint=(0.92, 0.88),
+                                    auto_dismiss=True, separator_height=0)
+        self.settings_popup.open()
 
     def choose_theme(self, index, popup):
         self.theme_index = index
@@ -578,9 +633,6 @@ class JarvisApp(App):
         self.save_settings()
         popup.dismiss()
         Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
-
-    def choose_language_code(self, code, popup):
-        pass
 
     def choose_voice(self, name, popup):
         self.voice_profile = name
