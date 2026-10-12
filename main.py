@@ -280,16 +280,73 @@ class AnimatedCore(Widget):
                 Ellipse(pos=(cx-dp(3), cy-dp(3)), size=(dp(6), dp(6)))
                 Color(*accent2, 0.5)
                 Line(points=[cx-radius*0.9, cy-radius*0.9, cx+radius*0.9, cy+radius*0.9], width=dp(0.6))
-            else:  # JARVIS SPHERE: luminous orb with latitude curves
-                Color(*accent2, 0.20)
-                Ellipse(pos=(cx-radius*0.58, cy-radius*0.58), size=(radius*1.16, radius*1.16))
+            
+            else:  # JARVIS SPHERE: animated luminous orb
+                pulse = 0.94 + 0.06 * math.sin(self.phase * 2.5)
+                r = radius * 0.66 * pulse
+
+                # Soft blue glow layers
+                Color(*accent2, 0.07)
+                Ellipse(pos=(cx-r*1.38, cy-r*1.38),
+                        size=(r*2.76, r*2.76))
+
+                Color(*accent2, 0.13)
+                Ellipse(pos=(cx-r*1.16, cy-r*1.16),
+                        size=(r*2.32, r*2.32))
+
+                # Main luminous sphere
+                Color(*accent2, 0.24)
+                Ellipse(pos=(cx-r, cy-r), size=(r*2, r*2))
+
                 Color(*accent, 0.9)
-                Line(circle=(cx, cy, radius*0.58), width=dp(1.6))
-                for scale in (0.28, 0.48):
-                    Color(*accent, 0.45)
-                    Line(ellipse=(cx-radius*0.58, cy-radius*scale, radius*1.16, radius*scale*2), width=dp(1))
-                Color(*accent, 0.75)
-                Line(ellipse=(cx-radius*0.26, cy-radius*0.58, radius*0.52, radius*1.16), width=dp(1))
+                Line(circle=(cx, cy, r), width=dp(1.8))
+
+                # Rotating orbital ellipses
+                for i in range(3):
+                    angle = self.phase * (0.7 if i % 2 == 0 else -0.7)
+                    Color(*accent if i != 1 else accent2, 0.75)
+                    with self.canvas:
+                        pass
+                    Line(
+                        ellipse=(
+                            cx-r*1.12,
+                            cy-r*(0.28 + i*0.12),
+                            r*2.24,
+                            r*(0.56 + i*0.24)
+                        ),
+                        width=dp(1.2)
+                    )
+
+                # Latitude and longitude lines
+                for scale in (0.30, 0.52, 0.74):
+                    Color(*accent, 0.38)
+                    Line(
+                        ellipse=(
+                            cx-r*0.82,
+                            cy-r*scale,
+                            r*1.64,
+                            r*scale*2
+                        ),
+                        width=dp(0.8)
+                    )
+
+                Color(*accent2, 0.65)
+                Line(
+                    points=[
+                        cx-r*0.82, cy,
+                        cx+r*0.82, cy
+                    ],
+                    width=dp(0.8)
+                )
+
+                # Bright central energy core
+                core = dp(5) + dp(2) * (
+                    0.5 + 0.5 * math.sin(self.phase * 3)
+                )
+                Color(*accent, 0.95)
+                Ellipse(pos=(cx-core, cy-core),
+                        size=(core*2, core*2))
+
 
 
 class JarvisApp(App):
