@@ -18,7 +18,8 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
-from kivy.graphics import Color, Ellipse, Line, Point, Rectangle, RoundedRectangle
+from kivy.graphics import (Color, Ellipse, InstructionGroup, Line, Point, Rectangle,
+                           RoundedRectangle, Triangle)
 from kivy.graphics.texture import Texture
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -113,6 +114,8 @@ TEXTS = {
         "orb_ask": "Имрӯз чӣ тавр ёрдам расонам?",
         "p_ask": "Чӣ кор кунам?",
         "p_ready": "Омода барои гӯш кардан. Фармонро нависед",
+        "listening": "Гӯш мекунам...",
+        "speaking": "Ҷавоб медиҳам...",
     },
     "ru": {
         "ready": "JARVIS ГОТОВ",
@@ -147,6 +150,8 @@ TEXTS = {
         "orb_ask": "Чем могу помочь сегодня?",
         "p_ask": "Что сделать?",
         "p_ready": "Готов слушать. Введите команду",
+        "listening": "Слушаю...",
+        "speaking": "Отвечаю...",
     },
     "en": {
         "ready": "JARVIS IS READY",
@@ -181,6 +186,8 @@ TEXTS = {
         "orb_ask": "How can I help you today?",
         "p_ask": "What can I do?",
         "p_ready": "Ready to listen. Type a command",
+        "listening": "Listening...",
+        "speaking": "Speaking...",
     },
 }
 
@@ -251,15 +258,37 @@ def linear_texture(name, stops, rows=64):
     return _TEX[name]
 
 
+def glass_instructions(group, x, y, w, h, r, tint, fill=0.20, sheen=0.55, border=0.40):
+    """'Liquid glass' look: translucent tint, bright top sheen, soft bottom glow, light border."""
+    group.clear()
+    if w <= 0 or h <= 0:
+        return
+    r = min(r, h / 2.0, w / 2.0)
+    group.add(Color(tint[0], tint[1], tint[2], fill))
+    group.add(RoundedRectangle(pos=(x, y), size=(w, h), radius=[r]))
+    sheen_tex = linear_texture("glass_sheen", ((0, (255, 255, 255, 0)), (1, (255, 255, 255, 120))))
+    group.add(Color(1, 1, 1, sheen))
+    group.add(RoundedRectangle(texture=sheen_tex, pos=(x + dp(1), y + h * 0.46),
+                               size=(max(w - dp(2), 1), h * 0.52), radius=[r, r, 0, 0]))
+    glow_tex = linear_texture("glass_glow", ((0, (255, 255, 255, 80)), (1, (255, 255, 255, 0))))
+    group.add(Color(tint[0] * 0.5 + 0.5, tint[1] * 0.5 + 0.5, tint[2] * 0.5 + 0.5, 0.45))
+    group.add(RoundedRectangle(texture=glow_tex, pos=(x + dp(1), y + dp(1)),
+                               size=(max(w - dp(2), 1), h * 0.3), radius=[0, 0, r, r]))
+    group.add(Color(1, 1, 1, border))
+    group.add(Line(rounded_rectangle=(x, y, w, h, r), width=dp(1)))
+
+
 class AnimatedCore(Widget):
     """Lightweight canvas-only visual; no external images or libraries."""
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
         self.theme_index = theme_index
         self.phase = 0.0
+        self.level = 0.0     # 0..1 voice level (simulated until the microphone is connected)
+        self.clock_t = 0.0
         self.fib, self.dashes, self.reds = [], [], []
         if theme_index == 6:  # PARTICLE CORE: points on a sphere
-            n = 520
+            n = 420
             for k in range(n):
                 y = 1 - 2 * (k + 0.5) / n
                 rr = math.sqrt(1 - y * y)
@@ -284,7 +313,19 @@ class AnimatedCore(Widget):
         app = App.get_running_app()
         if app is not None and getattr(app, "animation_paused", False):
             return
-        self.phase = (self.phase + dt * 0.8) % (math.pi * 2)
+        state = getattr(app, "orb_state", "idle") if app is not None else "idle"
+        self.clock_t += dt
+        t = self.clock_t
+        if state == "listening":    # orb reacts to incoming sound
+            target = 0.35 + 0.45 * abs(math.sin(t * 3.1) * math.sin(t * 1.3 + 1.0))
+            boost = 1.9
+        elif state == "speaking":   # orb pulses with the spoken answer
+            target = 0.30 + 0.50 * abs(math.sin(t * 6.2) * (0.6 + 0.4 * math.sin(t * 1.7)))
+            boost = 1.4
+        else:
+            target, boost = 0.0, 1.0
+        self.level += (target - self.level) * min(1.0, dt * 8.0)
+        self.phase = (self.phase + dt * 0.8 * boost) % (math.pi * 2)
         self.redraw()
 
     def set_theme(self, index):
@@ -293,18 +334,23 @@ class AnimatedCore(Widget):
 
     def draw_aura(self, cx, cy, R, accent, accent2):
         """AURA ORB: dark glass sphere, glowing violet/blue bands, soft halo."""
+        lv = self.level
+        R = R * (1 + 0.10 * lv)
         halo = radial_texture("aura_halo", ((0, (50, 100, 255, 100)), (0.5, (30, 70, 220, 36)),
                                             (1, (20, 40, 160, 0))))
-        Color(1, 1, 1, 1)
-        Rectangle(texture=halo, pos=(cx - R * 2.1, cy - R * 2.1), size=(R * 4.2, R * 4.2))
+        hs = R * (4.2 + 1.4 * lv)
+        Color(1, 1, 1, 0.75 + 0.25 * lv)
+        Rectangle(texture=halo, pos=(cx - hs / 2, cy - hs / 2), size=(hs, hs))
         body = radial_texture("aura_body", ((0, (1, 3, 10, 255)), (0.75, (3, 10, 34, 255)),
                                             (1, (10, 42, 120, 255))))
+        Color(1, 1, 1, 1)
         Rectangle(texture=body, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
         palette = ((0.23, 0.48, 1.0), (0.54, 0.36, 1.0), (0.21, 0.82, 1.0),
                    (0.18, 0.42, 1.0), (0.69, 0.49, 1.0))
         for j in range(5):
             a_axis = R * 0.95
-            b_axis = R * (0.28 + 0.14 * j + 0.04 * math.sin(self.phase * 1.3 + j))
+            b_axis = R * (0.28 + 0.14 * j + 0.04 * math.sin(self.phase * 1.3 + j)
+                          + 0.05 * lv * math.sin(self.phase * 4 + j * 1.3))
             rot = self.phase * (0.5 + 0.12 * j) * (1 if j % 2 == 0 else -1) + j * 0.8
             cr, sr = math.cos(rot), math.sin(rot)
             pts = []
@@ -313,9 +359,9 @@ class AnimatedCore(Widget):
                 ex, ey = a_axis * math.cos(t), b_axis * math.sin(t)
                 pts.extend([cx + ex * cr - ey * sr, cy + ex * sr + ey * cr])
             r, g, b = palette[j]
-            Color(r, g, b, 0.18)
+            Color(r, g, b, 0.18 + 0.15 * lv)
             Line(points=pts, width=dp(4.5))
-            Color(r, g, b, 0.55)
+            Color(r, g, b, 0.55 + 0.25 * lv)
             Line(points=pts, width=dp(2))
             Color(0.8, 0.9, 1, 0.85)
             Line(points=pts, width=dp(0.9))
@@ -327,54 +373,73 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R), width=dp(1.4))
         start = (self.phase * 40) % 360
         Color(0.75, 0.88, 1, 0.95)
-        Line(circle=(cx, cy, R, start, start + 100), width=dp(2.6), cap="round")
+        Line(circle=(cx, cy, R, start, start + 100), width=dp(2.6) * (1 + lv), cap="round")
         Color(0.78, 0.66, 1, 0.8)
-        Line(circle=(cx, cy, R, start + 190, start + 245), width=dp(2.2), cap="round")
+        Line(circle=(cx, cy, R, start + 190, start + 245), width=dp(2.2) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
-        """PARTICLE CORE: wobbling shell of glowing points inside a dark disc."""
+        """PARTICLE CORE: wobbling shell of glowing dots and rings inside a dark disc."""
+        lv = self.level
+        R = R * (1 + 0.10 * lv)
         disc = radial_texture("p_disc", ((0, (11, 26, 32, 255)), (1, (4, 8, 11, 255))))
         Color(1, 1, 1, 1)
         Rectangle(texture=disc, pos=(cx - R * 1.3, cy - R * 1.3), size=(R * 2.6, R * 2.6))
-        Color(*accent, 0.2)
+        Color(*accent, 0.2 + 0.3 * lv)
         Line(circle=(cx, cy, R * 1.3), width=dp(1))
         glow = radial_texture("p_glow", ((0, (40, 200, 255, 0)), (0.55, (40, 200, 255, 0)),
                                          (0.8, (40, 200, 255, 40)), (1, (40, 200, 255, 0))))
+        gs = R * 3 * (1 + 0.3 * lv)
         Color(1, 1, 1, 1)
-        Rectangle(texture=glow, pos=(cx - R * 1.5, cy - R * 1.5), size=(R * 3, R * 3))
+        Rectangle(texture=glow, pos=(cx - gs / 2, cy - gs / 2), size=(gs, gs))
         p = self.phase
         cs, sn = math.cos(p * 0.5), math.sin(p * 0.5)
         tc, ts = 0.9004, 0.4350  # tilt of 0.45 rad
-        near, mid, far = [], [], []
-        for x, y, z in self.fib:
+        amp = 0.13 * (1 + 2.4 * lv)
+
+        def shell(x, y, z):
             n = (math.sin(x * 2.3 + p * 1.2) * math.sin(y * 2.9 - p * 0.9)
                  + 0.6 * math.sin(z * 3.3 + p * 1.5) + 0.4 * math.sin((x + y + z) * 5 + p * 2))
-            rr = 1 + 0.13 * n
+            rr = 1 + amp * n
             X, Y, Z = x * rr, y * rr, z * rr
             x1 = X * cs + Z * sn
             z1 = -X * sn + Z * cs
             y1 = Y * tc - z1 * ts
             z2 = Y * ts + z1 * tc
-            pt = (cx + x1 * R, cy + y1 * R)
+            return cx + x1 * R, cy + y1 * R, z2
+
+        Color(*accent, 0.20 + 0.15 * lv)
+        for k in range(1, 13):  # latitude rings
+            y = -1 + 2 * k / 13.0
+            r0 = math.sqrt(1 - y * y)
+            pts = []
+            for n in range(37):
+                t = n / 36.0 * math.pi * 2
+                px, py, _z = shell(math.cos(t) * r0, y, math.sin(t) * r0)
+                pts.extend((px, py))
+            Line(points=pts, width=dp(0.6))
+        near, mid, far = [], [], []
+        for x, y, z in self.fib:
+            px, py, z2 = shell(x, y, z)
             if z2 > 0.35:
-                near.extend(pt)
+                near.extend((px, py))
             elif z2 > -0.3:
-                mid.extend(pt)
+                mid.extend((px, py))
             else:
-                far.extend(pt)
+                far.extend((px, py))
         if far:
             Color(0.10, 0.56, 0.69, 0.55)
-            Point(points=far, pointsize=dp(0.8))
+            Point(points=far, pointsize=dp(0.6))
         if mid:
             Color(0.38, 0.90, 1, 0.8)
-            Point(points=mid, pointsize=dp(1.0))
+            Point(points=mid, pointsize=dp(0.8))
         if near:
             Color(0.85, 0.98, 1, 1)
-            Point(points=near, pointsize=dp(1.3))
+            Point(points=near, pointsize=dp(1.0))
 
     def draw_glass(self, cx, cy, R, accent, accent2):
         """GLASS ORB: dark glass sphere on a reflective floor with light pillars."""
         p = self.phase
+        lv = self.level
         fy = cy - R * 1.02
         w = self.width
         floor = linear_texture("g_floor", ((0, (0, 0, 0, 0)), (1, (10, 40, 70, 140))))
@@ -385,11 +450,11 @@ class AnimatedCore(Widget):
         refl = radial_texture("g_refl", ((0, (70, 190, 255, 130)), (1, (70, 190, 255, 0))))
         for fx, a in ((0.10, 0.5), (0.90, 0.5), (0.03, 0.25), (0.97, 0.25)):
             x = self.x + w * fx
-            Color(1, 1, 1, a)
+            Color(1, 1, 1, min(1.0, a * (1 + 0.6 * lv)))
             Rectangle(texture=pillar, pos=(x - dp(2.5), fy), size=(dp(5), max(self.top - fy - dp(6), 1)))
             rw = w * 0.32
             Rectangle(texture=refl, pos=(x - rw / 2, fy - rw * 0.125), size=(rw, rw * 0.25))
-        Color(1, 1, 1, 1)
+        Color(1, 1, 1, min(1.0, 0.8 + 0.5 * lv))
         Rectangle(texture=refl, pos=(cx - R * 1.1, fy - R * 0.22), size=(R * 2.2, R * 0.44))
         Color(0.22, 0.78, 1, 0.2)
         for k in range(-6, 7):
@@ -428,16 +493,26 @@ class AnimatedCore(Widget):
                                            (1, (40, 170, 240, 70))))
         Color(1, 1, 1, 1)
         Rectangle(texture=inner, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
-        pl = 0.7 + 0.3 * math.sin(p * 2)
+        pl = min(1.0, 0.7 + 0.3 * math.sin(p * 2) + 0.5 * lv)
+
+        def equator(span):  # the equator line ripples when the orb hears or speaks
+            pts = []
+            for i in range(41):
+                u = i / 40.0 * 2 - 1
+                yy = cy + math.sin(u * 9 + p * 7) * lv * R * 0.07 * (1 - u * u)
+                pts.extend((cx + u * R * span, yy))
+            return pts
+
         Color(0.22, 0.78, 1, 0.25 * pl)
-        Line(points=[cx - R, cy, cx + R, cy], width=dp(4))
+        Line(points=equator(1.0), width=dp(4))
         Color(0.55, 0.92, 1, 0.95 * pl)
-        Line(points=[cx - R * 0.97, cy, cx + R * 0.97, cy], width=dp(1.4))
+        Line(points=equator(0.97), width=dp(1.4) * (1 + lv))
         Color(0.91, 0.98, 1, 0.8 * pl)
         Line(points=[cx, cy - R * 0.18, cx, cy + R * 0.18], width=dp(1))
         flare = radial_texture("g_flare", ((0, (220, 250, 255, 240)), (1, (56, 200, 255, 0))))
+        fs = R * 0.22 * (1 + 0.8 * lv)
         Color(1, 1, 1, pl)
-        Rectangle(texture=flare, pos=(cx - R * 0.22, cy - R * 0.22), size=(R * 0.44, R * 0.44))
+        Rectangle(texture=flare, pos=(cx - fs, cy - fs), size=(fs * 2, fs * 2))
         Color(0.35, 0.82, 1, 0.85)
         Line(circle=(cx, cy, R), width=dp(1.3))
         Color(1, 1, 1, 0.92)  # two glossy highlights (angles run clockwise from the top)
@@ -538,27 +613,91 @@ class AnimatedCore(Widget):
                 Line(ellipse=(cx-radius*0.26, cy-radius*0.58, radius*0.52, radius*1.16), width=dp(1))
 
 
-class WaveButton(Button):
-    """Send button with a sound-wave icon drawn on canvas (no font glyphs needed)."""
-    def __init__(self, bar_color=(1, 1, 1, 1), **kwargs):
+class GlassButton(Button):
+    """Liquid-glass button used in the three newest designs."""
+    def __init__(self, tint=(0.3, 0.6, 1.0), active=False, radius=16, **kwargs):
         super().__init__(**kwargs)
-        self.bar_color = bar_color
+        self.tint = tint
+        self.active = active
+        self.radius = radius
+        self.background_normal = ""
+        self.background_down = ""
+        self.background_color = (0, 0, 0, 0)
+        self._grp = InstructionGroup()
+        self.canvas.before.add(self._grp)
+        self.bind(pos=self.draw_bg, size=self.draw_bg, state=self.draw_bg)
+        self.draw_bg()
+
+    def draw_bg(self, *_):
+        down = self.state == "down"
+        fill = (0.42 if self.active else 0.18) + (0.18 if down else 0.0)
+        glass_instructions(self._grp, self.x, self.y, self.width, self.height,
+                           dp(self.radius), self.tint, fill,
+                           0.30 if down else 0.55, 0.55 if self.active else 0.40)
+
+
+class ActionButton(Button):
+    """Command-bar button: sound-wave icon when empty, paper plane once text is typed."""
+    def __init__(self, glass=True, tint=(0.3, 0.6, 1.0), icon_color=(1, 1, 1, 1), **kwargs):
+        super().__init__(**kwargs)
+        self.glass = glass
+        self.tint = tint
+        self.icon_color = icon_color
+        self.mode = "wave"
         self.text = ""
         self.background_normal = ""
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
-        self.bind(pos=self.draw_bars, size=self.draw_bars)
-        self.draw_bars()
+        self._bg = InstructionGroup()
+        self.canvas.before.add(self._bg)
+        self.bind(pos=self.draw_icon, size=self.draw_icon, state=self.draw_icon)
+        self.draw_icon()
 
-    def draw_bars(self, *_):
+    def set_mode(self, mode):
+        if mode != self.mode:
+            self.mode = mode
+            self.draw_icon()
+
+    def draw_icon(self, *_):
+        self._bg.clear()
         self.canvas.after.clear()
         cx, cy = self.center
+        down = self.state == "down"
+        ic = self.icon_color
+        if not self.glass:
+            self._bg.add(Color(self.tint[0], self.tint[1], self.tint[2], 1))
+            self._bg.add(Rectangle(pos=self.pos, size=self.size))
+        elif self.mode == "plane":
+            d = max(min(self.width, self.height) - dp(10), 1)
+            self._bg.add(Color(self.tint[0], self.tint[1], self.tint[2], 0.70 if down else 0.55))
+            self._bg.add(Ellipse(pos=(cx - d / 2, cy - d / 2), size=(d, d)))
+            self._bg.add(Color(1, 1, 1, 0.22))
+            self._bg.add(Ellipse(pos=(cx - d / 2 + dp(2), cy), size=(d - dp(4), d / 2 - dp(1))))
+            self._bg.add(Color(1, 1, 1, 0.55))
+            self._bg.add(Line(circle=(cx, cy, d / 2), width=dp(1)))
         with self.canvas.after:
-            Color(*self.bar_color)
-            for i, h in enumerate((0.35, 0.7, 1.0, 0.6, 0.4)):
-                x = cx + (i - 2) * dp(5)
-                half = dp(22) * h / 2
-                Line(points=[x, cy - half, x, cy + half], width=dp(1.5), cap="round")
+            if self.mode == "plane":
+                s = dp(8.5) * (0.92 if down else 1.0)
+                ang = 0.5  # tilted up and to the right
+                ca, sa = math.cos(ang), math.sin(ang)
+
+                def rot(px, py):
+                    return cx + (px * ca - py * sa) * s, cy + (px * sa + py * ca) * s
+
+                a1 = rot(-1.0, -0.85)
+                tip = rot(1.15, 0.0)
+                b1 = rot(-1.0, 0.85)
+                notch = rot(-0.35, 0.0)
+                Color(ic[0], ic[1], ic[2], 0.75)
+                Triangle(points=[a1[0], a1[1], tip[0], tip[1], notch[0], notch[1]])
+                Color(ic[0], ic[1], ic[2], 1)
+                Triangle(points=[b1[0], b1[1], tip[0], tip[1], notch[0], notch[1]])
+            else:
+                Color(*ic)
+                for i, h in enumerate((0.35, 0.7, 1.0, 0.6, 0.4)):
+                    x = cx + (i - 2) * dp(5)
+                    half = dp(22) * h / 2
+                    Line(points=[x, cy - half, x, cy + half], width=dp(1.5), cap="round")
 
 
 class JarvisApp(App):
@@ -571,7 +710,11 @@ class JarvisApp(App):
         self.last_response = ""
         self.command_history = []
         self.animation_paused = False
+        self.orb_state = "idle"      # idle / listening / speaking
+        self._orb_event = None
         self.load_settings()
+        # Keep the text field visible above the on-screen keyboard.
+        Window.softinput_mode = "below_target"
 
         Window.clearcolor = hex_color(THEMES[self.theme_index]["background"])
         self.root_layout = FloatLayout()
@@ -608,10 +751,13 @@ class JarvisApp(App):
         self.grad_rect.pos = self.root_layout.pos
         self.grad_rect.size = (self.root_layout.width, self.root_layout.height * 0.42)
 
+    def is_glass(self):
+        return self.theme_index >= 5  # AURA ORB, PARTICLE CORE, GLASS ORB
+
     def update_pill(self, widget, *_):
-        widget.pill.pos = widget.pos
-        widget.pill.size = widget.size
-        widget.pill_line.rounded_rectangle = (widget.x, widget.y, widget.width, widget.height, dp(26))
+        tint = hex_color(THEMES[self.theme_index]["accent"])[:3]
+        glass_instructions(widget._grp, widget.x, widget.y, widget.width, widget.height,
+                           dp(26), tint, 0.16, 0.50, 0.50)
 
     def t(self, key):
         return TEXTS.get(self.language, TEXTS["tg"]).get(key, key)
@@ -639,6 +785,12 @@ class JarvisApp(App):
     def make_button(self, text, callback, color=None, height=44):
         theme = THEMES[self.theme_index]
         accent = color or theme["accent"]
+        if self.is_glass():
+            btn = GlassButton(text=text, tint=hex_color(accent)[:3], active=True,
+                              size_hint_y=None, height=dp(height), font_size=dp(13),
+                              bold=True, color=hex_color(theme["text"]))
+            btn.bind(on_release=callback)
+            return btn
         btn = Button(
             text=text,
             size_hint_y=None,
@@ -668,20 +820,24 @@ class JarvisApp(App):
     def build_interface(self):
         self.root_layout.clear_widgets()
         theme = THEMES[self.theme_index]
+        glass = self.is_glass()
         main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         self.root_layout.add_widget(main)
 
         # Header: title and settings button (plain text, no special glyphs)
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
-        title.size_hint_x = 0.6
-        settings_btn = Button(text=self.t("set"), size_hint_x=None, width=dp(84),
-                              font_size=dp(13), bold=True, color=hex_color(theme["accent"]),
-                              background_normal="", background_down="",
-                              background_color=hex_color(theme["panel"]))
+        if glass:
+            settings_btn = GlassButton(text=self.t("set"), tint=hex_color(theme["accent"])[:3],
+                                       size_hint_x=None, width=dp(96), font_size=dp(13),
+                                       bold=True, color=hex_color(theme["text"]), radius=18)
+        else:
+            settings_btn = Button(text=self.t("set"), size_hint_x=None, width=dp(96),
+                                  font_size=dp(13), bold=True, color=hex_color(theme["accent"]),
+                                  background_normal="", background_down="",
+                                  background_color=hex_color(theme["panel"]))
         settings_btn.bind(on_release=self.show_settings)
-        header.add_widget(title)
-        header.add_widget(Widget())
+        header.add_widget(title)  # takes all remaining width, so the title never wraps
         header.add_widget(settings_btn)
         main.add_widget(header)
 
@@ -697,11 +853,21 @@ class JarvisApp(App):
         # Response panel
         response_panel = BoxLayout(orientation="vertical", padding=dp(10),
                                    spacing=dp(4), size_hint_y=None, height=dp(94))
-        with response_panel.canvas.before:
-            Color(*hex_color(theme["panel"]))
-            response_panel.bg = Rectangle(pos=response_panel.pos, size=response_panel.size)
-        response_panel.bind(pos=lambda w, v: setattr(w.bg, "pos", w.pos),
-                            size=lambda w, v: setattr(w.bg, "size", w.size))
+        if glass:
+            response_panel._grp = InstructionGroup()
+            response_panel.canvas.before.add(response_panel._grp)
+            panel_tint = hex_color(theme["accent"])[:3]
+
+            def refresh_panel(w, *_):
+                glass_instructions(w._grp, w.x, w.y, w.width, w.height, dp(18),
+                                   panel_tint, 0.10, 0.28, 0.30)
+            response_panel.bind(pos=refresh_panel, size=refresh_panel)
+        else:
+            with response_panel.canvas.before:
+                Color(*hex_color(theme["panel"]))
+                response_panel.bg = Rectangle(pos=response_panel.pos, size=response_panel.size)
+            response_panel.bind(pos=lambda w, v: setattr(w.bg, "pos", w.pos),
+                                size=lambda w, v: setattr(w.bg, "size", w.size))
         self.response_title = make_label(self.t("response"), 10, theme["accent"], True,
                                           size_hint_y=None, height=dp(18))
         self.response_label = make_label(self.last_response or self.t("welcome"), 13,
@@ -713,18 +879,12 @@ class JarvisApp(App):
         main.add_widget(response_panel)
 
         # Command bar remains at the bottom in every design.
-        pill = self.theme_index in (5, 6, 7)
+        pill = glass
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
-        if pill:  # rounded "Ask anything..." bar
-            with command_row.canvas.before:
-                Color(*hex_color(theme["accent2"])[:3], 0.35)
-                command_row.pill = RoundedRectangle(pos=command_row.pos, size=command_row.size,
-                                                    radius=[dp(26)])
-                Color(*hex_color(theme["accent"])[:3], 0.7)
-                command_row.pill_line = Line(
-                    rounded_rectangle=(command_row.x, command_row.y, command_row.width,
-                                       command_row.height, dp(26)), width=dp(1.2))
+        if pill:  # liquid-glass "Ask anything..." bar
+            command_row._grp = InstructionGroup()
+            command_row.canvas.before.add(command_row._grp)
             command_row.bind(pos=self.update_pill, size=self.update_pill)
         self.command_input = TextInput(
             hint_text=self.t("input"), multiline=False, size_hint_x=1,
@@ -737,21 +897,23 @@ class JarvisApp(App):
             padding=[dp(22 if pill else 10), dp(15 if pill else 13), dp(10), dp(10)],
         )
         self.command_input.bind(on_text_validate=self.send_command)
+        self.command_input.bind(text=self.on_text_change)
         if pill:
-            send_btn = WaveButton(bar_color=hex_color(theme["text"]),
-                                  size_hint_x=None, width=dp(58))
+            self.action_btn = ActionButton(glass=True, tint=hex_color(theme["accent"])[:3],
+                                           icon_color=hex_color(theme["text"]),
+                                           size_hint_x=None, width=dp(58))
         else:
-            send_btn = Button(text=">", size_hint_x=None, width=dp(58),
-                              font_size=dp(28), bold=True, color=hex_color(theme["background"]),
-                              background_normal="", background_down="",
-                              background_color=hex_color(theme["accent"]))
-        send_btn.bind(on_release=self.send_command)
+            self.action_btn = ActionButton(glass=False, tint=hex_color(theme["accent"])[:3],
+                                           icon_color=hex_color(theme["background"]),
+                                           size_hint_x=None, width=dp(58))
+        self.action_btn.bind(on_release=self.on_action)
         command_row.add_widget(self.command_input)
-        command_row.add_widget(send_btn)
+        command_row.add_widget(self.action_btn)
         main.add_widget(command_row)
 
+        footer_color = (*hex_color(theme["text"])[:3], 0.7) if glass else theme["accent2"]
         footer = make_label(self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"],
-                            10, theme["accent2"], False, size_hint_y=None, height=dp(20))
+                            10, footer_color, False, size_hint_y=None, height=dp(20))
         main.add_widget(footer)
         self.footer_label = footer
 
@@ -861,7 +1023,37 @@ class JarvisApp(App):
         self.command_input.text = ""
         answer = self.process_command(command)
         self.show_response(answer)
-        self.status_label.text = self.t("ready")
+        # the orb "speaks" the answer (simulated until speech synthesis is connected)
+        self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
+
+    def on_text_change(self, instance, value):
+        if hasattr(self, "action_btn"):
+            self.action_btn.set_mode("plane" if value.strip() else "wave")
+
+    def on_action(self, *_):
+        if self.command_input.text.strip():
+            self.send_command()
+        else:
+            self.toggle_listening()
+
+    def toggle_listening(self):
+        if self.orb_state == "listening":
+            self.set_orb_state("idle")
+            return
+        self.show_response(self.t("mic") + "\n" + self.t("voice_note"))
+        self.set_orb_state("listening", 4.0)
+
+    def set_orb_state(self, state, seconds=None):
+        self.orb_state = state
+        if self._orb_event is not None:
+            self._orb_event.cancel()
+            self._orb_event = None
+        label = getattr(self, "status_label", None)
+        if label is not None:
+            label.text = {"listening": self.t("listening"),
+                          "speaking": self.t("speaking")}.get(state, self.t("ready"))
+        if state != "idle" and seconds:
+            self._orb_event = Clock.schedule_once(lambda dt: self.set_orb_state("idle"), seconds)
 
     def process_command(self, command):
         cmd = command.lower().strip()
@@ -907,12 +1099,17 @@ class JarvisApp(App):
                                       size_hint_y=None, height=dp(30)))
 
         def option(text, active, callback, height=48, fg_inactive=None, parent=None):
-            btn = Button(
-                text=text, size_hint_y=None, height=dp(height), font_size=dp(13), bold=active,
-                background_normal="", background_down="",
-                background_color=hex_color(theme["accent"] if active else theme["panel"]),
-                color=hex_color(theme["background"] if active else (fg_inactive or theme["text"])),
-            )
+            if self.is_glass():
+                btn = GlassButton(text=text, tint=hex_color(theme["accent"])[:3], active=active,
+                                  size_hint_y=None, height=dp(height), font_size=dp(13),
+                                  bold=active, color=hex_color(theme["text"]))
+            else:
+                btn = Button(
+                    text=text, size_hint_y=None, height=dp(height), font_size=dp(13), bold=active,
+                    background_normal="", background_down="",
+                    background_color=hex_color(theme["accent"] if active else theme["panel"]),
+                    color=hex_color(theme["background"] if active else (fg_inactive or theme["text"])),
+                )
             btn.bind(on_release=callback)
             (parent if parent is not None else content).add_widget(btn)
 
@@ -957,8 +1154,13 @@ class JarvisApp(App):
                                         theme["accent"], 44))
         content.add_widget(nav)
 
+        popup_kwargs = {}
+        if self.is_glass():
+            popup_kwargs = dict(background="",
+                                background_color=(*hex_color(theme["background"])[:3], 0.96),
+                                overlay_color=(0, 0, 0, 0.6))
         self.settings_popup = Popup(title="", content=content, size_hint=(0.92, 0.88),
-                                    auto_dismiss=True, separator_height=0)
+                                    auto_dismiss=True, separator_height=0, **popup_kwargs)
         self.settings_popup.bind(on_dismiss=self.settings_closed)
         self.animation_paused = True  # save battery while settings are open
         self.settings_popup.open()
