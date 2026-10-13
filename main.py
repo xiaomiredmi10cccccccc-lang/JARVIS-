@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-JARVIS Android Assistant
-Kivy + Buildozer compatible. Core commands work offline.
-Includes crash logger saving directly to /sdcard/Download/ for mobile debugging.
-Only characters present in the default Roboto font are used (no missing-glyph boxes).
+JARVIS Android Assistant (Combined Version)
+Kivy + Buildozer compatible. Includes voice layer, accounts layer, and core UI.
 """
 from datetime import datetime
+import json
 import math
 import os
 import random
+import re
 import sys
 import time
 import traceback
@@ -20,11 +20,6 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
-from kivy.utils import platform
-
-if platform == "android":
-    from jnius import autoclass, PythonJavaClass, java_method
-  
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
                            RoundedRectangle, Triangle)
 from kivy.graphics.texture import Texture
@@ -39,7 +34,167 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
 
-# ---- Crash log: saved in the app's private folder (always writable) and in Download ----
+# ==========================================
+# 1. VOICE LAYER (from voice.py)[span_3](start_span)[span_3](end_span)
+# ==========================================
+
+class VoiceUnavailable(Exception):
+    """Raised when a voice engine is requested but not connected yet."""
+    pass
+
+
+def microphone_permission_state():
+    """'granted', 'denied', 'unknown' or 'not_android' (desktop testing)."""
+    try:
+        from android.permissions import check_permission, Permission
+    except ImportError:
+        return "not_android"
+    try:
+        return "granted" if check_permission(Permission.RECORD_AUDIO) else "denied"
+    except Exception:
+        return "unknown"
+
+
+def request_microphone(callback):
+    """Asks Android for RECORD_AUDIO; callback(bool) may run on a non-UI thread."""
+    try:
+        from android.permissions import request_permissions, Permission
+    except ImportError:
+        callback(True)
+        return
+
+    def done(permissions, grants):
+        callback(bool(grants) and all(grants))
+
+    try:
+        request_permissions([Permission.RECORD_AUDIO], done)
+    except Exception:
+        callback(False)
+
+
+class SpeechRecognizer(object):
+    """Speech to text. Not connected yet."""
+    available = False
+
+    def start(self, on_text, on_error):
+        raise VoiceUnavailable("Speech recognition is not connected yet.")
+
+    def stop(self):
+        return None
+
+
+class SpeechSynthesizer(object):
+    """Text to speech. Not connected yet."""
+    available = False
+
+    def speak(self, text):
+        raise VoiceUnavailable("Speech synthesis is not connected yet.")
+
+    def stop(self):
+        return None
+
+
+# ==========================================
+# 2. ACCOUNTS & SYNC LAYER (from accounts.py)[span_4](start_span)[span_4](end_span)
+# ==========================================
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MIN_PASSWORD_LENGTH = 8
+
+
+class AccountError(Exception):
+    """Base class for account errors."""
+    pass
+
+
+class ServerNotConfigured(AccountError):
+    """Raised when an online operation is requested but no server is configured."""
+    pass
+
+
+def validate_email(email):
+    return bool(EMAIL_RE.match((email or "").strip()))
+
+
+def validate_password(password):
+    """Returns None when the password is acceptable, otherwise a short reason code."""
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
+        return "too_short"
+    if password.lower() == password or password.isdigit():
+        return "too_simple"
+    return None
+
+
+def load_server_url(private_dir=None):
+    """Server address from the environment or the private folder (never from the repo)."""
+    url = os.environ.get("JARVIS_SERVER_URL", "").strip()
+    if not url and private_dir:
+        path = os.path.join(private_dir, "server_config.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                url = str(json.load(f).get("url", "")).strip()
+        except Exception:
+            url = ""
+    return url if url.startswith("https://") else None
+
+
+class AccountService(object):
+    def is_configured(self):
+        raise NotImplementedError
+
+    def current_user(self):
+        raise NotImplementedError
+
+    def register(self, email, password):
+        raise NotImplementedError
+
+    def login(self, email, password):
+        raise NotImplementedError
+
+    def logout(self):
+        raise NotImplementedError
+
+    def push_chats(self, chats):
+        raise NotImplementedError
+
+    def pull_chats(self):
+        raise NotImplementedError
+
+
+class LocalAccountService(AccountService):
+    def is_configured(self):
+        return False
+
+    def current_user(self):
+        return None
+
+    def _unavailable(self):
+        raise ServerNotConfigured("The online account server is not configured.")
+
+    def register(self, email, password):
+        self._unavailable()
+
+    def login(self, email, password):
+        self._unavailable()
+
+    def logout(self):
+        return None
+
+    def push_chats(self, chats):
+        self._unavailable()
+
+    def pull_chats(self):
+        self._unavailable()
+
+
+def get_service(private_dir=None):
+    return LocalAccountService()
+
+
+# ==========================================
+# 3. CORE APP & UI (from main_before_chats.py)[span_5](start_span)[span_5](end_span)
+# ==========================================
+
 CRASH_FILE = "jarvis_crash_log.txt"
 
 
@@ -66,7 +221,6 @@ def save_crash(text):
 
 
 def read_last_crash():
-    """Returns the crash text saved by the previous run (shown once inside the app)."""
     path = os.path.join(crash_dirs()[0], CRASH_FILE)
     try:
         if os.path.exists(path):
@@ -91,7 +245,6 @@ sys.excepthook = handle_exception
 
 
 class JarvisExceptionHandler(ExceptionHandler):
-    """Keeps the app alive when a callback fails; the error is saved and shown on screen."""
     def handle_exception(self, inst):
         try:
             text = "".join(traceback.format_exception(type(inst), inst, inst.__traceback__))
@@ -273,7 +426,6 @@ def _make_texture(size, data):
 
 
 def radial_texture(name, stops, size=96):
-    """Pure-Python radial gradient (t=0 centre, t=1 edge). Built once, then cached."""
     if name not in _TEX:
         data = bytearray()
         half = (size - 1) / 2.0
@@ -290,7 +442,6 @@ def radial_texture(name, stops, size=96):
 
 
 def linear_texture(name, stops, rows=64):
-    """Vertical gradient (t=0 bottom, t=1 top). Built once, then cached."""
     if name not in _TEX:
         data = bytearray()
         for i in range(rows):
@@ -316,8 +467,6 @@ def _move_glass(w, *_):
 
 
 def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
-    """Liquid-glass look behind a widget: translucent tint, bright top sheen, soft bottom
-    glow and a light edge. The canvas instructions are created once and only moved later."""
     try:
         sheen_tex = linear_texture("glass_sheen", ((0, (255, 255, 255, 0)), (1, (255, 255, 255, 120))))
         glow_tex = linear_texture("glass_glow", ((0, (255, 255, 255, 80)), (1, (255, 255, 255, 0))))
@@ -337,7 +486,7 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
     except Exception:
         if not GLASS_ERRORS:
             GLASS_ERRORS.append(traceback.format_exc())
-        try:  # plain translucent fallback
+        try:
             with widget.canvas.before:
                 Color(tint[0], tint[1], tint[2], fill + 0.1)
                 widget._g_plain = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[radius])
@@ -348,22 +497,21 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
 
 
 class AnimatedCore(Widget):
-    """Canvas-only animated orb (AURA ORB, PARTICLE CORE, GLASS ORB); no external images."""
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
         self.theme_index = theme_index
         self.phase = 0.0
-        self.level = 0.0     # 0..1 voice level (simulated until the microphone is connected)
+        self.level = 0.0
         self.clock_t = 0.0
         self.fib, self.dashes, self.reds = [], [], []
-        if theme_index == 1:  # PARTICLE CORE: points on a sphere
+        if theme_index == 1:
             n = 420
             for k in range(n):
                 y = 1 - 2 * (k + 0.5) / n
                 rr = math.sqrt(1 - y * y)
                 t = k * 2.39996
                 self.fib.append((math.cos(t) * rr, y, math.sin(t) * rr))
-        if theme_index == 2:  # GLASS ORB: fixed random dots on the sphere
+        if theme_index == 2:
             rnd = random.Random(7)
             self.dashes = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.5, 1.5)) for _ in range(170)]
             self.reds = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.2, 1.2)) for _ in range(6)]
@@ -372,7 +520,6 @@ class AnimatedCore(Widget):
         self.redraw()
 
     def on_parent(self, widget, parent):
-        # Stop the animation timer when the widget is removed (theme change).
         if parent is None and getattr(self, "_event", None):
             self._event.cancel()
             self._event = None
@@ -384,10 +531,10 @@ class AnimatedCore(Widget):
         state = getattr(app, "orb_state", "idle") if app is not None else "idle"
         self.clock_t += dt
         t = self.clock_t
-        if state == "listening":    # orb reacts to incoming sound
+        if state == "listening":
             target = 0.35 + 0.45 * abs(math.sin(t * 3.1) * math.sin(t * 1.3 + 1.0))
             boost = 1.9
-        elif state == "speaking":   # orb pulses with the spoken answer
+        elif state == "speaking":
             target = 0.30 + 0.50 * abs(math.sin(t * 6.2) * (0.6 + 0.4 * math.sin(t * 1.7)))
             boost = 1.4
         else:
@@ -397,7 +544,6 @@ class AnimatedCore(Widget):
         self.redraw()
 
     def draw_aura(self, cx, cy, R, accent, accent2):
-        """AURA ORB: dark glass sphere with soft luminous ribbons, blue/violet glow, bright rim."""
         lv = self.level
         R = R * (1 + 0.10 * lv)
         p = self.phase
@@ -415,7 +561,7 @@ class AnimatedCore(Widget):
         Color(1, 1, 1, 0.7 + 0.3 * lv)
         Rectangle(texture=core, pos=(cx + R * 0.28 - cs / 2, cy - R * 0.32 - cs / 2), size=(cs, cs))
         colors = ((0.30, 0.55, 1.0), (0.55, 0.38, 1.0), (0.21, 0.82, 1.0))
-        fades = (0.35, 0.8, 0.8, 0.35)  # ribbons fade out at both ends
+        fades = (0.35, 0.8, 0.8, 0.35)
         for j in range(3):
             b_axis = R * (0.30 + 0.22 * j + 0.05 * math.sin(p * 1.1 + j * 2)
                           + 0.05 * lv * math.sin(p * 4 + j))
@@ -460,7 +606,6 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R, start + 190, start + 245), width=dp(2.2) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
-        """PARTICLE CORE: wobbling shell of glowing dots and rings inside a dark disc."""
         lv = self.level
         R = R * (1 + 0.10 * lv)
         disc = radial_texture("p_disc", ((0, (11, 26, 32, 255)), (1, (4, 8, 11, 255))))
@@ -475,7 +620,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=glow, pos=(cx - gs / 2, cy - gs / 2), size=(gs, gs))
         p = self.phase
         cs, sn = math.cos(p * 0.5), math.sin(p * 0.5)
-        tc, ts = 0.9004, 0.4350  # tilt of 0.45 rad
+        tc, ts = 0.9004, 0.4350
         amp = 0.13 * (1 + 2.4 * lv)
 
         def shell(x, y, z):
@@ -490,7 +635,7 @@ class AnimatedCore(Widget):
             return cx + x1 * R, cy + y1 * R, z2
 
         Color(*accent, 0.20 + 0.15 * lv)
-        for k in range(1, 13):  # latitude rings
+        for k in range(1, 13):
             y = -1 + 2 * k / 13.0
             r0 = math.sqrt(1 - y * y)
             pts = []
@@ -519,7 +664,6 @@ class AnimatedCore(Widget):
             Point(points=near, pointsize=dp(1.0))
 
     def draw_glass(self, cx, cy, R, accent, accent2):
-        """GLASS ORB: dark glass sphere on a reflective floor with light pillars."""
         p = self.phase
         lv = self.level
         fy = cy - R * 1.02
@@ -546,7 +690,7 @@ class AnimatedCore(Widget):
                                          (1, (11, 42, 60, 255))))
         Color(1, 1, 1, 1)
         Rectangle(texture=body, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
-        for k in range(14):  # meridian lines
+        for k in range(14):
             a = k / 14.0 * math.pi + p * 0.35
             rx = max(R * abs(math.cos(a)), dp(0.4))
             Color(0.22, 0.78, 1, 0.07 + 0.2 * abs(math.sin(a)))
@@ -577,7 +721,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=inner, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
         pl = min(1.0, 0.7 + 0.3 * math.sin(p * 2) + 0.5 * lv)
 
-        def equator(span):  # the equator line ripples when the orb hears or speaks
+        def equator(span):
             pts = []
             for i in range(41):
                 u = i / 40.0 * 2 - 1
@@ -597,7 +741,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=flare, pos=(cx - fs, cy - fs), size=(fs * 2, fs * 2))
         Color(0.35, 0.82, 1, 0.85)
         Line(circle=(cx, cy, R), width=dp(1.3))
-        Color(1, 1, 1, 0.92)  # two glossy highlights (angles run clockwise from the top)
+        Color(1, 1, 1, 0.92)
         Line(circle=(cx, cy, R * 0.9, 303, 327), width=R * 0.035, cap="round")
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
 
@@ -605,7 +749,6 @@ class AnimatedCore(Widget):
         try:
             self._redraw_impl()
         except Exception:
-            # a drawing error must never close the app: stop animating and report it
             if getattr(self, "_event", None):
                 self._event.cancel()
                 self._event = None
@@ -637,7 +780,6 @@ class AnimatedCore(Widget):
 
 
 class GlassButton(Button):
-    """Liquid-glass button."""
     def __init__(self, tint=(0.3, 0.6, 1.0), active=False, radius=16, **kwargs):
         super().__init__(**kwargs)
         self.tint_rgb = tint
@@ -658,7 +800,6 @@ class GlassButton(Button):
 
 
 class SendWaveButton(Button):
-    """Command-bar button: sound-wave icon when empty, paper plane once text is typed."""
     def __init__(self, tint_rgb=(0.3, 0.6, 1.0), icon_rgba=(1, 1, 1, 1), **kwargs):
         super().__init__(**kwargs)
         self.tint_rgb = tint_rgb
@@ -692,7 +833,7 @@ class SendWaveButton(Button):
                 Color(1, 1, 1, 0.55)
                 Line(circle=(cx, cy, d / 2), width=dp(1))
                 s = dp(8.5) * (0.92 if down else 1.0)
-                ca, sa = math.cos(0.5), math.sin(0.5)  # tilted up and to the right
+                ca, sa = math.cos(0.5), math.sin(0.5)
 
                 def rot(px, py):
                     return cx + (px * ca - py * sa) * s, cy + (px * sa + py * ca) * s
@@ -721,15 +862,16 @@ class JarvisApp(App):
         self._last_err = None
         self._err_count = 0
         self.store = JsonStore(os.path.join(self.user_data_dir, "jarvis_settings.json"))
+        self.account_service = get_service(self.user_data_dir)
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
         self.last_response = ""
         self.animation_paused = False
-        self.orb_state = "idle"      # idle / listening / speaking
+        self.orb_state = "idle"
         self._orb_event = None
         self.load_settings()
-        try:  # keep the text field visible above the on-screen keyboard
+        try:
             Window.softinput_mode = "below_target"
         except Exception:
             pass
@@ -739,7 +881,6 @@ class JarvisApp(App):
         with self.root_layout.canvas.before:
             self.bg_color = Color(*hex_color(THEMES[self.theme_index]["background"]))
             self.bg_rect = Rectangle(pos=self.root_layout.pos, size=self.root_layout.size)
-            # blue glow rising from the bottom (AURA ORB only)
             self.grad_color = Color(1, 1, 1, 1 if self.theme_index == 0 else 0)
             self.grad_rect = Rectangle(texture=self.make_gradient(),
                                        pos=self.root_layout.pos, size=(0, 0))
@@ -750,7 +891,7 @@ class JarvisApp(App):
             err = traceback.format_exc()
             save_crash(err)
             self.startup_error = err
-            self.theme_index = 0  # fall back to the first design
+            self.theme_index = 0
             try:
                 self.save_settings()
                 self.update_colors()
@@ -763,7 +904,7 @@ class JarvisApp(App):
     def make_gradient(self):
         rows = 64
         data = bytearray()
-        for i in range(rows):  # row 0 = bottom
+        for i in range(rows):
             t = i / (rows - 1.0)
             r = int(60 + (2 - 60) * t)
             g = int(130 + (6 - 130) * t)
@@ -789,7 +930,6 @@ class JarvisApp(App):
         if self.store.exists("settings"):
             data = self.store.get("settings")
             self.language = data.get("language", "tg")
-            # "theme_v2" is a new key: designs from older versions are ignored
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
         if self.language not in ("tg", "ru", "en"):
@@ -822,7 +962,6 @@ class JarvisApp(App):
         main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         self.root_layout.add_widget(main)
 
-        # Header: title (takes all free width, never wraps) and the glass settings button
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
         settings_btn = GlassButton(text=self.t("set"), tint=tint, size_hint_x=None, width=dp(96),
@@ -837,12 +976,10 @@ class JarvisApp(App):
                                        size_hint_y=None, height=dp(25))
         main.add_widget(self.status_label)
 
-        # Main visual zone: one layout per design
         self.visual_area = BoxLayout(orientation="vertical", spacing=dp(8))
         main.add_widget(self.visual_area)
         self.build_theme_layout()
 
-        # Response panel (glass)
         response_panel = BoxLayout(orientation="vertical", padding=dp(10),
                                    spacing=dp(4), size_hint_y=None, height=dp(94))
         glass_style(response_panel, tint, dp(18), fill=0.10, sheen=0.28, border=0.30)
@@ -856,7 +993,6 @@ class JarvisApp(App):
         response_panel.add_widget(response_scroll)
         main.add_widget(response_panel)
 
-        # Command bar: glass pill; sound-wave icon when empty, paper plane after typing
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
         glass_style(command_row, tint, dp(26), fill=0.16, sheen=0.50, border=0.50)
@@ -888,14 +1024,14 @@ class JarvisApp(App):
         self.visual_area.clear_widgets()
         theme = THEMES[self.theme_index]
         index = self.theme_index
-        if index == 0:  # AURA ORB: glowing orb + greeting
+        if index == 0:
             self.visual_area.add_widget(Widget(size_hint_y=0.05))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.5))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 14, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(28)))
             self.visual_area.add_widget(make_label(self.t("orb_ask"), 26, theme["text"], True,
                                                    size_hint_y=None, height=dp(90)))
-        elif index == 1:  # PARTICLE CORE: point-cloud orb
+        elif index == 1:
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.6))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 12, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(24)))
@@ -903,7 +1039,7 @@ class JarvisApp(App):
                                                    size_hint_y=None, height=dp(48)))
             self.visual_area.add_widget(make_label(self.t("p_ready"), 10, "#9FB4C8",
                                                    False, size_hint_y=None, height=dp(30)))
-        else:  # GLASS ORB: glass sphere on a reflective floor
+        else:
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.7))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 12, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(24)))
@@ -924,7 +1060,6 @@ class JarvisApp(App):
         self.command_input.text = ""
         answer = self.process_command(command)
         self.show_response(answer)
-        # the orb "speaks" the answer (simulated until speech synthesis is connected)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
     def on_text_change(self, instance, value):
@@ -941,8 +1076,21 @@ class JarvisApp(App):
         if self.orb_state == "listening":
             self.set_orb_state("idle")
             return
-        self.show_response(self.t("mic") + "\n" + self.t("voice_note"))
-        self.set_orb_state("listening", 4.0)
+        
+        # Check mic permission using voice layer functions
+        perm = microphone_permission_state()
+        if perm == "denied":
+            self.show_response("Микрофон иҷозат дода нашудааст.")
+            return
+
+        def on_perm(granted):
+            if granted:
+                self.show_response(self.t("mic") + "\n" + self.t("voice_note"))
+                self.set_orb_state("listening", 4.0)
+            else:
+                self.show_response("Иҷозати микрофон рад карда шуд.")
+
+        request_microphone(on_perm)
 
     def set_orb_state(self, state, seconds=None):
         self.orb_state = state
@@ -988,7 +1136,6 @@ class JarvisApp(App):
         self.open_section("main")
 
     def open_section(self, section):
-        """Settings are split into folders: main menu -> design / language / voice."""
         old = getattr(self, "settings_popup", None)
         if old is not None:
             old.dismiss()
@@ -1022,7 +1169,7 @@ class JarvisApp(App):
                 option(label, self.language == code,
                        lambda inst, c=code: self.choose_language(c, self.settings_popup))
             content.add_widget(Widget())
-        else:  # voice
+        else:
             for name in VOICES:
                 option(name, self.voice_profile == name,
                        lambda inst, n=name: self.choose_voice(n, self.settings_popup))
@@ -1049,7 +1196,7 @@ class JarvisApp(App):
             self.settings_popup = Popup(title="", content=content, size_hint=(0.92, 0.88),
                                         auto_dismiss=True, separator_height=0)
         self.settings_popup.bind(on_dismiss=self.settings_closed)
-        self.animation_paused = True  # save battery while settings are open
+        self.animation_paused = True
         self.settings_popup.open()
 
     def settings_closed(self, popup, *_):
@@ -1087,7 +1234,6 @@ class JarvisApp(App):
             self.show_error_popup(text)
 
     def report_error(self, text):
-        """Called when a callback or drawing fails: show the error once instead of crashing."""
         if text == self._last_err or self._err_count >= 3:
             return
         self._last_err = text
