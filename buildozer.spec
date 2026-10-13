@@ -13,8 +13,8 @@ fullscreen = 0
 
 requirements = python3,kivy
 
-# Илова кардани иҷозатҳои зарурӣ барои сабти лог дар телефон:
-android.permissions = WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+# Иҷозатҳо барои интернет, микрофон ва файлҳо
+android.permissions = INTERNET, RECORD_AUDIO, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
 p4a.branch = develop
 p4a.commit = HEAD
