@@ -20,6 +20,11 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
+from kivy.utils import platform
+
+if platform == "android":
+    from jnius import autoclass, PythonJavaClass, java_method
+  
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
                            RoundedRectangle, Triangle)
 from kivy.graphics.texture import Texture
