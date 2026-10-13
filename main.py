@@ -652,7 +652,7 @@ class GlassButton(Button):
             fc.rgba = (t[0], t[1], t[2], self.fill_base + (0.18 if self.state == "down" else 0.0))
 
 
-class ActionButton(Button):
+class SendWaveButton(Button):
     """Command-bar button: sound-wave icon when empty, paper plane once text is typed."""
     def __init__(self, tint_rgb=(0.3, 0.6, 1.0), icon_rgba=(1, 1, 1, 1), **kwargs):
         super().__init__(**kwargs)
@@ -866,7 +866,7 @@ class JarvisApp(App):
         )
         self.command_input.bind(on_text_validate=self.send_command)
         self.command_input.bind(text=self.on_text_change)
-        self.action_btn = ActionButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
+        self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
                                        size_hint_x=None, width=dp(58))
         self.action_btn.bind(on_release=self.on_action)
         command_row.add_widget(self.command_input)
