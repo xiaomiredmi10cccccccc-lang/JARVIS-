@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-JARVIS Android Assistant (Combined Version)
-Kivy + Buildozer compatible. Includes voice layer, accounts layer, and core UI.
+JARVIS Android Assistant
+Kivy + Buildozer compatible. Core commands work offline.
+Crash logs are kept in the app's private folder and shown inside the app.
+Only characters present in the default Roboto font are used (no missing-glyph boxes).
 """
 from datetime import datetime
 import json
@@ -12,6 +14,7 @@ import re
 import sys
 import time
 import traceback
+import uuid
 
 from kivy.app import App
 from kivy.base import ExceptionHandler, ExceptionManager
@@ -33,14 +36,13 @@ from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
-
-# ==========================================
-# 1. VOICE LAYER (from voice.py)[span_3](start_span)[span_3](end_span)
-# ==========================================
-
+# ==========================================================================
+# VOICE LAYER: microphone permission, speech recognition and speech synthesis are
+# kept apart. Only the permission part works today; the recognizer and the
+# synthesizer are not connected and say so (they never pretend to work).
+# ==========================================================================
 class VoiceUnavailable(Exception):
     """Raised when a voice engine is requested but not connected yet."""
-    pass
 
 
 def microphone_permission_state():
@@ -94,22 +96,37 @@ class SpeechSynthesizer(object):
         return None
 
 
-# ==========================================
-# 2. ACCOUNTS & SYNC LAYER (from accounts.py)[span_4](start_span)[span_4](end_span)
-# ==========================================
+class SpeakerVerifier(object):
+    """Accept commands only from the phone owner's voice. This is a separate feature from
+    speech recognition: recognizing words does NOT prove who is speaking. Not implemented;
+    until it exists, no command is treated as voice-verified."""
+    available = False
 
+    def enroll(self, samples):
+        raise VoiceUnavailable("Speaker verification is not connected yet.")
+
+    def is_owner(self, audio):
+        raise VoiceUnavailable("Speaker verification is not connected yet.")
+
+
+# ==========================================================================
+# ACCOUNTS AND SYNC LAYER (client side only). No server exists yet, so nothing here
+# works online: every online call raises ServerNotConfigured. Passwords are never
+# stored in the app; the server address is not kept in the public GitHub code (it
+# comes from the JARVIS_SERVER_URL variable or server_config.json in the private
+# folder). To add a server later, implement a remote AccountService and return it
+# from get_service().
+# ==========================================================================
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD_LENGTH = 8
 
 
 class AccountError(Exception):
     """Base class for account errors."""
-    pass
 
 
 class ServerNotConfigured(AccountError):
     """Raised when an online operation is requested but no server is configured."""
-    pass
 
 
 def validate_email(email):
@@ -139,6 +156,7 @@ def load_server_url(private_dir=None):
 
 
 class AccountService(object):
+    """Interface that the app uses; implemented by LocalAccountService or a future remote one."""
     def is_configured(self):
         raise NotImplementedError
 
@@ -162,6 +180,7 @@ class AccountService(object):
 
 
 class LocalAccountService(AccountService):
+    """Used while there is no server: all data stays on this phone."""
     def is_configured(self):
         return False
 
@@ -188,13 +207,11 @@ class LocalAccountService(AccountService):
 
 
 def get_service(private_dir=None):
+    """Always local for now; returns a remote service here once one is implemented."""
     return LocalAccountService()
 
 
-# ==========================================
-# 3. CORE APP & UI (from main_before_chats.py)[span_5](start_span)[span_5](end_span)
-# ==========================================
-
+# ---- Crash log: saved only in the app's private folder (not readable by other apps) ----
 CRASH_FILE = "jarvis_crash_log.txt"
 
 
@@ -202,7 +219,6 @@ def crash_dirs():
     dirs = []
     priv = os.environ.get("ANDROID_PRIVATE")
     dirs.append(priv if priv else os.getcwd())
-    dirs.append("/sdcard/Download")
     return dirs
 
 
@@ -221,6 +237,7 @@ def save_crash(text):
 
 
 def read_last_crash():
+    """Returns the crash text saved by the previous run (shown once inside the app)."""
     path = os.path.join(crash_dirs()[0], CRASH_FILE)
     try:
         if os.path.exists(path):
@@ -245,6 +262,7 @@ sys.excepthook = handle_exception
 
 
 class JarvisExceptionHandler(ExceptionHandler):
+    """Keeps the app alive when a callback fails; the error is saved and shown on screen."""
     def handle_exception(self, inst):
         try:
             text = "".join(traceback.format_exception(type(inst), inst, inst.__traceback__))
@@ -287,7 +305,34 @@ TEXTS = {
         "voice": "Профили овоз",
         "close": "Пӯшидан",
         "status": "Ҳолати система",
-        "commands": "Фармонҳо: салом, соат, сана, ҳолат, мавзӯъ, кӯмак",
+        "commands": "Фармонҳо: салом, соат, сана, ҳолат, мавзӯъ, забон, танзимот, чати нав, чатҳо, кӯмак",
+        "menu_chats": "Чатҳои ман",
+        "menu_new": "Чати нав",
+        "menu_settings": "Танзимот",
+        "menu_about": "Маълумот дар бораи JARVIS",
+        "chat_default": "Чати нав",
+        "chats_title": "Чатҳои ман",
+        "chats_empty": "Ҳоло чат нест",
+        "delete_ask": "Чати «{}» нест карда шавад?",
+        "yes_delete": "Ҳа, нест кун",
+        "no": "Не",
+        "chat_created": "Чати нав сохта шуд.",
+        "chats_opened": "Рӯйхати чатҳо кушода шуд.",
+        "settings_opened": "Танзимот кушода шуд.",
+        "about_opened": "Маълумот кушода шуд.",
+        "about_title": "Дар бораи JARVIS",
+        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ. Фармонҳои асосӣ бе интернет кор мекунанд. Чатҳо дар худи телефон нигоҳ дошта мешаванд. Шинохти овоз ва ҳисоби онлайн ҳанӯз пайваст нашудаанд.",
+        "about_chats": "Чатҳо дар телефон: {}",
+        "sec_account": "Ҳисоб ва ҳамоҳангсозӣ",
+        "title_account": "Ҳисоб",
+        "acct_status": "Сервер танзим нашудааст. Чатҳо танҳо дар ин телефон нигоҳ дошта мешаванд. Ҳисоби онлайн ва ҳамоҳангсозии байни телефонҳо баъд аз пайваст кардани сервер кор мекунанд.",
+        "mic_denied": "Иҷозати микрофон дода нашуд. Онро дар Танзимоти Android → Барномаҳо → JARVIS → Иҷозатҳо фаъол кунед.",
+        "mic_engine": "Иҷозати микрофон ҳаст, вале шинохти овоз ҳанӯз пайваст нашудааст.",
+        "lang_hint": "Забонро нависед, масалан: «забон русӣ», «забон тоҷикӣ» ё «language english».",
+        "lang_changed": "Забон иваз шуд: {}",
+        "theme_changed": "Интерфейс: {}",
+        "cmd_error": "Ҳангоми иҷрои фармон хатогӣ рух дод. Дубора кӯшиш кунед.",
+        "error_hint": "Хатогӣ рух дод. Барномаро аз нав кушоед. Матни зерин барои диагностика аст.",
         "help": "Ман ҳоло фармонҳои асосии офлайнро иҷро карда метавонам",
         "unknown": "Ин фармон ҳоло дастгирӣ намешавад. Барои рӯйхати фармонҳо «кӯмак» нависед.",
         "mic": "Шинохти овоз ҳанӯз пайваст нашудааст.",
@@ -323,7 +368,34 @@ TEXTS = {
         "voice": "Голосовой профиль",
         "close": "Закрыть",
         "status": "Состояние системы",
-        "commands": "Команды: привет, время, дата, статус, тема, помощь",
+        "commands": "Команды: привет, время, дата, статус, тема, язык, настройки, новый чат, чаты, помощь",
+        "menu_chats": "Мои чаты",
+        "menu_new": "Новый чат",
+        "menu_settings": "Настройки",
+        "menu_about": "О JARVIS",
+        "chat_default": "Новый чат",
+        "chats_title": "Мои чаты",
+        "chats_empty": "Чатов пока нет",
+        "delete_ask": "Удалить чат «{}»?",
+        "yes_delete": "Да, удалить",
+        "no": "Нет",
+        "chat_created": "Новый чат создан.",
+        "chats_opened": "Список чатов открыт.",
+        "settings_opened": "Настройки открыты.",
+        "about_opened": "Информация открыта.",
+        "about_title": "О JARVIS",
+        "about_body": "JARVIS — персональный помощник с тремя футуристическими интерфейсами. Основные команды работают без интернета. Чаты хранятся на самом телефоне. Распознавание речи и онлайн-аккаунт ещё не подключены.",
+        "about_chats": "Чатов на телефоне: {}",
+        "sec_account": "Аккаунт и синхронизация",
+        "title_account": "Аккаунт",
+        "acct_status": "Сервер не настроен. Чаты хранятся только на этом телефоне. Онлайн-аккаунт и синхронизация между телефонами заработают после подключения сервера.",
+        "mic_denied": "Доступ к микрофону не предоставлен. Включите его: Настройки Android → Приложения → JARVIS → Разрешения.",
+        "mic_engine": "Доступ к микрофону есть, но распознавание речи ещё не подключено.",
+        "lang_hint": "Напишите язык, например: «язык русский», «язык таджикский» или «language english».",
+        "lang_changed": "Язык изменён: {}",
+        "theme_changed": "Интерфейс: {}",
+        "cmd_error": "При выполнении команды произошла ошибка. Попробуйте ещё раз.",
+        "error_hint": "Произошла ошибка. Перезапустите приложение. Текст ниже нужен для диагностики.",
         "help": "Сейчас я выполняю основные офлайн-команды",
         "unknown": "Эта команда пока не поддерживается. Напишите «помощь» для списка команд.",
         "mic": "Распознавание речи ещё не подключено.",
@@ -359,7 +431,34 @@ TEXTS = {
         "voice": "Voice profile",
         "close": "Close",
         "status": "System status",
-        "commands": "Commands: hello, time, date, status, theme, help",
+        "commands": "Commands: hello, time, date, status, theme, language, settings, new chat, chats, help",
+        "menu_chats": "My chats",
+        "menu_new": "New chat",
+        "menu_settings": "Settings",
+        "menu_about": "About JARVIS",
+        "chat_default": "New chat",
+        "chats_title": "My chats",
+        "chats_empty": "No chats yet",
+        "delete_ask": "Delete chat \u201c{}\u201d?",
+        "yes_delete": "Yes, delete",
+        "no": "No",
+        "chat_created": "New chat created.",
+        "chats_opened": "Chat list opened.",
+        "settings_opened": "Settings opened.",
+        "about_opened": "Information opened.",
+        "about_title": "About JARVIS",
+        "about_body": "JARVIS is a personal assistant with three futuristic designs. The basic commands work offline. Chats are stored on this phone. Speech recognition and the online account are not connected yet.",
+        "about_chats": "Chats on this phone: {}",
+        "sec_account": "Account and sync",
+        "title_account": "Account",
+        "acct_status": "The server is not configured. Chats are kept only on this phone. The online account and sync between phones will work once a server is connected.",
+        "mic_denied": "Microphone permission was not granted. Enable it in Android Settings → Apps → JARVIS → Permissions.",
+        "mic_engine": "Microphone access is available, but speech recognition is not connected yet.",
+        "lang_hint": "Write the language, for example: \u201clanguage english\u201d, \u201clanguage russian\u201d or \u201clanguage tajik\u201d.",
+        "lang_changed": "Language changed: {}",
+        "theme_changed": "Interface: {}",
+        "cmd_error": "An error occurred while running the command. Please try again.",
+        "error_hint": "An error occurred. Please restart the app. The text below is for diagnostics.",
         "help": "I can currently run basic offline commands",
         "unknown": "This command is not supported yet. Type 'help' for available commands.",
         "mic": "Speech recognition has not been connected yet.",
@@ -426,6 +525,7 @@ def _make_texture(size, data):
 
 
 def radial_texture(name, stops, size=96):
+    """Pure-Python radial gradient (t=0 centre, t=1 edge). Built once, then cached."""
     if name not in _TEX:
         data = bytearray()
         half = (size - 1) / 2.0
@@ -442,6 +542,7 @@ def radial_texture(name, stops, size=96):
 
 
 def linear_texture(name, stops, rows=64):
+    """Vertical gradient (t=0 bottom, t=1 top). Built once, then cached."""
     if name not in _TEX:
         data = bytearray()
         for i in range(rows):
@@ -467,6 +568,8 @@ def _move_glass(w, *_):
 
 
 def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
+    """Liquid-glass look behind a widget: translucent tint, bright top sheen, soft bottom
+    glow and a light edge. The canvas instructions are created once and only moved later."""
     try:
         sheen_tex = linear_texture("glass_sheen", ((0, (255, 255, 255, 0)), (1, (255, 255, 255, 120))))
         glow_tex = linear_texture("glass_glow", ((0, (255, 255, 255, 80)), (1, (255, 255, 255, 0))))
@@ -486,7 +589,7 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
     except Exception:
         if not GLASS_ERRORS:
             GLASS_ERRORS.append(traceback.format_exc())
-        try:
+        try:  # plain translucent fallback
             with widget.canvas.before:
                 Color(tint[0], tint[1], tint[2], fill + 0.1)
                 widget._g_plain = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[radius])
@@ -497,21 +600,22 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
 
 
 class AnimatedCore(Widget):
+    """Canvas-only animated orb (AURA ORB, PARTICLE CORE, GLASS ORB); no external images."""
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
         self.theme_index = theme_index
         self.phase = 0.0
-        self.level = 0.0
+        self.level = 0.0     # 0..1 voice level (simulated until the microphone is connected)
         self.clock_t = 0.0
         self.fib, self.dashes, self.reds = [], [], []
-        if theme_index == 1:
+        if theme_index == 1:  # PARTICLE CORE: points on a sphere
             n = 420
             for k in range(n):
                 y = 1 - 2 * (k + 0.5) / n
                 rr = math.sqrt(1 - y * y)
                 t = k * 2.39996
                 self.fib.append((math.cos(t) * rr, y, math.sin(t) * rr))
-        if theme_index == 2:
+        if theme_index == 2:  # GLASS ORB: fixed random dots on the sphere
             rnd = random.Random(7)
             self.dashes = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.5, 1.5)) for _ in range(170)]
             self.reds = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.2, 1.2)) for _ in range(6)]
@@ -520,6 +624,7 @@ class AnimatedCore(Widget):
         self.redraw()
 
     def on_parent(self, widget, parent):
+        # Stop the animation timer when the widget is removed (theme change).
         if parent is None and getattr(self, "_event", None):
             self._event.cancel()
             self._event = None
@@ -531,10 +636,10 @@ class AnimatedCore(Widget):
         state = getattr(app, "orb_state", "idle") if app is not None else "idle"
         self.clock_t += dt
         t = self.clock_t
-        if state == "listening":
+        if state == "listening":    # orb reacts to incoming sound
             target = 0.35 + 0.45 * abs(math.sin(t * 3.1) * math.sin(t * 1.3 + 1.0))
             boost = 1.9
-        elif state == "speaking":
+        elif state == "speaking":   # orb pulses with the spoken answer
             target = 0.30 + 0.50 * abs(math.sin(t * 6.2) * (0.6 + 0.4 * math.sin(t * 1.7)))
             boost = 1.4
         else:
@@ -544,6 +649,7 @@ class AnimatedCore(Widget):
         self.redraw()
 
     def draw_aura(self, cx, cy, R, accent, accent2):
+        """AURA ORB: dark glass sphere with soft luminous ribbons, blue/violet glow, bright rim."""
         lv = self.level
         R = R * (1 + 0.10 * lv)
         p = self.phase
@@ -561,7 +667,7 @@ class AnimatedCore(Widget):
         Color(1, 1, 1, 0.7 + 0.3 * lv)
         Rectangle(texture=core, pos=(cx + R * 0.28 - cs / 2, cy - R * 0.32 - cs / 2), size=(cs, cs))
         colors = ((0.30, 0.55, 1.0), (0.55, 0.38, 1.0), (0.21, 0.82, 1.0))
-        fades = (0.35, 0.8, 0.8, 0.35)
+        fades = (0.35, 0.8, 0.8, 0.35)  # ribbons fade out at both ends
         for j in range(3):
             b_axis = R * (0.30 + 0.22 * j + 0.05 * math.sin(p * 1.1 + j * 2)
                           + 0.05 * lv * math.sin(p * 4 + j))
@@ -606,6 +712,7 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R, start + 190, start + 245), width=dp(2.2) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
+        """PARTICLE CORE: wobbling shell of glowing dots and rings inside a dark disc."""
         lv = self.level
         R = R * (1 + 0.10 * lv)
         disc = radial_texture("p_disc", ((0, (11, 26, 32, 255)), (1, (4, 8, 11, 255))))
@@ -620,7 +727,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=glow, pos=(cx - gs / 2, cy - gs / 2), size=(gs, gs))
         p = self.phase
         cs, sn = math.cos(p * 0.5), math.sin(p * 0.5)
-        tc, ts = 0.9004, 0.4350
+        tc, ts = 0.9004, 0.4350  # tilt of 0.45 rad
         amp = 0.13 * (1 + 2.4 * lv)
 
         def shell(x, y, z):
@@ -635,7 +742,7 @@ class AnimatedCore(Widget):
             return cx + x1 * R, cy + y1 * R, z2
 
         Color(*accent, 0.20 + 0.15 * lv)
-        for k in range(1, 13):
+        for k in range(1, 13):  # latitude rings
             y = -1 + 2 * k / 13.0
             r0 = math.sqrt(1 - y * y)
             pts = []
@@ -664,6 +771,7 @@ class AnimatedCore(Widget):
             Point(points=near, pointsize=dp(1.0))
 
     def draw_glass(self, cx, cy, R, accent, accent2):
+        """GLASS ORB: dark glass sphere on a reflective floor with light pillars."""
         p = self.phase
         lv = self.level
         fy = cy - R * 1.02
@@ -690,7 +798,7 @@ class AnimatedCore(Widget):
                                          (1, (11, 42, 60, 255))))
         Color(1, 1, 1, 1)
         Rectangle(texture=body, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
-        for k in range(14):
+        for k in range(14):  # meridian lines
             a = k / 14.0 * math.pi + p * 0.35
             rx = max(R * abs(math.cos(a)), dp(0.4))
             Color(0.22, 0.78, 1, 0.07 + 0.2 * abs(math.sin(a)))
@@ -721,7 +829,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=inner, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
         pl = min(1.0, 0.7 + 0.3 * math.sin(p * 2) + 0.5 * lv)
 
-        def equator(span):
+        def equator(span):  # the equator line ripples when the orb hears or speaks
             pts = []
             for i in range(41):
                 u = i / 40.0 * 2 - 1
@@ -741,7 +849,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=flare, pos=(cx - fs, cy - fs), size=(fs * 2, fs * 2))
         Color(0.35, 0.82, 1, 0.85)
         Line(circle=(cx, cy, R), width=dp(1.3))
-        Color(1, 1, 1, 0.92)
+        Color(1, 1, 1, 0.92)  # two glossy highlights (angles run clockwise from the top)
         Line(circle=(cx, cy, R * 0.9, 303, 327), width=R * 0.035, cap="round")
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
 
@@ -749,6 +857,7 @@ class AnimatedCore(Widget):
         try:
             self._redraw_impl()
         except Exception:
+            # a drawing error must never close the app: stop animating and report it
             if getattr(self, "_event", None):
                 self._event.cancel()
                 self._event = None
@@ -780,6 +889,7 @@ class AnimatedCore(Widget):
 
 
 class GlassButton(Button):
+    """Liquid-glass button."""
     def __init__(self, tint=(0.3, 0.6, 1.0), active=False, radius=16, **kwargs):
         super().__init__(**kwargs)
         self.tint_rgb = tint
@@ -800,6 +910,7 @@ class GlassButton(Button):
 
 
 class SendWaveButton(Button):
+    """Command-bar button: sound-wave icon when empty, paper plane once text is typed."""
     def __init__(self, tint_rgb=(0.3, 0.6, 1.0), icon_rgba=(1, 1, 1, 1), **kwargs):
         super().__init__(**kwargs)
         self.tint_rgb = tint_rgb
@@ -833,7 +944,7 @@ class SendWaveButton(Button):
                 Color(1, 1, 1, 0.55)
                 Line(circle=(cx, cy, d / 2), width=dp(1))
                 s = dp(8.5) * (0.92 if down else 1.0)
-                ca, sa = math.cos(0.5), math.sin(0.5)
+                ca, sa = math.cos(0.5), math.sin(0.5)  # tilted up and to the right
 
                 def rot(px, py):
                     return cx + (px * ca - py * sa) * s, cy + (px * sa + py * ca) * s
@@ -854,6 +965,260 @@ class SendWaveButton(Button):
                     Line(points=[x, cy - half, x, cy + half], width=dp(1.5), cap="round")
 
 
+LANG_NAMES = {"tg": "Тоҷикӣ", "ru": "Русский", "en": "English"}
+
+
+def format_time(iso):
+    try:
+        return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S").strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        return ""
+
+
+class ChatStore(object):
+    """Chat history in the app's private folder (JSON, written atomically).
+    With path=None everything is kept in memory only."""
+    def __init__(self, path=None):
+        self.path = path
+        self.chats = []
+        self.current_id = None
+        self.load()
+
+    @staticmethod
+    def now():
+        return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    def load(self):
+        data = None
+        if self.path and os.path.exists(self.path):
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:  # damaged file: keep a copy and start clean
+                try:
+                    os.replace(self.path, self.path + ".bad")
+                except Exception:
+                    pass
+                data = None
+        if isinstance(data, dict) and isinstance(data.get("chats"), list):
+            for c in data["chats"]:
+                if not (isinstance(c, dict) and c.get("id") and isinstance(c.get("messages", []), list)):
+                    continue
+                c.setdefault("title", "")
+                c.setdefault("created", self.now())
+                c.setdefault("updated", c["created"])
+                c["messages"] = [m for m in c.get("messages", []) if isinstance(m, dict)
+                                 and m.get("role") in ("user", "jarvis") and isinstance(m.get("text"), str)]
+                self.chats.append(c)
+            self.current_id = data.get("current")
+        if self.get(self.current_id) is None:
+            ordered = self.sorted_chats()
+            self.current_id = ordered[0]["id"] if ordered else None
+        if self.current_id is None:
+            self.new_chat()
+
+    def save(self):
+        if not self.path:
+            return True
+        try:
+            folder = os.path.dirname(self.path)
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"version": 1, "current": self.current_id, "chats": self.chats},
+                          f, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.path)
+            return True
+        except Exception:
+            return False
+
+    def get(self, chat_id):
+        for c in self.chats:
+            if c["id"] == chat_id:
+                return c
+        return None
+
+    def current(self):
+        chat = self.get(self.current_id)
+        return chat if chat is not None else self.new_chat()
+
+    def sorted_chats(self):
+        return sorted(self.chats, key=lambda c: c.get("updated", ""), reverse=True)
+
+    def new_chat(self):
+        cur = self.get(self.current_id)
+        if cur is not None and not cur["messages"]:
+            return cur  # an empty chat already exists: reuse it
+        now = self.now()
+        chat = {"id": uuid.uuid4().hex[:12], "title": "", "created": now, "updated": now, "messages": []}
+        self.chats.append(chat)
+        self.current_id = chat["id"]
+        self.save()
+        return chat
+
+    def open_chat(self, chat_id):
+        if self.get(chat_id) is not None:
+            self.current_id = chat_id
+            self.save()
+
+    def add_message(self, chat_id, role, text):
+        chat = self.get(chat_id) or self.current()
+        chat["messages"].append({"role": role, "text": text, "time": self.now()})
+        chat["updated"] = self.now()
+        if role == "user" and not chat["title"]:
+            title = " ".join(text.split())
+            chat["title"] = title[:28] + ("..." if len(title) > 28 else "")
+        self.save()
+        return chat
+
+    def delete_chat(self, chat_id):
+        self.chats = [c for c in self.chats if c["id"] != chat_id]
+        if self.current_id == chat_id:
+            ordered = self.sorted_chats()
+            self.current_id = ordered[0]["id"] if ordered else None
+        if self.get(self.current_id) is None:
+            self.current_id = None
+            self.new_chat()
+        else:
+            self.save()
+
+
+# ---- Commands: every command is a separate registered function ----
+COMMANDS = []
+
+
+def command(name, *keywords, priority=10):
+    """Register a command. Higher priority is checked first; keywords match at word start."""
+    def register(fn):
+        COMMANDS.append((priority, name, tuple(k.lower() for k in keywords), fn))
+        COMMANDS.sort(key=lambda c: -c[0])
+        return fn
+    return register
+
+
+def keyword_match(text, keyword):
+    pattern = r"(?<!\w)" + re.escape(keyword) + (r"(?!\w)" if len(keyword) <= 3 else "")
+    return re.search(pattern, text) is not None
+
+
+def run_command(app, text):
+    low = text.lower().strip()
+    for priority, name, keywords, fn in COMMANDS:
+        if any(keyword_match(low, k) for k in keywords):
+            try:
+                return fn(app, low)
+            except Exception:
+                save_crash("Command '%s' failed:\n%s" % (name, traceback.format_exc()))
+                return app.t("cmd_error")
+    return app.t("unknown")
+
+
+@command("new_chat", "чати нав", "чатӣ нав", "новый чат", "new chat", priority=90)
+def cmd_new_chat(app, text):
+    app.notice = app.t("chat_created")
+    app.new_chat()
+    return app.t("chat_created")
+
+
+@command("chats", "чатҳои ман", "чатҳо", "мои чаты", "чаты", "my chats", "chats", priority=80)
+def cmd_chats(app, text):
+    Clock.schedule_once(lambda dt: app.show_chats(), 0.4)
+    return app.t("chats_opened")
+
+
+@command("language", "забон", "язык", "language", priority=70)
+def cmd_language(app, text):
+    targets = (("tg", ("тоҷик", "таджик", "tajik", "tg")),
+               ("ru", ("русӣ", "русск", "russian", "ru")),
+               ("en", ("англис", "англий", "english", "en")))
+    for code, names in targets:
+        if any(keyword_match(text, n) for n in names):
+            app.set_language(code)
+            return app.t("lang_changed").format(LANG_NAMES[code])
+    return app.t("lang_hint")
+
+
+@command("settings", "танзимот", "настройки", "settings", priority=60)
+def cmd_settings(app, text):
+    Clock.schedule_once(lambda dt: app.show_settings(), 0.4)
+    return app.t("settings_opened")
+
+
+@command("theme", "мавзӯъ", "мавзуъ", "тема", "theme", "design", "интерфейс",
+         "aura", "particle", "glass", priority=50)
+def cmd_theme(app, text):
+    for i, item in enumerate(THEMES):
+        if keyword_match(text, item["name"].lower().split()[0]):  # aura / particle / glass
+            app.set_theme(i)
+            break
+    else:
+        app.next_theme()
+    return app.t("theme_changed").format(THEMES[app.theme_index]["name"])
+
+
+@command("about", "маълумот", "о программе", "о jarvis", "about", priority=40)
+def cmd_about(app, text):
+    Clock.schedule_once(lambda dt: app.show_about(), 0.4)
+    return app.t("about_opened")
+
+
+@command("voice", "овоз", "голос", "voice", "микрофон", "microphone", priority=20)
+def cmd_voice(app, text):
+    return app.t("mic") + "\n" + app.t("voice_note")
+
+
+@command("time", "соат", "время", "time", "clock", priority=10)
+def cmd_time(app, text):
+    return app.t("time") + ": " + datetime.now().strftime("%H:%M:%S")
+
+
+@command("date", "сана", "дата", "date", "today", priority=10)
+def cmd_date(app, text):
+    return app.t("date") + ": " + datetime.now().strftime("%d.%m.%Y")
+
+
+@command("status", "ҳолат", "статус", "status", "system", priority=10)
+def cmd_status(app, text):
+    return app.t("system") + "\n\n" + THEMES[app.theme_index]["name"]
+
+
+@command("help", "кӯмак", "кумак", "помощь", "help", "команд", priority=10)
+def cmd_help(app, text):
+    return app.t("help") + "\n" + app.t("commands")
+
+
+@command("greeting", "салом", "привет", "здравствуй", "hello", "hi", "hey", priority=5)
+def cmd_greeting(app, text):
+    return app.t("welcome")
+
+
+class IconGlassButton(GlassButton):
+    """Glass button with a drawn icon ('dots' = vertical three dots, 'cross').
+    The icon is drawn on the canvas, so no font glyph is needed."""
+    def __init__(self, icon_kind="dots", icon_rgba=(1, 1, 1, 1), **kwargs):
+        super().__init__(**kwargs)
+        self.icon_kind = icon_kind
+        self.icon_rgba = icon_rgba
+        self.bind(pos=self.draw_icon, size=self.draw_icon)
+        self.draw_icon()
+
+    def draw_icon(self, *_):
+        self.canvas.after.clear()
+        cx, cy = self.center
+        with self.canvas.after:
+            Color(*self.icon_rgba)
+            if self.icon_kind == "dots":
+                for dy in (-dp(7), 0, dp(7)):
+                    Ellipse(pos=(cx - dp(2.2), cy + dy - dp(2.2)), size=(dp(4.4), dp(4.4)))
+            else:
+                k = dp(7)
+                Line(points=[cx - k, cy - k, cx + k, cy + k], width=dp(1.6), cap="round")
+                Line(points=[cx - k, cy + k, cx + k, cy - k], width=dp(1.6), cap="round")
+
+
 class JarvisApp(App):
     def build(self):
         self.title = "JARVIS"
@@ -862,16 +1227,25 @@ class JarvisApp(App):
         self._last_err = None
         self._err_count = 0
         self.store = JsonStore(os.path.join(self.user_data_dir, "jarvis_settings.json"))
-        self.account_service = get_service(self.user_data_dir)
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
         self.last_response = ""
         self.animation_paused = False
-        self.orb_state = "idle"
+        self.orb_state = "idle"      # idle / listening / speaking
         self._orb_event = None
         self.load_settings()
+        self.account_service = get_service(self.user_data_dir)
+        self.open_popups = set()
+        self.app_paused = False
+        self.notice = None            # one-time text shown in an empty chat
+        self.chat_placeholder = False
         try:
+            self.chats = ChatStore(os.path.join(self.user_data_dir, "jarvis_chats.json"))
+        except Exception:
+            save_crash("ChatStore failed:\n" + traceback.format_exc())
+            self.chats = ChatStore(None)  # memory only, the app still works
+        try:  # keep the text field visible above the on-screen keyboard
             Window.softinput_mode = "below_target"
         except Exception:
             pass
@@ -881,6 +1255,7 @@ class JarvisApp(App):
         with self.root_layout.canvas.before:
             self.bg_color = Color(*hex_color(THEMES[self.theme_index]["background"]))
             self.bg_rect = Rectangle(pos=self.root_layout.pos, size=self.root_layout.size)
+            # blue glow rising from the bottom (AURA ORB only)
             self.grad_color = Color(1, 1, 1, 1 if self.theme_index == 0 else 0)
             self.grad_rect = Rectangle(texture=self.make_gradient(),
                                        pos=self.root_layout.pos, size=(0, 0))
@@ -891,7 +1266,7 @@ class JarvisApp(App):
             err = traceback.format_exc()
             save_crash(err)
             self.startup_error = err
-            self.theme_index = 0
+            self.theme_index = 0  # fall back to the first design
             try:
                 self.save_settings()
                 self.update_colors()
@@ -904,7 +1279,7 @@ class JarvisApp(App):
     def make_gradient(self):
         rows = 64
         data = bytearray()
-        for i in range(rows):
+        for i in range(rows):  # row 0 = bottom
             t = i / (rows - 1.0)
             r = int(60 + (2 - 60) * t)
             g = int(130 + (6 - 130) * t)
@@ -930,6 +1305,7 @@ class JarvisApp(App):
         if self.store.exists("settings"):
             data = self.store.get("settings")
             self.language = data.get("language", "tg")
+            # "theme_v2" is a new key: designs from older versions are ignored
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
         if self.language not in ("tg", "ru", "en"):
@@ -962,37 +1338,42 @@ class JarvisApp(App):
         main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         self.root_layout.add_widget(main)
 
+        # Header: title (takes all free width, never wraps) and the glass settings button
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
-        settings_btn = GlassButton(text=self.t("set"), tint=tint, size_hint_x=None, width=dp(96),
-                                   font_size=dp(13), bold=True, color=hex_color(theme["text"]),
-                                   radius=18)
-        settings_btn.bind(on_release=self.show_settings)
+        menu_btn = IconGlassButton(icon_kind="dots", icon_rgba=hex_color(theme["text"]),
+                                   tint=tint, size_hint_x=None, width=dp(48), radius=24)
+        menu_btn.bind(on_release=self.show_menu)
         header.add_widget(title)
-        header.add_widget(settings_btn)
+        header.add_widget(menu_btn)
         main.add_widget(header)
 
         self.status_label = make_label(self.t("ready"), 12, theme["accent"], True,
                                        size_hint_y=None, height=dp(25))
         main.add_widget(self.status_label)
 
+        # Main visual zone: one layout per design
         self.visual_area = BoxLayout(orientation="vertical", spacing=dp(8))
         main.add_widget(self.visual_area)
         self.build_theme_layout()
 
-        response_panel = BoxLayout(orientation="vertical", padding=dp(10),
-                                   spacing=dp(4), size_hint_y=None, height=dp(94))
-        glass_style(response_panel, tint, dp(18), fill=0.10, sheen=0.28, border=0.30)
-        self.response_title = make_label(self.t("response"), 10, theme["accent"], True,
-                                          size_hint_y=None, height=dp(18))
-        self.response_label = make_label(self.last_response or self.t("welcome"), 13,
-                                         theme["text"], False)
-        response_scroll = ScrollView(do_scroll_x=False)
-        response_scroll.add_widget(self.response_label)
-        response_panel.add_widget(self.response_title)
-        response_panel.add_widget(response_scroll)
-        main.add_widget(response_panel)
+        # Chat panel (glass): messages follow each other, newest at the bottom
+        chat_h = max(dp(120), min(dp(190), Window.height * 0.21))  # fits small and tall screens
+        chat_panel = BoxLayout(orientation="vertical", padding=dp(10),
+                               spacing=dp(4), size_hint_y=None, height=chat_h)
+        glass_style(chat_panel, tint, dp(18), fill=0.10, sheen=0.28, border=0.30)
+        self.response_title = make_label(self.chat_title(), 10, theme["accent"], True,
+                                         size_hint_y=None, height=dp(18))
+        self.chat_scroll = ScrollView(do_scroll_x=False)
+        self.chat_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
+        self.chat_box.bind(minimum_height=self.chat_box.setter("height"))
+        self.chat_scroll.add_widget(self.chat_box)
+        chat_panel.add_widget(self.response_title)
+        chat_panel.add_widget(self.chat_scroll)
+        main.add_widget(chat_panel)
+        self.render_chat()
 
+        # Command bar: glass pill; sound-wave icon when empty, paper plane after typing
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
         glass_style(command_row, tint, dp(26), fill=0.16, sheen=0.50, border=0.50)
@@ -1024,14 +1405,14 @@ class JarvisApp(App):
         self.visual_area.clear_widgets()
         theme = THEMES[self.theme_index]
         index = self.theme_index
-        if index == 0:
+        if index == 0:  # AURA ORB: glowing orb + greeting
             self.visual_area.add_widget(Widget(size_hint_y=0.05))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.5))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 14, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(28)))
             self.visual_area.add_widget(make_label(self.t("orb_ask"), 26, theme["text"], True,
                                                    size_hint_y=None, height=dp(90)))
-        elif index == 1:
+        elif index == 1:  # PARTICLE CORE: point-cloud orb
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.6))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 12, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(24)))
@@ -1039,28 +1420,102 @@ class JarvisApp(App):
                                                    size_hint_y=None, height=dp(48)))
             self.visual_area.add_widget(make_label(self.t("p_ready"), 10, "#9FB4C8",
                                                    False, size_hint_y=None, height=dp(30)))
-        else:
+        else:  # GLASS ORB: glass sphere on a reflective floor
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.7))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 12, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(24)))
             self.visual_area.add_widget(make_label(self.t("p_ask"), 24, theme["text"], True,
                                                    size_hint_y=None, height=dp(48)))
 
-    def show_response(self, message):
-        self.last_response = message
-        if hasattr(self, "response_label"):
-            self.response_label.text = message
+    # ------------------------------------------------------------ chat
+    def chat_title(self, chat=None):
+        chat = chat or self.chats.current()
+        return chat.get("title") or self.t("chat_default")
 
+    def make_bubble(self, role, text):
+        theme = THEMES[self.theme_index]
+        user = role == "user"
+        tint = (0.45, 0.55, 1.0) if user else hex_color(theme["accent"])[:3]
+        bubble = BoxLayout(orientation="vertical", size_hint=(0.84, None), padding=dp(9))
+        bubble.bind(minimum_height=bubble.setter("height"))
+        glass_style(bubble, tint, dp(14), fill=0.26 if user else 0.12, sheen=0.3, border=0.35)
+        label = Label(text=text, font_size=dp(13), color=hex_color(theme["text"]),
+                      halign="left", valign="top", size_hint_y=None)
+        label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+        label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
+        bubble.add_widget(label)
+        row = BoxLayout(orientation="horizontal", size_hint_y=None)
+        bubble.bind(height=lambda inst, h: setattr(row, "height", h))
+        if user:
+            row.add_widget(Widget())
+            row.add_widget(bubble)
+        else:
+            row.add_widget(bubble)
+            row.add_widget(Widget())
+        return row
+
+    def scroll_chat_down(self):
+        Clock.schedule_once(lambda dt: setattr(self.chat_scroll, "scroll_y", 0), 0.15)
+
+    def render_chat(self):
+        self.chat_box.clear_widgets()
+        chat = self.chats.current()
+        messages = chat["messages"][-100:]  # only the latest 100 are drawn (all stay saved)
+        self.chat_placeholder = not messages
+        if not messages:
+            self.chat_box.add_widget(self.make_bubble("jarvis", self.notice or self.t("welcome")))
+            self.notice = None
+        for m in messages:
+            self.chat_box.add_widget(self.make_bubble(m["role"], m["text"]))
+        self.response_title.text = self.chat_title(chat)
+        self.scroll_chat_down()
+
+    def append_bubble(self, role, text):
+        self.chat_box.add_widget(self.make_bubble(role, text))
+        self.scroll_chat_down()
+
+    def add_chat_message(self, chat_id, role, text):
+        self.chats.add_message(chat_id, role, text)
+        if self.chats.current_id != chat_id:
+            return
+        if self.chat_placeholder:
+            self.render_chat()
+        else:
+            self.append_bubble(role, text)
+            self.response_title.text = self.chat_title()
+
+    def show_response(self, message):
+        """Adds a JARVIS message to the current chat (saved and shown)."""
+        self.add_chat_message(self.chats.current_id, "jarvis", message)
+
+    def new_chat(self):
+        chat = self.chats.new_chat()
+        self.chats.open_chat(chat["id"])
+        self.render_chat()
+
+    def open_chat(self, chat_id):
+        self.chats.open_chat(chat_id)
+        self.render_chat()
+        if getattr(self, "chats_popup", None) is not None:
+            self.chats_popup.dismiss()
+
+    # --------------------------------------------------------- commands
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
             return
-        command = self.command_input.text.strip()
-        if not command:
+        command_text = self.command_input.text.strip()
+        if not command_text:
             return
         self.command_input.text = ""
-        answer = self.process_command(command)
-        self.show_response(answer)
+        chat_id = self.chats.current_id
+        self.add_chat_message(chat_id, "user", command_text)
+        answer = run_command(self, command_text)
+        self.add_chat_message(chat_id, "jarvis", answer)
+        # the orb "speaks" the answer (simulated until speech synthesis is connected)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
+
+    def process_command(self, command_text):
+        return run_command(self, command_text)
 
     def on_text_change(self, instance, value):
         if hasattr(self, "action_btn"):
@@ -1072,25 +1527,29 @@ class JarvisApp(App):
         else:
             self.toggle_listening()
 
+    # ------------------------------------------------------------ voice
     def toggle_listening(self):
         if self.orb_state == "listening":
             self.set_orb_state("idle")
             return
-        
-        # Check mic permission using voice layer functions
-        perm = microphone_permission_state()
-        if perm == "denied":
-            self.show_response("Микрофон иҷозат дода нашудааст.")
-            return
+        state = microphone_permission_state()
+        if state in ("granted", "not_android"):
+            self.start_listening()
+        else:
+            # the permission callback may run on another thread: hand it to the UI thread
+            request_microphone(
+                lambda granted: Clock.schedule_once(lambda dt: self.on_mic_permission(granted), 0))
 
-        def on_perm(granted):
-            if granted:
-                self.show_response(self.t("mic") + "\n" + self.t("voice_note"))
-                self.set_orb_state("listening", 4.0)
-            else:
-                self.show_response("Иҷозати микрофон рад карда шуд.")
+    def on_mic_permission(self, granted):
+        if granted:
+            self.start_listening()
+        else:
+            self.show_response(self.t("mic_denied"))
 
-        request_microphone(on_perm)
+    def start_listening(self):
+        # The speech engine is not connected yet: say so; the orb only shows a short demo.
+        self.show_response(self.t("mic_engine"))
+        self.set_orb_state("listening", 3.0)
 
     def set_orb_state(self, state, seconds=None):
         self.orb_state = state
@@ -1104,59 +1563,162 @@ class JarvisApp(App):
         if state != "idle" and seconds:
             self._orb_event = Clock.schedule_once(lambda dt: self.set_orb_state("idle"), seconds)
 
-    def process_command(self, command):
-        cmd = command.lower().strip()
-        now = datetime.now()
+    # ----------------------------------------------------------- popups
+    def track_popup(self, popup):
+        self.open_popups.add(popup)
+        popup.bind(on_dismiss=self.popup_closed)
+        self.update_pause()
 
-        greetings = ("салом", "салом алейкум", "привет", "здравствуй", "hello", "hi", "hey")
-        if any(word in cmd for word in greetings):
-            return self.t("welcome")
-        if any(word in cmd for word in ("соат", "время", "time", "clock")):
-            return self.t("time") + ": " + now.strftime("%H:%M:%S")
-        if any(word in cmd for word in ("сана", "дата", "date", "today")):
-            return self.t("date") + ": " + now.strftime("%d.%m.%Y")
-        if any(word in cmd for word in ("ҳолат", "статус", "status", "system")):
-            return self.t("system") + "\n\n" + THEMES[self.theme_index]["name"]
-        if any(word in cmd for word in ("мавзӯъ", "тема", "theme", "design")):
-            self.next_theme()
-            return "Interface: " + THEMES[self.theme_index]["name"]
-        if any(word in cmd for word in ("кӯмак", "помощь", "help", "команд")):
-            return self.t("help") + "\n" + self.t("commands")
-        if any(word in cmd for word in ("овоз", "голос", "voice", "microphone", "микрофон")):
-            return self.t("mic") + "\n" + self.t("voice_note")
-        return self.t("unknown")
+    def popup_closed(self, popup, *_):
+        self.open_popups.discard(popup)
+        self.update_pause()
 
-    def next_theme(self, *_):
-        self.theme_index = (self.theme_index + 1) % len(THEMES)
+    def update_pause(self):
+        self.animation_paused = bool(self.open_popups) or self.app_paused
+
+    def make_popup(self, content, size_hint=(0.92, 0.88), **extra):
+        theme = THEMES[self.theme_index]
+        kwargs = dict(title="", content=content, size_hint=size_hint, auto_dismiss=True,
+                      separator_height=0)
+        kwargs.update(extra)
+        try:
+            popup = Popup(background="", background_color=(*hex_color(theme["background"])[:3], 0.96),
+                          overlay_color=(0, 0, 0, 0.6), **kwargs)
+        except Exception:
+            popup = Popup(**kwargs)
+        self.track_popup(popup)
+        return popup
+
+    def glass_option(self, content, text, active, callback, height=54, tint=None):
+        theme = THEMES[self.theme_index]
+        btn = GlassButton(text=text, tint=tint or hex_color(theme["accent"])[:3], active=active,
+                          size_hint_y=None, height=dp(height), font_size=dp(13), bold=active,
+                          color=hex_color(theme["text"]), radius=18)
+        btn.bind(on_release=callback)
+        content.add_widget(btn)
+        return btn
+
+    def show_menu(self, *_):
+        """The three-dot menu in the header."""
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        popup = self.make_popup(box, size_hint=(0.74, None), height=dp(4 * 50 + 3 * 8 + 24),
+                                pos_hint={"right": 0.97, "top": 0.92})
+        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat),
+                 ("menu_settings", self.show_settings), ("menu_about", self.show_about))
+        for key, action in items:
+            def go(inst, f=action):
+                popup.dismiss()
+                Clock.schedule_once(lambda dt: f(), 0.12)
+            self.glass_option(box, self.t(key), False, go, height=50)
+        popup.open()
+
+    def show_chats(self, *_):
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
+        content.add_widget(make_label(self.t("chats_title"), 17, theme["accent"], True,
+                                      size_hint_y=None, height=dp(30)))
+        chats = self.chats.sorted_chats()
+        scroll = ScrollView(do_scroll_x=False)
+        grid = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        for chat in chats:
+            row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(62))
+            text = self.chat_title(chat) + "\n" + format_time(chat.get("created", ""))
+            open_btn = GlassButton(text=text, tint=tint, active=chat["id"] == self.chats.current_id,
+                                   font_size=dp(12), color=hex_color(theme["text"]), radius=16)
+            open_btn.bind(on_release=lambda inst, cid=chat["id"]: self.open_chat(cid))
+            del_btn = IconGlassButton(icon_kind="cross", icon_rgba=hex_color(theme["text"]), tint=tint,
+                                      size_hint_x=None, width=dp(56), radius=16)
+            del_btn.bind(on_release=lambda inst, cid=chat["id"]: self.confirm_delete(cid))
+            row.add_widget(open_btn)
+            row.add_widget(del_btn)
+            grid.add_widget(row)
+        if not chats:
+            grid.add_widget(make_label(self.t("chats_empty"), 13, theme["text"], False,
+                                       size_hint_y=None, height=dp(50)))
+        scroll.add_widget(grid)
+        content.add_widget(scroll)
+        content.add_widget(self.make_button(self.t("close"), lambda *_: self.chats_popup.dismiss(),
+                                            theme["accent"], 44))
+        self.chats_popup = self.make_popup(content)
+        self.chats_popup.open()
+
+    def confirm_delete(self, chat_id):
+        chat = self.chats.get(chat_id)
+        if chat is None:
+            return
+        theme = THEMES[self.theme_index]
+        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
+        content.add_widget(make_label(self.t("delete_ask").format(self.chat_title(chat)), 14,
+                                      theme["text"], False))
+        buttons = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        popup = self.make_popup(content, size_hint=(0.86, None), height=dp(190))
+
+        def do_delete(*_):
+            self.chats.delete_chat(chat_id)
+            popup.dismiss()
+            self.render_chat()
+            if getattr(self, "chats_popup", None) is not None:
+                self.chats_popup.dismiss()
+            Clock.schedule_once(lambda dt: self.show_chats(), 0.2)
+
+        buttons.add_widget(self.make_button(self.t("yes_delete"), do_delete, theme["accent2"], 48))
+        buttons.add_widget(self.make_button(self.t("no"), lambda *_: popup.dismiss(),
+                                            theme["accent"], 48))
+        content.add_widget(buttons)
+        popup.open()
+
+    def show_about(self, *_):
+        theme = THEMES[self.theme_index]
+        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
+        content.add_widget(make_label(self.t("about_title"), 17, theme["accent"], True,
+                                      size_hint_y=None, height=dp(30)))
+        content.add_widget(make_label(self.t("about_body"), 13, theme["text"], False))
+        content.add_widget(make_label(self.t("about_chats").format(len(self.chats.chats)), 12,
+                                      theme["accent"], False, size_hint_y=None, height=dp(28)))
+        popup = self.make_popup(content, size_hint=(0.92, None), height=dp(360))
+        content.add_widget(self.make_button(self.t("close"), lambda *_: popup.dismiss(),
+                                            theme["accent"], 44))
+        popup.open()
+
+    # --------------------------------------------------------- settings
+    def set_language(self, code):
+        if code in TEXTS:
+            self.language = code
+            self.save_settings()
+            self.build_interface()  # every text on screen is rebuilt in the new language
+
+    def set_theme(self, index):
+        self.theme_index = index % len(THEMES)
         self.save_settings()
         self.update_colors()
         self.build_interface()
+
+    def next_theme(self, *_):
+        self.set_theme(self.theme_index + 1)
 
     def show_settings(self, *_):
         self.open_section("main")
 
     def open_section(self, section):
+        """Settings folders: main menu -> design / language / voice / account."""
         old = getattr(self, "settings_popup", None)
         if old is not None:
             old.dismiss()
         theme = THEMES[self.theme_index]
-        tint = hex_color(theme["accent"])[:3]
         content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
-        titles = {"main": "settings", "theme": "title_theme",
-                  "language": "title_lang", "voice": "title_voice"}
+        titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
+                  "voice": "title_voice", "account": "title_account"}
         content.add_widget(make_label(self.t(titles[section]), 17, theme["accent"], True,
                                       size_hint_y=None, height=dp(30)))
 
         def option(text, active, callback, height=54):
-            btn = GlassButton(text=text, tint=tint, active=active, size_hint_y=None,
-                              height=dp(height), font_size=dp(13), bold=active,
-                              color=hex_color(theme["text"]), radius=18)
-            btn.bind(on_release=callback)
-            content.add_widget(btn)
+            self.glass_option(content, text, active, callback, height)
 
         if section == "main":
             for key, target in (("sec_theme", "theme"), ("sec_lang", "language"),
-                                ("sec_voice", "voice")):
+                                ("sec_voice", "voice"), ("sec_account", "account")):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=58)
             content.add_widget(Widget())
         elif section == "theme":
@@ -1169,39 +1731,24 @@ class JarvisApp(App):
                 option(label, self.language == code,
                        lambda inst, c=code: self.choose_language(c, self.settings_popup))
             content.add_widget(Widget())
-        else:
+        elif section == "voice":
             for name in VOICES:
                 option(name, self.voice_profile == name,
                        lambda inst, n=name: self.choose_voice(n, self.settings_popup))
             content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
             content.add_widget(Widget())
+        else:  # account
+            content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
 
         nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
         if section != "main":
-            nav.add_widget(self.make_button(self.t("back"),
-                                            lambda *_: self.open_section("main"),
+            nav.add_widget(self.make_button(self.t("back"), lambda *_: self.open_section("main"),
                                             theme["accent2"], 44))
-        nav.add_widget(self.make_button(self.t("close"),
-                                        lambda *_: self.settings_popup.dismiss(),
+        nav.add_widget(self.make_button(self.t("close"), lambda *_: self.settings_popup.dismiss(),
                                         theme["accent"], 44))
         content.add_widget(nav)
-
-        try:
-            self.settings_popup = Popup(
-                title="", content=content, size_hint=(0.92, 0.88), auto_dismiss=True,
-                separator_height=0, background="",
-                background_color=(*hex_color(theme["background"])[:3], 0.96),
-                overlay_color=(0, 0, 0, 0.6))
-        except Exception:
-            self.settings_popup = Popup(title="", content=content, size_hint=(0.92, 0.88),
-                                        auto_dismiss=True, separator_height=0)
-        self.settings_popup.bind(on_dismiss=self.settings_closed)
-        self.animation_paused = True
+        self.settings_popup = self.make_popup(content)
         self.settings_popup.open()
-
-    def settings_closed(self, popup, *_):
-        if popup is self.settings_popup:
-            self.animation_paused = False
 
     def choose_theme(self, index, popup):
         self.theme_index = index
@@ -1211,16 +1758,13 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
 
     def choose_language(self, code, popup):
-        self.language = code
-        self.save_settings()
         popup.dismiss()
-        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
+        Clock.schedule_once(lambda dt: self.set_language(code), 0.1)
 
     def choose_voice(self, name, popup):
         self.voice_profile = name
         self.save_settings()
         popup.dismiss()
-        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
         Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
 
     def on_start(self):
@@ -1234,6 +1778,7 @@ class JarvisApp(App):
             self.show_error_popup(text)
 
     def report_error(self, text):
+        """Called when a callback or drawing fails: show the error once instead of crashing."""
         if text == self._last_err or self._err_count >= 3:
             return
         self._last_err = text
@@ -1243,7 +1788,7 @@ class JarvisApp(App):
     def show_error_popup(self, text):
         try:
             box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
-            box.add_widget(TextInput(text=text[-3500:], readonly=True, font_size=dp(10),
+            box.add_widget(TextInput(text=self.t("error_hint") + "\n\n" + text[-3500:], readonly=True, font_size=dp(10),
                                      background_color=(0.05, 0.05, 0.08, 1),
                                      foreground_color=(1, 0.85, 0.85, 1)))
             ok = Button(text="OK", size_hint_y=None, height=dp(44))
@@ -1255,11 +1800,14 @@ class JarvisApp(App):
             pass
 
     def on_pause(self):
+        self.app_paused = True   # stop animating while the app is in the background
+        self.update_pause()
         self.save_settings()
         return True
 
     def on_resume(self):
-        self.save_settings()
+        self.app_paused = False
+        self.update_pause()
 
     def on_stop(self):
         self.save_settings()
