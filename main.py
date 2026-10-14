@@ -37,16 +37,13 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
 # ==========================================================================
-# VOICE LAYER: microphone permission, speech recognition and speech synthesis are
-# kept apart. Only the permission part works today; the recognizer and the
-# synthesizer are not connected and say so (they never pretend to work).
+# VOICE LAYER: microphone permission, speech recognition and speech synthesis
 # ==========================================================================
 class VoiceUnavailable(Exception):
     """Raised when a voice engine is requested but not connected yet."""
 
 
 def microphone_permission_state():
-    """'granted', 'denied', 'unknown' or 'not_android' (desktop testing)."""
     try:
         from android.permissions import check_permission, Permission
     except ImportError:
@@ -58,7 +55,6 @@ def microphone_permission_state():
 
 
 def request_microphone(callback):
-    """Asks Android for RECORD_AUDIO; callback(bool) may run on a non-UI thread."""
     try:
         from android.permissions import request_permissions, Permission
     except ImportError:
@@ -78,7 +74,6 @@ LANG_TAGS = {"tg": "tg-TJ", "ru": "ru-RU", "en": "en-US"}
 
 
 def android_available():
-    """True only on Android (pyjnius and the android module exist)."""
     try:
         import jnius  # noqa: F401
         import android  # noqa: F401
@@ -88,10 +83,6 @@ def android_available():
 
 
 class SpeechRecognizer(object):
-    """Speech to text through Android's own voice-input screen (RecognizerIntent).
-    The Google speech service of the phone does the work, usually online; a language the
-    service does not know (possibly Tajik) is handled by that service, not by this app.
-    Callbacks run on Android's thread: the caller must hand them to the UI thread."""
     REQUEST_CODE = 7041
 
     def __init__(self):
@@ -122,7 +113,7 @@ class SpeechRecognizer(object):
                 activity.bind(on_activity_result=self._on_result)
                 self._bound = True
             PythonActivity.mActivity.startActivityForResult(intent, self.REQUEST_CODE)
-        except Exception as exc:  # e.g. no speech service installed
+        except Exception as exc:
             raise VoiceUnavailable(str(exc))
 
     def _on_result(self, request_code, result_code, intent):
@@ -131,7 +122,7 @@ class SpeechRecognizer(object):
         on_text, on_error = self._on_text, self._on_error
         try:
             text = ""
-            if result_code == -1 and intent is not None:  # Activity.RESULT_OK
+            if result_code == -1 and intent is not None:
                 from jnius import autoclass
                 RecognizerIntent = autoclass("android.speech.RecognizerIntent")
                 results = intent.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
@@ -151,9 +142,6 @@ class SpeechRecognizer(object):
 
 
 class SpeechSynthesizer(object):
-    """Text to speech through Android's TextToSpeech (voices installed on the phone).
-    If the phone has no Tajik voice, the Russian voice reads the Tajik text; the
-    pronunciation is then close but not perfect (speak() reports this as 'fallback')."""
     def __init__(self):
         self._tts = None
 
@@ -169,7 +157,6 @@ class SpeechSynthesizer(object):
         return self._tts
 
     def warm_up(self):
-        """Starts the engine early: it needs a moment before the first word."""
         if android_available():
             try:
                 self._engine()
@@ -177,7 +164,6 @@ class SpeechSynthesizer(object):
                 pass
 
     def speak(self, text, lang="ru"):
-        """Returns 'ok' or 'fallback'; raises VoiceUnavailable when nothing can be spoken."""
         if not android_available():
             raise VoiceUnavailable("Speech synthesis works only on Android.")
         try:
@@ -217,37 +203,19 @@ class SpeechSynthesizer(object):
         self._tts = None
 
 
-class SpeakerVerifier(object):
-    """Accept commands only from the phone owner's voice. This is a separate feature from
-    speech recognition: recognizing words does NOT prove who is speaking. Not implemented;
-    until it exists, no command is treated as voice-verified."""
-    available = False
-
-    def enroll(self, samples):
-        raise VoiceUnavailable("Speaker verification is not connected yet.")
-
-    def is_owner(self, audio):
-        raise VoiceUnavailable("Speaker verification is not connected yet.")
-
-
 # ==========================================================================
-# ACCOUNTS AND SYNC LAYER (client side only). No server exists yet, so nothing here
-# works online: every online call raises ServerNotConfigured. Passwords are never
-# stored in the app; the server address is not kept in the public GitHub code (it
-# comes from the JARVIS_SERVER_URL variable or server_config.json in the private
-# folder). To add a server later, implement a remote AccountService and return it
-# from get_service().
+# ACCOUNTS AND SYNC LAYER
 # ==========================================================================
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD_LENGTH = 8
 
 
 class AccountError(Exception):
-    """Base class for account errors."""
+    pass
 
 
 class ServerNotConfigured(AccountError):
-    """Raised when an online operation is requested but no server is configured."""
+    pass
 
 
 def validate_email(email):
@@ -255,7 +223,6 @@ def validate_email(email):
 
 
 def validate_password(password):
-    """Returns None when the password is acceptable, otherwise a short reason code."""
     if not password or len(password) < MIN_PASSWORD_LENGTH:
         return "too_short"
     if password.lower() == password or password.isdigit():
@@ -263,102 +230,49 @@ def validate_password(password):
     return None
 
 
-def load_server_url(private_dir=None):
-    """Server address from the environment or the private folder (never from the repo)."""
-    url = os.environ.get("JARVIS_SERVER_URL", "").strip()
-    if not url and private_dir:
-        path = os.path.join(private_dir, "server_config.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                url = str(json.load(f).get("url", "")).strip()
-        except Exception:
-            url = ""
-    return url if url.startswith("https://") else None
-
-
 class AccountService(object):
-    """Interface that the app uses; implemented by LocalAccountService or a future remote one."""
     def is_configured(self):
         raise NotImplementedError
 
     def current_user(self):
         raise NotImplementedError
 
-    def register(self, email, password):
-        raise NotImplementedError
-
-    def login(self, email, password):
-        raise NotImplementedError
-
-    def logout(self):
-        raise NotImplementedError
-
-    def push_chats(self, chats):
-        raise NotImplementedError
-
-    def pull_chats(self):
-        raise NotImplementedError
-
 
 class LocalAccountService(AccountService):
-    """Used while there is no server: all data stays on this phone."""
     def is_configured(self):
         return False
 
     def current_user(self):
         return None
 
-    def _unavailable(self):
-        raise ServerNotConfigured("The online account server is not configured.")
-
-    def register(self, email, password):
-        self._unavailable()
-
-    def login(self, email, password):
-        self._unavailable()
-
-    def logout(self):
-        return None
-
-    def push_chats(self, chats):
-        self._unavailable()
-
-    def pull_chats(self):
-        self._unavailable()
-
 
 def get_service(private_dir=None):
-    """Always local for now; returns a remote service here once one is implemented."""
     return LocalAccountService()
 
 
-# ---- Crash log: saved only in the app's private folder (not readable by other apps) ----
+# ---- Crash log ----
 CRASH_FILE = "jarvis_crash_log.txt"
 
 
 def crash_dirs():
-    dirs = []
     priv = os.environ.get("ANDROID_PRIVATE")
-    dirs.append(priv if priv else os.getcwd())
-    return dirs
+    return [priv if priv else os.getcwd()]
 
 
 def save_crash(text):
-    saved = None
     for d in crash_dirs():
         try:
             os.makedirs(d, exist_ok=True)
             path = os.path.join(d, CRASH_FILE)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
-            saved = saved or path
+            return path
         except Exception:
             pass
-    return saved
+    return None
 
 
 def read_last_crash():
-    """Returns the crash text saved by the previous run (shown once inside the app)."""
     path = os.path.join(crash_dirs()[0], CRASH_FILE)
     try:
         if os.path.exists(path):
@@ -371,19 +285,7 @@ def read_last_crash():
     return None
 
 
-def handle_exception(exc_type, exc_value, exc_traceback):
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-        return
-    save_crash("".join(traceback.format_exception(exc_type, exc_value, exc_traceback)))
-    sys.__excepthook__(exc_type, exc_value, exc_traceback)
-
-
-sys.excepthook = handle_exception
-
-
 class JarvisExceptionHandler(ExceptionHandler):
-    """Keeps the app alive when a callback fails; the error is saved and shown on screen."""
     def handle_exception(self, inst):
         try:
             text = "".join(traceback.format_exception(type(inst), inst, inst.__traceback__))
@@ -407,12 +309,6 @@ THEMES = [
 
 VOICES = ("JARVIS Classic", "Aura")
 
-LANGUAGES = {
-    "Тоҷикӣ": "tg",
-    "Русский": "ru",
-    "English": "en",
-}
-
 TEXTS = {
     "tg": {
         "ready": "ҶАРВИС ОМОДА АСТ",
@@ -421,12 +317,8 @@ TEXTS = {
         "input": "Фармонро нависед...",
         "send": "ФИРИСТОДАН",
         "settings": "Танзимоти JARVIS",
-        "language": "Забон",
-        "theme": "Тарҳи интерфейс",
-        "voice": "Профили овоз",
         "close": "Пӯшидан",
-        "status": "Ҳолати система",
-        "commands": "Фармонҳо: салом, соат, сана, ҳолат, мавзӯъ, забон, танзимот, чати нав, чатҳо, кӯмак",
+        "commands": "Фармонҳо: салом, соат, сана, ҳолат, мавзӯъ, забон, танзимот, кӯмак",
         "menu_chats": "Чатҳои ман",
         "menu_new": "Чати нав",
         "menu_settings": "Танзимот",
@@ -442,35 +334,31 @@ TEXTS = {
         "settings_opened": "Танзимот кушода шуд.",
         "about_opened": "Маълумот кушода шуд.",
         "about_title": "Дар бораи JARVIS",
-        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ. Фармонҳои асосӣ бе интернет кор мекунанд. Чатҳо дар худи телефон нигоҳ дошта мешаванд. Фармони овозӣ ва хондани ҷавоб бо хизматрасонии Android кор мекунанд. Ҳисоби онлайн ҳанӯз пайваст нашудааст.",
+        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ. Фармонҳои асосӣ бе интернет кор мекунанд.",
         "about_chats": "Чатҳо дар телефон: {}",
-        "sec_account": "Ҳисоб ва ҳамоҳангсозӣ",
         "title_account": "Ҳисоб",
-        "acct_status": "Сервер танзим нашудааст. Чатҳо танҳо дар ин телефон нигоҳ дошта мешаванд. Ҳисоби онлайн ва ҳамоҳангсозии байни телефонҳо баъд аз пайваст кардани сервер кор мекунанд.",
-        "mic_denied": "Иҷозати микрофон дода нашуд. Онро дар Танзимоти Android → Барномаҳо → JARVIS → Иҷозатҳо фаъол кунед.",
-        "mic_engine": "Иҷозати микрофон ҳаст, вале шинохти овоз ҳанӯз пайваст нашудааст.",
-        "lang_hint": "Забонро нависед, масалан: «забон русӣ», «забон тоҷикӣ» ё «language english».",
+        "acct_status": "Сервер танзим нашудааст. Чатҳо танҳо дар ин телефон нигоҳ дошта мешаванд.",
+        "mic_denied": "Иҷозати микрофон дода нашуд.",
         "lang_changed": "Забон иваз шуд: {}",
         "theme_changed": "Интерфейс: {}",
-        "cmd_error": "Ҳангоми иҷрои фармон хатогӣ рух дод. Дубора кӯшиш кунед.",
-        "error_hint": "Хатогӣ рух дод. Барномаро аз нав кушоед. Матни зерин барои диагностика аст.",
+        "cmd_error": "Хатогӣ рух дод.",
+        "error_hint": "Барномаро аз нав кушоед.",
         "listen_prompt": "Фармонро бигӯед",
-        "stt_unavailable": "Шинохти овоз дар ин телефон дастрас нест (хизматрасонии овозии Android ёфт нашуд).",
-        "stt_failed": "Овоз шинохта нашуд. Дубора кӯшиш кунед.",
-        "tts_fallback": "Овози тоҷикӣ дар телефон нест, барои хондан овози русӣ истифода мешавад.",
-        "tts_unavailable": "Хондани ҷавоб ҳоло кор намекунад: овози забони интихобшуда дар телефон нест.",
+        "stt_unavailable": "Шинохти овоз дастрас нест.",
+        "stt_failed": "Овоз шинохта нашуд.",
+        "tts_fallback": "Овози тоҷикӣ дар телефон нест, овози русӣ истифода мешавад.",
+        "tts_unavailable": "Хондани ҷавоб ҳоло кор намекунад.",
         "speak_on": "Ҷавобҳо бо овоз: фаъол",
         "speak_off": "Ҷавобҳо бо овоз: хомӯш",
-        "voice_hint": "Шинохти овоз бо хизматрасонии Android кор мекунад (одатан бо интернет). Забони тоҷикӣ шояд дастгирӣ нашавад.",
+        "voice_hint": "Шинохти овоз тавассути хизматрасонии Android кор мекунад.",
         "voice_how": "Барои гуфтани фармон нишони садоро пахш кунед.",
         "help": "Ман ҳоло фармонҳои асосии офлайнро иҷро карда метавонам",
-        "unknown": "Ин фармон ҳоло дастгирӣ намешавад. Барои рӯйхати фармонҳо «кӯмак» нависед.",
+        "unknown": "Ин фармон дастгирӣ намешавад. «кӯмак» нависед.",
         "mic": "Шинохти овоз ҳанӯз пайваст нашудааст.",
         "response": "Ҷавоби JARVIS",
         "time": "Вақти ҳозира",
         "date": "Санаи имрӯз",
-        "system": "Ҳолат: онлайн\nМуҳаррик: Kivy\nПайвасти интернет: аз ҷониби система муайян карда намешавад",
-        "voice_note": "Интихоби профил ҳоло танҳо номи профилро нигоҳ медорад. Овози воқеиро хизматрасонии Android муайян мекунад.",
+        "system": "Ҳолат: онлайн",
         "set": "ТАНЗИМ",
         "sec_theme": "Танзими интерфейс",
         "sec_lang": "Танзими забон",
@@ -482,7 +370,7 @@ TEXTS = {
         "orb_hello": "Салом",
         "orb_ask": "Имрӯз чӣ тавр ёрдам расонам?",
         "p_ask": "Чӣ кор кунам?",
-        "p_ready": "Омода барои гӯш кардан. Фармонро нависед",
+        "p_ready": "Омода барои гӯш кардан",
         "listening": "Гӯш мекунам...",
         "speaking": "Ҷавоб медиҳам...",
     },
@@ -493,12 +381,8 @@ TEXTS = {
         "input": "Введите команду...",
         "send": "ОТПРАВИТЬ",
         "settings": "Настройки JARVIS",
-        "language": "Язык",
-        "theme": "Дизайн интерфейса",
-        "voice": "Голосовой профиль",
         "close": "Закрыть",
-        "status": "Состояние системы",
-        "commands": "Команды: привет, время, дата, статус, тема, язык, настройки, новый чат, чаты, помощь",
+        "commands": "Команды: привет, время, дата, статус, тема, язык, настройки, помощь",
         "menu_chats": "Мои чаты",
         "menu_new": "Новый чат",
         "menu_settings": "Настройки",
@@ -514,119 +398,107 @@ TEXTS = {
         "settings_opened": "Настройки открыты.",
         "about_opened": "Информация открыта.",
         "about_title": "О JARVIS",
-        "about_body": "JARVIS — персональный помощник с тремя футуристическими интерфейсами. Основные команды работают без интернета. Чаты хранятся на самом телефоне. Голосовые команды и озвучивание ответов работают через сервисы Android. Онлайн-аккаунт ещё не подключён.",
+        "about_body": "JARVIS — персональный помощник.",
         "about_chats": "Чатов на телефоне: {}",
-        "sec_account": "Аккаунт и синхронизация",
         "title_account": "Аккаунт",
-        "acct_status": "Сервер не настроен. Чаты хранятся только на этом телефоне. Онлайн-аккаунт и синхронизация между телефонами заработают после подключения сервера.",
-        "mic_denied": "Доступ к микрофону не предоставлен. Включите его: Настройки Android → Приложения → JARVIS → Разрешения.",
-        "mic_engine": "Доступ к микрофону есть, но распознавание речи ещё не подключено.",
-        "lang_hint": "Напишите язык, например: «язык русский», «язык таджикский» или «language english».",
+        "acct_status": "Сервер не настроен.",
+        "mic_denied": "Доступ к микрофону не предоставлен.",
         "lang_changed": "Язык изменён: {}",
         "theme_changed": "Интерфейс: {}",
-        "cmd_error": "При выполнении команды произошла ошибка. Попробуйте ещё раз.",
-        "error_hint": "Произошла ошибка. Перезапустите приложение. Текст ниже нужен для диагностики.",
+        "cmd_error": "Произошла ошибка.",
+        "error_hint": "Перезапустите приложение.",
         "listen_prompt": "Скажите команду",
-        "stt_unavailable": "Распознавание речи недоступно на этом телефоне (не найден голосовой сервис Android).",
-        "stt_failed": "Речь не распознана. Попробуйте ещё раз.",
-        "tts_fallback": "Таджикского голоса на телефоне нет, для чтения используется русский.",
-        "tts_unavailable": "Озвучивание ответа сейчас не работает: на телефоне нет голоса для выбранного языка.",
+        "stt_unavailable": "Распознавание речи недоступно.",
+        "stt_failed": "Речь не распознана.",
+        "tts_fallback": "Используется русский голос.",
+        "tts_unavailable": "Озвучивание не работает.",
         "speak_on": "Озвучивать ответы: вкл.",
         "speak_off": "Озвучивать ответы: выкл.",
-        "voice_hint": "Распознавание речи работает через сервис Android (обычно нужен интернет). Таджикский язык может не поддерживаться.",
-        "voice_how": "Нажмите значок звука, чтобы сказать команду.",
-        "help": "Сейчас я выполняю основные офлайн-команды",
-        "unknown": "Эта команда пока не поддерживается. Напишите «помощь» для списка команд.",
-        "mic": "Распознавание речи ещё не подключено.",
-        "response": "Ответ JARVIS",
-        "time": "Текущее время",
-        "date": "Сегодняшняя дата",
-        "system": "Состояние: онлайн\nДвижок: Kivy\nПодключение к интернету: не проверяется приложением",
-        "voice_note": "Сейчас профиль только сохраняет выбранное имя. Реальный голос определяет сервис Android.",
+        "voice_hint": "Распознавание речи работает через Android.",
+        "voice_how": "Нажмите значок звука.",
+        "help": "Команды офлайн",
+        "unknown": "Команда не поддерживается.",
+        "mic": "Микрофон не подключен.",
+        "response": "Ответ",
+        "time": "Время",
+        "date": "Дата",
+        "system": "Состояние",
         "set": "НАСТР.",
-        "sec_theme": "Настройка интерфейса",
-        "sec_lang": "Настройка языка",
-        "sec_voice": "Тон голоса",
-        "title_theme": "Виды интерфейса",
+        "sec_theme": "Интерфейс",
+        "sec_lang": "Язык",
+        "sec_voice": "Голос",
+        "title_theme": "Виды",
         "title_lang": "Языки",
-        "title_voice": "Примеры голоса",
+        "title_voice": "Голоса",
         "back": "Назад",
         "orb_hello": "Здравствуйте",
-        "orb_ask": "Чем могу помочь сегодня?",
+        "orb_ask": "Чем могу помочь?",
         "p_ask": "Что сделать?",
-        "p_ready": "Готов слушать. Введите команду",
+        "p_ready": "Готов",
         "listening": "Слушаю...",
         "speaking": "Отвечаю...",
     },
     "en": {
         "ready": "JARVIS IS READY",
         "online": "System online",
-        "welcome": "Hello! I am JARVIS. How can I help?",
+        "welcome": "Hello! I am JARVIS.",
         "input": "Type a command...",
         "send": "SEND",
         "settings": "JARVIS Settings",
-        "language": "Language",
-        "theme": "Interface design",
-        "voice": "Voice profile",
         "close": "Close",
-        "status": "System status",
-        "commands": "Commands: hello, time, date, status, theme, language, settings, new chat, chats, help",
+        "commands": "Commands: hello, time, date, status, theme, help",
         "menu_chats": "My chats",
         "menu_new": "New chat",
         "menu_settings": "Settings",
-        "menu_about": "About JARVIS",
+        "menu_about": "About",
         "chat_default": "New chat",
         "chats_title": "My chats",
-        "chats_empty": "No chats yet",
-        "delete_ask": "Delete chat \u201c{}\u201d?",
-        "yes_delete": "Yes, delete",
+        "chats_empty": "No chats",
+        "delete_ask": "Delete chat?",
+        "yes_delete": "Yes",
         "no": "No",
-        "chat_created": "New chat created.",
-        "chats_opened": "Chat list opened.",
-        "settings_opened": "Settings opened.",
-        "about_opened": "Information opened.",
+        "chat_created": "Created.",
+        "chats_opened": "Opened.",
+        "settings_opened": "Settings.",
+        "about_opened": "About.",
         "about_title": "About JARVIS",
-        "about_body": "JARVIS is a personal assistant with three futuristic designs. The basic commands work offline. Chats are stored on this phone. Voice commands and spoken answers use Android services. The online account is not connected yet.",
-        "about_chats": "Chats on this phone: {}",
-        "sec_account": "Account and sync",
+        "about_body": "JARVIS assistant.",
+        "about_chats": "Chats: {}",
         "title_account": "Account",
-        "acct_status": "The server is not configured. Chats are kept only on this phone. The online account and sync between phones will work once a server is connected.",
-        "mic_denied": "Microphone permission was not granted. Enable it in Android Settings → Apps → JARVIS → Permissions.",
-        "mic_engine": "Microphone access is available, but speech recognition is not connected yet.",
-        "lang_hint": "Write the language, for example: \u201clanguage english\u201d, \u201clanguage russian\u201d or \u201clanguage tajik\u201d.",
-        "lang_changed": "Language changed: {}",
-        "theme_changed": "Interface: {}",
-        "cmd_error": "An error occurred while running the command. Please try again.",
-        "error_hint": "An error occurred. Please restart the app. The text below is for diagnostics.",
-        "listen_prompt": "Say a command",
-        "stt_unavailable": "Speech recognition is not available on this phone (no Android voice service found).",
-        "stt_failed": "Speech was not recognized. Please try again.",
-        "tts_fallback": "There is no Tajik voice on this phone, so a Russian voice reads the answer.",
-        "tts_unavailable": "Reading answers aloud does not work right now: the phone has no voice for the chosen language.",
-        "speak_on": "Speak answers: on",
-        "speak_off": "Speak answers: off",
-        "voice_hint": "Speech recognition uses the Android service (usually needs internet). Tajik may not be supported.",
-        "voice_how": "Tap the sound icon to say a command.",
-        "help": "I can currently run basic offline commands",
-        "unknown": "This command is not supported yet. Type 'help' for available commands.",
-        "mic": "Speech recognition has not been connected yet.",
-        "response": "JARVIS response",
-        "time": "Current time",
-        "date": "Today's date",
-        "system": "State: online\nEngine: Kivy\nInternet connectivity is not checked by this app",
-        "voice_note": "The selected profile name is saved for now. The real voice is chosen by the Android service.",
+        "acct_status": "No server.",
+        "mic_denied": "No mic permission.",
+        "lang_changed": "Language: {}",
+        "theme_changed": "Theme: {}",
+        "cmd_error": "Error.",
+        "error_hint": "Restart.",
+        "listen_prompt": "Say command",
+        "stt_unavailable": "STT unavailable.",
+        "stt_failed": "Failed.",
+        "tts_fallback": "Fallback voice.",
+        "tts_unavailable": "TTS unavailable.",
+        "speak_on": "Voice: on",
+        "speak_off": "Voice: off",
+        "voice_hint": "Android STT.",
+        "voice_how": "Tap mic.",
+        "help": "Offline commands",
+        "unknown": "Unknown command.",
+        "mic": "Mic not connected.",
+        "response": "Response",
+        "time": "Time",
+        "date": "Date",
+        "system": "System",
         "set": "SET",
-        "sec_theme": "Interface settings",
-        "sec_lang": "Language settings",
-        "sec_voice": "Voice tone",
-        "title_theme": "Interface styles",
+        "sec_theme": "Theme",
+        "sec_lang": "Language",
+        "sec_voice": "Voice",
+        "title_theme": "Themes",
         "title_lang": "Languages",
-        "title_voice": "Voice samples",
+        "title_voice": "Voices",
         "back": "Back",
         "orb_hello": "Hello",
-        "orb_ask": "How can I help you today?",
-        "p_ask": "What can I do?",
-        "p_ready": "Ready to listen. Type a command",
+        "orb_ask": "How can I help?",
+        "p_ask": "What to do?",
+        "p_ready": "Ready",
         "listening": "Listening...",
         "speaking": "Speaking...",
     },
@@ -673,7 +545,6 @@ def _make_texture(size, data):
 
 
 def radial_texture(name, stops, size=96):
-    """Pure-Python radial gradient (t=0 centre, t=1 edge). Built once, then cached."""
     if name not in _TEX:
         data = bytearray()
         half = (size - 1) / 2.0
@@ -690,7 +561,6 @@ def radial_texture(name, stops, size=96):
 
 
 def linear_texture(name, stops, rows=64):
-    """Vertical gradient (t=0 bottom, t=1 top). Built once, then cached."""
     if name not in _TEX:
         data = bytearray()
         for i in range(rows):
@@ -716,8 +586,6 @@ def _move_glass(w, *_):
 
 
 def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
-    """Liquid-glass look behind a widget: translucent tint, bright top sheen, soft bottom
-    glow and a light edge. The canvas instructions are created once and only moved later."""
     try:
         sheen_tex = linear_texture("glass_sheen", ((0, (255, 255, 255, 0)), (1, (255, 255, 255, 120))))
         glow_tex = linear_texture("glass_glow", ((0, (255, 255, 255, 80)), (1, (255, 255, 255, 0))))
@@ -737,7 +605,7 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
     except Exception:
         if not GLASS_ERRORS:
             GLASS_ERRORS.append(traceback.format_exc())
-        try:  # plain translucent fallback
+        try:
             with widget.canvas.before:
                 Color(tint[0], tint[1], tint[2], fill + 0.1)
                 widget._g_plain = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[radius])
@@ -748,22 +616,21 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
 
 
 class AnimatedCore(Widget):
-    """Canvas-only animated orb (AURA ORB, PARTICLE CORE, GLASS ORB); no external images."""
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
         self.theme_index = theme_index
         self.phase = 0.0
-        self.level = 0.0     # 0..1 voice level (simulated until the microphone is connected)
+        self.level = 0.0
         self.clock_t = 0.0
         self.fib, self.dashes, self.reds = [], [], []
-        if theme_index == 1:  # PARTICLE CORE: points on a sphere
+        if theme_index == 1:
             n = 420
             for k in range(n):
                 y = 1 - 2 * (k + 0.5) / n
                 rr = math.sqrt(1 - y * y)
                 t = k * 2.39996
                 self.fib.append((math.cos(t) * rr, y, math.sin(t) * rr))
-        if theme_index == 2:  # GLASS ORB: fixed random dots on the sphere
+        if theme_index == 2:
             rnd = random.Random(7)
             self.dashes = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.5, 1.5)) for _ in range(170)]
             self.reds = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.2, 1.2)) for _ in range(6)]
@@ -772,7 +639,6 @@ class AnimatedCore(Widget):
         self.redraw()
 
     def on_parent(self, widget, parent):
-        # Stop the animation timer when the widget is removed (theme change).
         if parent is None and getattr(self, "_event", None):
             self._event.cancel()
             self._event = None
@@ -784,10 +650,10 @@ class AnimatedCore(Widget):
         state = getattr(app, "orb_state", "idle") if app is not None else "idle"
         self.clock_t += dt
         t = self.clock_t
-        if state == "listening":    # orb reacts to incoming sound
+        if state == "listening":
             target = 0.35 + 0.45 * abs(math.sin(t * 3.1) * math.sin(t * 1.3 + 1.0))
             boost = 1.9
-        elif state == "speaking":   # orb pulses with the spoken answer
+        elif state == "speaking":
             target = 0.30 + 0.50 * abs(math.sin(t * 6.2) * (0.6 + 0.4 * math.sin(t * 1.7)))
             boost = 1.4
         else:
@@ -797,7 +663,6 @@ class AnimatedCore(Widget):
         self.redraw()
 
     def draw_aura(self, cx, cy, R, accent, accent2):
-        """AURA ORB: dark glass sphere with soft luminous ribbons, blue/violet glow, bright rim."""
         lv = self.level
         R = R * (1 + 0.10 * lv)
         p = self.phase
@@ -815,7 +680,7 @@ class AnimatedCore(Widget):
         Color(1, 1, 1, 0.7 + 0.3 * lv)
         Rectangle(texture=core, pos=(cx + R * 0.28 - cs / 2, cy - R * 0.32 - cs / 2), size=(cs, cs))
         colors = ((0.30, 0.55, 1.0), (0.55, 0.38, 1.0), (0.21, 0.82, 1.0))
-        fades = (0.35, 0.8, 0.8, 0.35)  # ribbons fade out at both ends
+        fades = (0.35, 0.8, 0.8, 0.35)
         for j in range(3):
             b_axis = R * (0.30 + 0.22 * j + 0.05 * math.sin(p * 1.1 + j * 2)
                           + 0.05 * lv * math.sin(p * 4 + j))
@@ -860,7 +725,6 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R, start + 190, start + 245), width=dp(2.2) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
-        """PARTICLE CORE: wobbling shell of glowing dots and rings inside a dark disc."""
         lv = self.level
         R = R * (1 + 0.10 * lv)
         disc = radial_texture("p_disc", ((0, (11, 26, 32, 255)), (1, (4, 8, 11, 255))))
@@ -875,7 +739,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=glow, pos=(cx - gs / 2, cy - gs / 2), size=(gs, gs))
         p = self.phase
         cs, sn = math.cos(p * 0.5), math.sin(p * 0.5)
-        tc, ts = 0.9004, 0.4350  # tilt of 0.45 rad
+        tc, ts = 0.9004, 0.4350
         amp = 0.13 * (1 + 2.4 * lv)
 
         def shell(x, y, z):
@@ -890,7 +754,7 @@ class AnimatedCore(Widget):
             return cx + x1 * R, cy + y1 * R, z2
 
         Color(*accent, 0.20 + 0.15 * lv)
-        for k in range(1, 13):  # latitude rings
+        for k in range(1, 13):
             y = -1 + 2 * k / 13.0
             r0 = math.sqrt(1 - y * y)
             pts = []
@@ -919,7 +783,6 @@ class AnimatedCore(Widget):
             Point(points=near, pointsize=dp(1.0))
 
     def draw_glass(self, cx, cy, R, accent, accent2):
-        """GLASS ORB: dark glass sphere on a reflective floor with light pillars."""
         p = self.phase
         lv = self.level
         fy = cy - R * 1.02
@@ -946,7 +809,7 @@ class AnimatedCore(Widget):
                                          (1, (11, 42, 60, 255))))
         Color(1, 1, 1, 1)
         Rectangle(texture=body, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
-        for k in range(14):  # meridian lines
+        for k in range(14):
             a = k / 14.0 * math.pi + p * 0.35
             rx = max(R * abs(math.cos(a)), dp(0.4))
             Color(0.22, 0.78, 1, 0.07 + 0.2 * abs(math.sin(a)))
@@ -977,7 +840,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=inner, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
         pl = min(1.0, 0.7 + 0.3 * math.sin(p * 2) + 0.5 * lv)
 
-        def equator(span):  # the equator line ripples when the orb hears or speaks
+        def equator(span):
             pts = []
             for i in range(41):
                 u = i / 40.0 * 2 - 1
@@ -997,7 +860,7 @@ class AnimatedCore(Widget):
         Rectangle(texture=flare, pos=(cx - fs, cy - fs), size=(fs * 2, fs * 2))
         Color(0.35, 0.82, 1, 0.85)
         Line(circle=(cx, cy, R), width=dp(1.3))
-        Color(1, 1, 1, 0.92)  # two glossy highlights (angles run clockwise from the top)
+        Color(1, 1, 1, 0.92)
         Line(circle=(cx, cy, R * 0.9, 303, 327), width=R * 0.035, cap="round")
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
 
@@ -1005,7 +868,6 @@ class AnimatedCore(Widget):
         try:
             self._redraw_impl()
         except Exception:
-            # a drawing error must never close the app: stop animating and report it
             if getattr(self, "_event", None):
                 self._event.cancel()
                 self._event = None
@@ -1037,7 +899,6 @@ class AnimatedCore(Widget):
 
 
 class GlassButton(Button):
-    """Liquid-glass button."""
     def __init__(self, tint=(0.3, 0.6, 1.0), active=False, radius=16, **kwargs):
         super().__init__(**kwargs)
         self.tint_rgb = tint
@@ -1058,7 +919,6 @@ class GlassButton(Button):
 
 
 class SendWaveButton(Button):
-    """Command-bar button: sound-wave icon when empty, paper plane once text is typed."""
     def __init__(self, tint_rgb=(0.3, 0.6, 1.0), icon_rgba=(1, 1, 1, 1), **kwargs):
         super().__init__(**kwargs)
         self.tint_rgb = tint_rgb
@@ -1092,7 +952,7 @@ class SendWaveButton(Button):
                 Color(1, 1, 1, 0.55)
                 Line(circle=(cx, cy, d / 2), width=dp(1))
                 s = dp(8.5) * (0.92 if down else 1.0)
-                ca, sa = math.cos(0.5), math.sin(0.5)  # tilted up and to the right
+                ca, sa = math.cos(0.5), math.sin(0.5)
 
                 def rot(px, py):
                     return cx + (px * ca - py * sa) * s, cy + (px * sa + py * ca) * s
@@ -1124,8 +984,6 @@ def format_time(iso):
 
 
 class ChatStore(object):
-    """Chat history in the app's private folder (JSON, written atomically).
-    With path=None everything is kept in memory only."""
     def __init__(self, path=None):
         self.path = path
         self.chats = []
@@ -1142,7 +1000,7 @@ class ChatStore(object):
             try:
                 with open(self.path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-            except Exception:  # damaged file: keep a copy and start clean
+            except Exception:
                 try:
                     os.replace(self.path, self.path + ".bad")
                 except Exception:
@@ -1199,7 +1057,7 @@ class ChatStore(object):
     def new_chat(self):
         cur = self.get(self.current_id)
         if cur is not None and not cur["messages"]:
-            return cur  # an empty chat already exists: reuse it
+            return cur
         now = self.now()
         chat = {"id": uuid.uuid4().hex[:12], "title": "", "created": now, "updated": now, "messages": []}
         self.chats.append(chat)
@@ -1234,12 +1092,10 @@ class ChatStore(object):
             self.save()
 
 
-# ---- Commands: every command is a separate registered function ----
 COMMANDS = []
 
 
 def command(name, *keywords, priority=10):
-    """Register a command. Higher priority is checked first; keywords match at word start."""
     def register(fn):
         COMMANDS.append((priority, name, tuple(k.lower() for k in keywords), fn))
         COMMANDS.sort(key=lambda c: -c[0])
@@ -1299,7 +1155,7 @@ def cmd_settings(app, text):
          "aura", "particle", "glass", priority=50)
 def cmd_theme(app, text):
     for i, item in enumerate(THEMES):
-        if keyword_match(text, item["name"].lower().split()[0]):  # aura / particle / glass
+        if keyword_match(text, item["name"].lower().split()[0]):
             app.set_theme(i)
             break
     else:
@@ -1344,8 +1200,6 @@ def cmd_greeting(app, text):
 
 
 class IconGlassButton(GlassButton):
-    """Glass button with a drawn icon ('dots' = vertical three dots, 'cross').
-    The icon is drawn on the canvas, so no font glyph is needed."""
     def __init__(self, icon_kind="dots", icon_rgba=(1, 1, 1, 1), **kwargs):
         super().__init__(**kwargs)
         self.icon_kind = icon_kind
@@ -1378,10 +1232,10 @@ class JarvisApp(App):
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
-        self.speak_enabled = False    # read answers aloud (off by default)
+        self.speak_enabled = False
         self.last_response = ""
         self.animation_paused = False
-        self.orb_state = "idle"      # idle / listening / speaking
+        self.orb_state = "idle"
         self._orb_event = None
         self.load_settings()
         self.account_service = get_service(self.user_data_dir)
@@ -1391,14 +1245,14 @@ class JarvisApp(App):
         self.tts_error_noted = False
         self.open_popups = set()
         self.app_paused = False
-        self.notice = None            # one-time text shown in an empty chat
+        self.notice = None
         self.chat_placeholder = False
         try:
             self.chats = ChatStore(os.path.join(self.user_data_dir, "jarvis_chats.json"))
         except Exception:
             save_crash("ChatStore failed:\n" + traceback.format_exc())
-            self.chats = ChatStore(None)  # memory only, the app still works
-        try:  # keep the text field visible above the on-screen keyboard
+            self.chats = ChatStore(None)
+        try:
             Window.softinput_mode = "below_target"
         except Exception:
             pass
@@ -1408,7 +1262,6 @@ class JarvisApp(App):
         with self.root_layout.canvas.before:
             self.bg_color = Color(*hex_color(THEMES[self.theme_index]["background"]))
             self.bg_rect = Rectangle(pos=self.root_layout.pos, size=self.root_layout.size)
-            # blue glow rising from the bottom (AURA ORB only)
             self.grad_color = Color(1, 1, 1, 1 if self.theme_index == 0 else 0)
             self.grad_rect = Rectangle(texture=self.make_gradient(),
                                        pos=self.root_layout.pos, size=(0, 0))
@@ -1419,7 +1272,7 @@ class JarvisApp(App):
             err = traceback.format_exc()
             save_crash(err)
             self.startup_error = err
-            self.theme_index = 0  # fall back to the first design
+            self.theme_index = 0
             try:
                 self.save_settings()
                 self.update_colors()
@@ -1432,7 +1285,7 @@ class JarvisApp(App):
     def make_gradient(self):
         rows = 64
         data = bytearray()
-        for i in range(rows):  # row 0 = bottom
+        for i in range(rows):
             t = i / (rows - 1.0)
             r = int(60 + (2 - 60) * t)
             g = int(130 + (6 - 130) * t)
@@ -1458,7 +1311,6 @@ class JarvisApp(App):
         if self.store.exists("settings"):
             data = self.store.get("settings")
             self.language = data.get("language", "tg")
-            # "theme_v2" is a new key: designs from older versions are ignored
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
             self.speak_enabled = bool(data.get("speak", False))
@@ -1493,7 +1345,6 @@ class JarvisApp(App):
         main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         self.root_layout.add_widget(main)
 
-        # Header: title (takes all free width, never wraps) and the glass settings button
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
         menu_btn = IconGlassButton(icon_kind="dots", icon_rgba=hex_color(theme["text"]),
@@ -1507,13 +1358,11 @@ class JarvisApp(App):
                                        size_hint_y=None, height=dp(25))
         main.add_widget(self.status_label)
 
-        # Main visual zone: one layout per design
         self.visual_area = BoxLayout(orientation="vertical", spacing=dp(8))
         main.add_widget(self.visual_area)
         self.build_theme_layout()
 
-        # Chat panel (glass): messages follow each other, newest at the bottom
-        chat_h = max(dp(120), min(dp(190), Window.height * 0.21))  # fits small and tall screens
+        chat_h = max(dp(120), min(dp(190), Window.height * 0.21))
         chat_panel = BoxLayout(orientation="vertical", padding=dp(10),
                                spacing=dp(4), size_hint_y=None, height=chat_h)
         glass_style(chat_panel, tint, dp(18), fill=0.10, sheen=0.28, border=0.30)
@@ -1528,7 +1377,6 @@ class JarvisApp(App):
         main.add_widget(chat_panel)
         self.render_chat()
 
-        # Command bar: glass pill; sound-wave icon when empty, paper plane after typing
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
         glass_style(command_row, tint, dp(26), fill=0.16, sheen=0.50, border=0.50)
@@ -1560,14 +1408,14 @@ class JarvisApp(App):
         self.visual_area.clear_widgets()
         theme = THEMES[self.theme_index]
         index = self.theme_index
-        if index == 0:  # AURA ORB: glowing orb + greeting
+        if index == 0:
             self.visual_area.add_widget(Widget(size_hint_y=0.05))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.5))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 14, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(28)))
             self.visual_area.add_widget(make_label(self.t("orb_ask"), 26, theme["text"], True,
                                                    size_hint_y=None, height=dp(90)))
-        elif index == 1:  # PARTICLE CORE: point-cloud orb
+        elif index == 1:
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.6))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 12, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(24)))
@@ -1575,14 +1423,13 @@ class JarvisApp(App):
                                                    size_hint_y=None, height=dp(48)))
             self.visual_area.add_widget(make_label(self.t("p_ready"), 10, "#9FB4C8",
                                                    False, size_hint_y=None, height=dp(30)))
-        else:  # GLASS ORB: glass sphere on a reflective floor
+        else:
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.7))
             self.visual_area.add_widget(make_label(self.t("orb_hello"), 12, "#8A9AAF",
                                                    False, size_hint_y=None, height=dp(24)))
             self.visual_area.add_widget(make_label(self.t("p_ask"), 24, theme["text"], True,
                                                    size_hint_y=None, height=dp(48)))
 
-    # ------------------------------------------------------------ chat
     def chat_title(self, chat=None):
         chat = chat or self.chats.current()
         return chat.get("title") or self.t("chat_default")
@@ -1615,7 +1462,7 @@ class JarvisApp(App):
     def render_chat(self):
         self.chat_box.clear_widgets()
         chat = self.chats.current()
-        messages = chat["messages"][-100:]  # only the latest 100 are drawn (all stay saved)
+        messages = chat["messages"][-100:]
         self.chat_placeholder = not messages
         if not messages:
             self.chat_box.add_widget(self.make_bubble("jarvis", self.notice or self.t("welcome")))
@@ -1640,7 +1487,6 @@ class JarvisApp(App):
             self.response_title.text = self.chat_title()
 
     def show_response(self, message):
-        """Adds a JARVIS message to the current chat (saved and shown)."""
         self.add_chat_message(self.chats.current_id, "jarvis", message)
 
     def new_chat(self):
@@ -1654,7 +1500,6 @@ class JarvisApp(App):
         if getattr(self, "chats_popup", None) is not None:
             self.chats_popup.dismiss()
 
-    # --------------------------------------------------------- commands
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
             return
@@ -1670,7 +1515,6 @@ class JarvisApp(App):
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
     def speak_answer(self, answer):
-        """Reads the answer aloud when the option is on; problems are reported once, never crash."""
         if not self.speak_enabled:
             return
         try:
@@ -1705,7 +1549,6 @@ class JarvisApp(App):
         else:
             self.toggle_listening()
 
-    # ------------------------------------------------------------ voice
     def toggle_listening(self):
         if self.orb_state == "listening":
             self.set_orb_state("idle")
@@ -1714,7 +1557,6 @@ class JarvisApp(App):
         if state in ("granted", "not_android"):
             self.start_listening()
         else:
-            # the permission callback may run on another thread: hand it to the UI thread
             request_microphone(
                 lambda granted: Clock.schedule_once(lambda dt: self.on_mic_permission(granted), 0))
 
@@ -1725,12 +1567,11 @@ class JarvisApp(App):
             self.show_response(self.t("mic_denied"))
 
     def start_listening(self):
-        """Opens Android's voice input; the recognized text is sent like a typed command."""
         if not self.speech.is_supported():
             self.show_response(self.t("stt_unavailable"))
             return
         try:
-            self.set_orb_state("listening", 45.0)  # safety timeout
+            self.set_orb_state("listening", 45.0)
             self.speech.start(
                 self.language, self.t("listen_prompt"),
                 lambda text: Clock.schedule_once(lambda dt: self.on_speech_text(text), 0),
@@ -1750,7 +1591,7 @@ class JarvisApp(App):
 
     def on_speech_error(self, err):
         self.set_orb_state("idle")
-        if err != "cancelled":  # the user simply closed the voice screen
+        if err != "cancelled":
             self.show_response(self.t("stt_failed"))
 
     def set_orb_state(self, state, seconds=None):
@@ -1765,7 +1606,6 @@ class JarvisApp(App):
         if state != "idle" and seconds:
             self._orb_event = Clock.schedule_once(lambda dt: self.set_orb_state("idle"), seconds)
 
-    # ----------------------------------------------------------- popups
     def track_popup(self, popup):
         self.open_popups.add(popup)
         popup.bind(on_dismiss=self.popup_closed)
@@ -1801,7 +1641,6 @@ class JarvisApp(App):
         return btn
 
     def show_menu(self, *_):
-        """The three-dot menu in the header."""
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         popup = self.make_popup(box, size_hint=(0.74, None), height=dp(4 * 50 + 3 * 8 + 24),
                                 pos_hint={"right": 0.97, "top": 0.92})
@@ -1884,12 +1723,11 @@ class JarvisApp(App):
                                             theme["accent"], 44))
         popup.open()
 
-    # --------------------------------------------------------- settings
     def set_language(self, code):
         if code in TEXTS:
             self.language = code
             self.save_settings()
-            self.build_interface()  # every text on screen is rebuilt in the new language
+            self.build_interface()
 
     def set_theme(self, index):
         self.theme_index = index % len(THEMES)
@@ -1904,7 +1742,6 @@ class JarvisApp(App):
         self.open_section("main")
 
     def open_section(self, section):
-        """Settings folders: main menu -> design / language / voice / account."""
         old = getattr(self, "settings_popup", None)
         if old is not None:
             old.dismiss()
@@ -1942,7 +1779,7 @@ class JarvisApp(App):
             content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
             content.add_widget(make_label(self.t("voice_hint"), 10, theme["accent2"]))
             content.add_widget(Widget())
-        else:  # account
+        else:
             content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
 
         nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
@@ -1985,7 +1822,6 @@ class JarvisApp(App):
             self.show_error_popup(text)
 
     def report_error(self, text):
-        """Called when a callback or drawing fails: show the error once instead of crashing."""
         if text == self._last_err or self._err_count >= 3:
             return
         self._last_err = text
@@ -2007,7 +1843,7 @@ class JarvisApp(App):
             pass
 
     def on_pause(self):
-        self.app_paused = True   # stop animating while the app is in the background
+        self.app_paused = True
         self.update_pause()
         self.save_settings()
         return True
