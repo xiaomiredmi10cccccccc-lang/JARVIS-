@@ -3,7 +3,6 @@
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Core commands work offline.
 Crash logs are kept in the app's private folder and shown inside the app.
-Only characters present in the default Roboto font are used (no missing-glyph boxes).
 """
 from datetime import datetime
 import json
@@ -40,7 +39,7 @@ from kivy.uix.widget import Widget
 # VOICE LAYER: microphone permission, speech recognition and speech synthesis
 # ==========================================================================
 class VoiceUnavailable(Exception):
-    """Raised when a voice engine is requested but not connected yet."""
+    pass
 
 
 def microphone_permission_state():
@@ -203,33 +202,6 @@ class SpeechSynthesizer(object):
         self._tts = None
 
 
-# ==========================================================================
-# ACCOUNTS AND SYNC LAYER
-# ==========================================================================
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-MIN_PASSWORD_LENGTH = 8
-
-
-class AccountError(Exception):
-    pass
-
-
-class ServerNotConfigured(AccountError):
-    pass
-
-
-def validate_email(email):
-    return bool(EMAIL_RE.match((email or "").strip()))
-
-
-def validate_password(password):
-    if not password or len(password) < MIN_PASSWORD_LENGTH:
-        return "too_short"
-    if password.lower() == password or password.isdigit():
-        return "too_simple"
-    return None
-
-
 class AccountService(object):
     def is_configured(self):
         raise NotImplementedError
@@ -334,10 +306,10 @@ TEXTS = {
         "settings_opened": "Танзимот кушода шуд.",
         "about_opened": "Маълумот кушода шуд.",
         "about_title": "Дар бораи JARVIS",
-        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ. Фармонҳои асосӣ бе интернет кор мекунанд.",
+        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ.",
         "about_chats": "Чатҳо дар телефон: {}",
         "title_account": "Ҳисоб",
-        "acct_status": "Сервер танзим нашудааст. Чатҳо танҳо дар ин телефон нигоҳ дошта мешаванд.",
+        "acct_status": "Системаи офлайн фаъол аст.",
         "mic_denied": "Иҷозати микрофон дода нашуд.",
         "lang_changed": "Забон иваз шуд: {}",
         "theme_changed": "Интерфейс: {}",
@@ -401,7 +373,7 @@ TEXTS = {
         "about_body": "JARVIS — персональный помощник.",
         "about_chats": "Чатов на телефоне: {}",
         "title_account": "Аккаунт",
-        "acct_status": "Сервер не настроен.",
+        "acct_status": "Офлайн режим.",
         "mic_denied": "Доступ к микрофону не предоставлен.",
         "lang_changed": "Язык изменён: {}",
         "theme_changed": "Интерфейс: {}",
@@ -465,7 +437,7 @@ TEXTS = {
         "about_body": "JARVIS assistant.",
         "about_chats": "Chats: {}",
         "title_account": "Account",
-        "acct_status": "No server.",
+        "acct_status": "Offline mode.",
         "mic_denied": "No mic permission.",
         "lang_changed": "Language: {}",
         "theme_changed": "Theme: {}",
