@@ -6,15 +6,16 @@ package.domain = org.test
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
-version = 0.1
+version = 0.2
 
 orientation = portrait
 fullscreen = 0
 
 requirements = python3,kivy
 
-# Иҷозатҳо барои интернет, микрофон ва файлҳо
-android.permissions = INTERNET, RECORD_AUDIO, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+# RECORD_AUDIO is needed to ask for the microphone (voice commands).
+# Storage permissions were removed: crash logs now stay in the private app folder.
+android.permissions = RECORD_AUDIO
 
 p4a.branch = develop
 p4a.commit = HEAD
