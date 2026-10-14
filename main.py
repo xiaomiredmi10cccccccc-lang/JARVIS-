@@ -74,26 +74,147 @@ def request_microphone(callback):
         callback(False)
 
 
-class SpeechRecognizer(object):
-    """Speech to text. Not connected yet."""
-    available = False
+LANG_TAGS = {"tg": "tg-TJ", "ru": "ru-RU", "en": "en-US"}
 
-    def start(self, on_text, on_error):
-        raise VoiceUnavailable("Speech recognition is not connected yet.")
+
+def android_available():
+    """True only on Android (pyjnius and the android module exist)."""
+    try:
+        import jnius  # noqa: F401
+        import android  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+class SpeechRecognizer(object):
+    """Speech to text through Android's own voice-input screen (RecognizerIntent).
+    The Google speech service of the phone does the work, usually online; a language the
+    service does not know (possibly Tajik) is handled by that service, not by this app.
+    Callbacks run on Android's thread: the caller must hand them to the UI thread."""
+    REQUEST_CODE = 7041
+
+    def __init__(self):
+        self._bound = False
+        self._on_text = None
+        self._on_error = None
+
+    def is_supported(self):
+        return android_available()
+
+    def start(self, lang, prompt, on_text, on_error):
+        if not android_available():
+            raise VoiceUnavailable("Speech recognition works only on Android.")
+        try:
+            from jnius import autoclass
+            from android import activity
+            Intent = autoclass("android.content.Intent")
+            RecognizerIntent = autoclass("android.speech.RecognizerIntent")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            self._on_text, self._on_error = on_text, on_error
+            intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANG_TAGS.get(lang, "en-US"))
+            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
+            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            if not self._bound:
+                activity.bind(on_activity_result=self._on_result)
+                self._bound = True
+            PythonActivity.mActivity.startActivityForResult(intent, self.REQUEST_CODE)
+        except Exception as exc:  # e.g. no speech service installed
+            raise VoiceUnavailable(str(exc))
+
+    def _on_result(self, request_code, result_code, intent):
+        if request_code != self.REQUEST_CODE:
+            return
+        on_text, on_error = self._on_text, self._on_error
+        try:
+            text = ""
+            if result_code == -1 and intent is not None:  # Activity.RESULT_OK
+                from jnius import autoclass
+                RecognizerIntent = autoclass("android.speech.RecognizerIntent")
+                results = intent.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                if results is not None and results.size() > 0:
+                    text = str(results.get(0))
+            if text:
+                if on_text:
+                    on_text(text)
+            elif on_error:
+                on_error("no_speech" if result_code == -1 else "cancelled")
+        except Exception as exc:
+            if on_error:
+                on_error(str(exc))
 
     def stop(self):
         return None
 
 
 class SpeechSynthesizer(object):
-    """Text to speech. Not connected yet."""
-    available = False
+    """Text to speech through Android's TextToSpeech (voices installed on the phone).
+    If the phone has no Tajik voice, the Russian voice reads the Tajik text; the
+    pronunciation is then close but not perfect (speak() reports this as 'fallback')."""
+    def __init__(self):
+        self._tts = None
 
-    def speak(self, text):
-        raise VoiceUnavailable("Speech synthesis is not connected yet.")
+    def is_supported(self):
+        return android_available()
+
+    def _engine(self):
+        if self._tts is None:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+            self._tts = TextToSpeech(PythonActivity.mActivity, None)
+        return self._tts
+
+    def warm_up(self):
+        """Starts the engine early: it needs a moment before the first word."""
+        if android_available():
+            try:
+                self._engine()
+            except Exception:
+                pass
+
+    def speak(self, text, lang="ru"):
+        """Returns 'ok' or 'fallback'; raises VoiceUnavailable when nothing can be spoken."""
+        if not android_available():
+            raise VoiceUnavailable("Speech synthesis works only on Android.")
+        try:
+            from jnius import autoclass
+            Locale = autoclass("java.util.Locale")
+            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+            tts = self._engine()
+            result = "ok"
+            code = tts.setLanguage(Locale(lang))
+            if code < 0 and lang == "tg":
+                code = tts.setLanguage(Locale("ru"))
+                result = "fallback"
+            if code < 0:
+                raise VoiceUnavailable("No voice for this language is installed.")
+            if tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis") != 0:
+                raise VoiceUnavailable("The speech engine is still starting. Try again.")
+            return result
+        except VoiceUnavailable:
+            raise
+        except Exception as exc:
+            raise VoiceUnavailable(str(exc))
 
     def stop(self):
-        return None
+        try:
+            if self._tts is not None:
+                self._tts.stop()
+        except Exception:
+            pass
+
+    def shutdown(self):
+        try:
+            if self._tts is not None:
+                self._tts.stop()
+                self._tts.shutdown()
+        except Exception:
+            pass
+        self._tts = None
 
 
 class SpeakerVerifier(object):
@@ -321,7 +442,7 @@ TEXTS = {
         "settings_opened": "Танзимот кушода шуд.",
         "about_opened": "Маълумот кушода шуд.",
         "about_title": "Дар бораи JARVIS",
-        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ. Фармонҳои асосӣ бе интернет кор мекунанд. Чатҳо дар худи телефон нигоҳ дошта мешаванд. Шинохти овоз ва ҳисоби онлайн ҳанӯз пайваст нашудаанд.",
+        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ. Фармонҳои асосӣ бе интернет кор мекунанд. Чатҳо дар худи телефон нигоҳ дошта мешаванд. Фармони овозӣ ва хондани ҷавоб бо хизматрасонии Android кор мекунанд. Ҳисоби онлайн ҳанӯз пайваст нашудааст.",
         "about_chats": "Чатҳо дар телефон: {}",
         "sec_account": "Ҳисоб ва ҳамоҳангсозӣ",
         "title_account": "Ҳисоб",
@@ -333,6 +454,15 @@ TEXTS = {
         "theme_changed": "Интерфейс: {}",
         "cmd_error": "Ҳангоми иҷрои фармон хатогӣ рух дод. Дубора кӯшиш кунед.",
         "error_hint": "Хатогӣ рух дод. Барномаро аз нав кушоед. Матни зерин барои диагностика аст.",
+        "listen_prompt": "Фармонро бигӯед",
+        "stt_unavailable": "Шинохти овоз дар ин телефон дастрас нест (хизматрасонии овозии Android ёфт нашуд).",
+        "stt_failed": "Овоз шинохта нашуд. Дубора кӯшиш кунед.",
+        "tts_fallback": "Овози тоҷикӣ дар телефон нест, барои хондан овози русӣ истифода мешавад.",
+        "tts_unavailable": "Хондани ҷавоб ҳоло кор намекунад: овози забони интихобшуда дар телефон нест.",
+        "speak_on": "Ҷавобҳо бо овоз: фаъол",
+        "speak_off": "Ҷавобҳо бо овоз: хомӯш",
+        "voice_hint": "Шинохти овоз бо хизматрасонии Android кор мекунад (одатан бо интернет). Забони тоҷикӣ шояд дастгирӣ нашавад.",
+        "voice_how": "Барои гуфтани фармон нишони садоро пахш кунед.",
         "help": "Ман ҳоло фармонҳои асосии офлайнро иҷро карда метавонам",
         "unknown": "Ин фармон ҳоло дастгирӣ намешавад. Барои рӯйхати фармонҳо «кӯмак» нависед.",
         "mic": "Шинохти овоз ҳанӯз пайваст нашудааст.",
@@ -340,7 +470,7 @@ TEXTS = {
         "time": "Вақти ҳозира",
         "date": "Санаи имрӯз",
         "system": "Ҳолат: онлайн\nМуҳаррик: Kivy\nПайвасти интернет: аз ҷониби система муайян карда намешавад",
-        "voice_note": "Интихоби профил ҳоло танҳо номи профилро нигоҳ медорад; синтези овоз ҳанӯз пайваст нашудааст.",
+        "voice_note": "Интихоби профил ҳоло танҳо номи профилро нигоҳ медорад. Овози воқеиро хизматрасонии Android муайян мекунад.",
         "set": "ТАНЗИМ",
         "sec_theme": "Танзими интерфейс",
         "sec_lang": "Танзими забон",
@@ -384,7 +514,7 @@ TEXTS = {
         "settings_opened": "Настройки открыты.",
         "about_opened": "Информация открыта.",
         "about_title": "О JARVIS",
-        "about_body": "JARVIS — персональный помощник с тремя футуристическими интерфейсами. Основные команды работают без интернета. Чаты хранятся на самом телефоне. Распознавание речи и онлайн-аккаунт ещё не подключены.",
+        "about_body": "JARVIS — персональный помощник с тремя футуристическими интерфейсами. Основные команды работают без интернета. Чаты хранятся на самом телефоне. Голосовые команды и озвучивание ответов работают через сервисы Android. Онлайн-аккаунт ещё не подключён.",
         "about_chats": "Чатов на телефоне: {}",
         "sec_account": "Аккаунт и синхронизация",
         "title_account": "Аккаунт",
@@ -396,6 +526,15 @@ TEXTS = {
         "theme_changed": "Интерфейс: {}",
         "cmd_error": "При выполнении команды произошла ошибка. Попробуйте ещё раз.",
         "error_hint": "Произошла ошибка. Перезапустите приложение. Текст ниже нужен для диагностики.",
+        "listen_prompt": "Скажите команду",
+        "stt_unavailable": "Распознавание речи недоступно на этом телефоне (не найден голосовой сервис Android).",
+        "stt_failed": "Речь не распознана. Попробуйте ещё раз.",
+        "tts_fallback": "Таджикского голоса на телефоне нет, для чтения используется русский.",
+        "tts_unavailable": "Озвучивание ответа сейчас не работает: на телефоне нет голоса для выбранного языка.",
+        "speak_on": "Озвучивать ответы: вкл.",
+        "speak_off": "Озвучивать ответы: выкл.",
+        "voice_hint": "Распознавание речи работает через сервис Android (обычно нужен интернет). Таджикский язык может не поддерживаться.",
+        "voice_how": "Нажмите значок звука, чтобы сказать команду.",
         "help": "Сейчас я выполняю основные офлайн-команды",
         "unknown": "Эта команда пока не поддерживается. Напишите «помощь» для списка команд.",
         "mic": "Распознавание речи ещё не подключено.",
@@ -403,7 +542,7 @@ TEXTS = {
         "time": "Текущее время",
         "date": "Сегодняшняя дата",
         "system": "Состояние: онлайн\nДвижок: Kivy\nПодключение к интернету: не проверяется приложением",
-        "voice_note": "Сейчас профиль только сохраняет выбранное имя; синтез речи ещё не подключён.",
+        "voice_note": "Сейчас профиль только сохраняет выбранное имя. Реальный голос определяет сервис Android.",
         "set": "НАСТР.",
         "sec_theme": "Настройка интерфейса",
         "sec_lang": "Настройка языка",
@@ -447,7 +586,7 @@ TEXTS = {
         "settings_opened": "Settings opened.",
         "about_opened": "Information opened.",
         "about_title": "About JARVIS",
-        "about_body": "JARVIS is a personal assistant with three futuristic designs. The basic commands work offline. Chats are stored on this phone. Speech recognition and the online account are not connected yet.",
+        "about_body": "JARVIS is a personal assistant with three futuristic designs. The basic commands work offline. Chats are stored on this phone. Voice commands and spoken answers use Android services. The online account is not connected yet.",
         "about_chats": "Chats on this phone: {}",
         "sec_account": "Account and sync",
         "title_account": "Account",
@@ -459,6 +598,15 @@ TEXTS = {
         "theme_changed": "Interface: {}",
         "cmd_error": "An error occurred while running the command. Please try again.",
         "error_hint": "An error occurred. Please restart the app. The text below is for diagnostics.",
+        "listen_prompt": "Say a command",
+        "stt_unavailable": "Speech recognition is not available on this phone (no Android voice service found).",
+        "stt_failed": "Speech was not recognized. Please try again.",
+        "tts_fallback": "There is no Tajik voice on this phone, so a Russian voice reads the answer.",
+        "tts_unavailable": "Reading answers aloud does not work right now: the phone has no voice for the chosen language.",
+        "speak_on": "Speak answers: on",
+        "speak_off": "Speak answers: off",
+        "voice_hint": "Speech recognition uses the Android service (usually needs internet). Tajik may not be supported.",
+        "voice_how": "Tap the sound icon to say a command.",
         "help": "I can currently run basic offline commands",
         "unknown": "This command is not supported yet. Type 'help' for available commands.",
         "mic": "Speech recognition has not been connected yet.",
@@ -466,7 +614,7 @@ TEXTS = {
         "time": "Current time",
         "date": "Today's date",
         "system": "State: online\nEngine: Kivy\nInternet connectivity is not checked by this app",
-        "voice_note": "The selected profile name is saved, but speech synthesis is not connected yet.",
+        "voice_note": "The selected profile name is saved for now. The real voice is chosen by the Android service.",
         "set": "SET",
         "sec_theme": "Interface settings",
         "sec_lang": "Language settings",
@@ -1167,7 +1315,7 @@ def cmd_about(app, text):
 
 @command("voice", "овоз", "голос", "voice", "микрофон", "microphone", priority=20)
 def cmd_voice(app, text):
-    return app.t("mic") + "\n" + app.t("voice_note")
+    return app.t("voice_how") + "\n" + app.t("voice_hint")
 
 
 @command("time", "соат", "время", "time", "clock", priority=10)
@@ -1230,12 +1378,17 @@ class JarvisApp(App):
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
+        self.speak_enabled = False    # read answers aloud (off by default)
         self.last_response = ""
         self.animation_paused = False
         self.orb_state = "idle"      # idle / listening / speaking
         self._orb_event = None
         self.load_settings()
         self.account_service = get_service(self.user_data_dir)
+        self.speech = SpeechRecognizer()
+        self.tts = SpeechSynthesizer()
+        self.tts_fallback_noted = False
+        self.tts_error_noted = False
         self.open_popups = set()
         self.app_paused = False
         self.notice = None            # one-time text shown in an empty chat
@@ -1308,13 +1461,15 @@ class JarvisApp(App):
             # "theme_v2" is a new key: designs from older versions are ignored
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
+            self.speak_enabled = bool(data.get("speak", False))
         if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
 
     def save_settings(self):
         self.store.put("settings", language=self.language,
                        theme_v2=self.theme_index,
-                       voice_profile=self.voice_profile)
+                       voice_profile=self.voice_profile,
+                       speak=self.speak_enabled)
 
     def update_colors(self):
         theme = THEMES[self.theme_index]
@@ -1511,8 +1666,31 @@ class JarvisApp(App):
         self.add_chat_message(chat_id, "user", command_text)
         answer = run_command(self, command_text)
         self.add_chat_message(chat_id, "jarvis", answer)
-        # the orb "speaks" the answer (simulated until speech synthesis is connected)
+        self.speak_answer(answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
+
+    def speak_answer(self, answer):
+        """Reads the answer aloud when the option is on; problems are reported once, never crash."""
+        if not self.speak_enabled:
+            return
+        try:
+            if self.tts.speak(answer, self.language) == "fallback" and not self.tts_fallback_noted:
+                self.tts_fallback_noted = True
+                self.show_response(self.t("tts_fallback"))
+        except VoiceUnavailable:
+            if not self.tts_error_noted:
+                self.tts_error_noted = True
+                self.show_response(self.t("tts_unavailable"))
+        except Exception:
+            save_crash("speak_answer failed:\n" + traceback.format_exc())
+
+    def toggle_speak(self, *_):
+        self.speak_enabled = not self.speak_enabled
+        self.tts_error_noted = False
+        self.save_settings()
+        if self.speak_enabled:
+            self.tts.warm_up()
+        self.open_section("voice")
 
     def process_command(self, command_text):
         return run_command(self, command_text)
@@ -1547,9 +1725,33 @@ class JarvisApp(App):
             self.show_response(self.t("mic_denied"))
 
     def start_listening(self):
-        # The speech engine is not connected yet: say so; the orb only shows a short demo.
-        self.show_response(self.t("mic_engine"))
-        self.set_orb_state("listening", 3.0)
+        """Opens Android's voice input; the recognized text is sent like a typed command."""
+        if not self.speech.is_supported():
+            self.show_response(self.t("stt_unavailable"))
+            return
+        try:
+            self.set_orb_state("listening", 45.0)  # safety timeout
+            self.speech.start(
+                self.language, self.t("listen_prompt"),
+                lambda text: Clock.schedule_once(lambda dt: self.on_speech_text(text), 0),
+                lambda err: Clock.schedule_once(lambda dt: self.on_speech_error(err), 0))
+        except VoiceUnavailable:
+            self.set_orb_state("idle")
+            self.show_response(self.t("stt_unavailable"))
+        except Exception:
+            self.set_orb_state("idle")
+            save_crash("start_listening failed:\n" + traceback.format_exc())
+            self.show_response(self.t("stt_failed"))
+
+    def on_speech_text(self, text):
+        self.set_orb_state("idle")
+        self.command_input.text = text
+        self.send_command()
+
+    def on_speech_error(self, err):
+        self.set_orb_state("idle")
+        if err != "cancelled":  # the user simply closed the voice screen
+            self.show_response(self.t("stt_failed"))
 
     def set_orb_state(self, state, seconds=None):
         self.orb_state = state
@@ -1732,10 +1934,13 @@ class JarvisApp(App):
                        lambda inst, c=code: self.choose_language(c, self.settings_popup))
             content.add_widget(Widget())
         elif section == "voice":
+            option(self.t("speak_on") if self.speak_enabled else self.t("speak_off"),
+                   self.speak_enabled, self.toggle_speak)
             for name in VOICES:
                 option(name, self.voice_profile == name,
                        lambda inst, n=name: self.choose_voice(n, self.settings_popup))
             content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
+            content.add_widget(make_label(self.t("voice_hint"), 10, theme["accent2"]))
             content.add_widget(Widget())
         else:  # account
             content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
@@ -1768,6 +1973,8 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
 
     def on_start(self):
+        if self.speak_enabled:
+            self.tts.warm_up()
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
 
     def show_pending_errors(self):
@@ -1811,6 +2018,7 @@ class JarvisApp(App):
 
     def on_stop(self):
         self.save_settings()
+        self.tts.shutdown()
 
 
 if __name__ == "__main__":
