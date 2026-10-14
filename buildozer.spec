@@ -1,36 +1,29 @@
 [app]
 
+# (str) Title of your application
 title = JARVIS
+
+# (str) Package name
 package.name = jarvis
-package.domain = org.test
 
-source.dir = .
+# (str) Package domain (needed for android packaging)
+package.domain = org.jarvis
+
+# (str) Source files where the relevent code lives (relative to directory of buildozer.spec)
 source.include_exts = py,png,jpg,kv,atlas
-version = 0.2
 
+# (list) Application requirements
+# Add pyjnius and android for voice integration support
+requirements = python3,kivy,pyjnius,android
+
+# (str) Supported orientations
 orientation = portrait
-fullscreen = 0
 
-requirements = python3,kivy
-
-# RECORD_AUDIO is needed to ask for the microphone (voice commands).
-# Storage permissions were removed: crash logs now stay in the private app folder.
+# (list) Permissions
+# RECORD_AUDIO is mandatory for voice commands
 android.permissions = RECORD_AUDIO
-
-p4a.branch = develop
-p4a.commit = HEAD
-
-android.api = 33
-android.minapi = 24
-android.ndk = 28c
-android.ndk_api = 24
-android.archs = arm64-v8a
-
-android.allow_backup = True
-android.accept_sdk_license = True
-android.skip_update = True
 
 [buildozer]
 
+# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
 log_level = 2
-warn_on_root = 1
