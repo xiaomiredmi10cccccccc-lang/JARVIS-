@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 JARVIS Android Assistant
-Kivy + Buildozer compatible. Core commands work offline.
-Crash logs are kept in the app's private folder and shown inside the app.
+Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
 """
 from datetime import datetime
 import json
@@ -14,6 +13,8 @@ import sys
 import time
 import traceback
 import uuid
+import urllib.request
+import urllib.error
 
 from kivy.app import App
 from kivy.base import ExceptionHandler, ExceptionManager
@@ -36,11 +37,10 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
 # ==========================================================================
-# VOICE LAYER: microphone permission, speech recognition and speech synthesis
+# VOICE LAYER
 # ==========================================================================
 class VoiceUnavailable(Exception):
     pass
-
 
 def microphone_permission_state():
     try:
@@ -51,7 +51,6 @@ def microphone_permission_state():
         return "granted" if check_permission(Permission.RECORD_AUDIO) else "denied"
     except Exception:
         return "unknown"
-
 
 def request_microphone(callback):
     try:
@@ -68,9 +67,7 @@ def request_microphone(callback):
     except Exception:
         callback(False)
 
-
 LANG_TAGS = {"tg": "tg-TJ", "ru": "ru-RU", "en": "en-US"}
-
 
 def android_available():
     try:
@@ -79,7 +76,6 @@ def android_available():
     except Exception:
         return False
     return True
-
 
 class SpeechRecognizer(object):
     REQUEST_CODE = 7041
@@ -139,7 +135,6 @@ class SpeechRecognizer(object):
     def stop(self):
         return None
 
-
 class SpeechSynthesizer(object):
     def __init__(self):
         self._tts = None
@@ -178,7 +173,7 @@ class SpeechSynthesizer(object):
             if code < 0:
                 raise VoiceUnavailable("No voice for this language is installed.")
             if tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis") != 0:
-                raise VoiceUnavailable("The speech engine is still starting. Try again.")
+                raise VoiceUnavailable("The speech engine is still starting.")
             return result
         except VoiceUnavailable:
             raise
@@ -201,35 +196,20 @@ class SpeechSynthesizer(object):
             pass
         self._tts = None
 
-
-class AccountService(object):
-    def is_configured(self):
-        raise NotImplementedError
-
-    def current_user(self):
-        raise NotImplementedError
-
-
-class LocalAccountService(AccountService):
+class LocalAccountService(object):
     def is_configured(self):
         return False
-
     def current_user(self):
         return None
-
 
 def get_service(private_dir=None):
     return LocalAccountService()
 
-
-# ---- Crash log ----
 CRASH_FILE = "jarvis_crash_log.txt"
-
 
 def crash_dirs():
     priv = os.environ.get("ANDROID_PRIVATE")
     return [priv if priv else os.getcwd()]
-
 
 def save_crash(text):
     for d in crash_dirs():
@@ -243,7 +223,6 @@ def save_crash(text):
             pass
     return None
 
-
 def read_last_crash():
     path = os.path.join(crash_dirs()[0], CRASH_FILE)
     try:
@@ -256,7 +235,6 @@ def read_last_crash():
         pass
     return None
 
-
 class JarvisExceptionHandler(ExceptionHandler):
     def handle_exception(self, inst):
         try:
@@ -268,7 +246,6 @@ class JarvisExceptionHandler(ExceptionHandler):
         except Exception:
             pass
         return ExceptionManager.PASS
-
 
 THEMES = [
     {"name": "AURA ORB", "accent": "#7CC4FF", "accent2": "#2F6BFF",
@@ -287,7 +264,6 @@ TEXTS = {
         "online": "Система фаъол аст",
         "welcome": "Салом! Ман JARVIS ҳастам. Чӣ кор кунам?",
         "input": "Фармонро нависед...",
-        "send": "ФИРИСТОДАН",
         "settings": "Танзимоти JARVIS",
         "close": "Пӯшидан",
         "commands": "Фармонҳо: салом, соат, сана, ҳолат, мавзӯъ, забон, танзимот, кӯмак",
@@ -306,7 +282,7 @@ TEXTS = {
         "settings_opened": "Танзимот кушода шуд.",
         "about_opened": "Маълумот кушода шуд.",
         "about_title": "Дар бораи JARVIS",
-        "about_body": "JARVIS — ёрдамчии шахсӣ бо се интерфейси футуристӣ.",
+        "about_body": "JARVIS — ёрдамчии шахсӣ.",
         "about_chats": "Чатҳо дар телефон: {}",
         "title_account": "Ҳисоб",
         "acct_status": "Системаи офлайн фаъол аст.",
@@ -351,7 +327,6 @@ TEXTS = {
         "online": "Система активна",
         "welcome": "Здравствуйте! Я JARVIS. Чем могу помочь?",
         "input": "Введите команду...",
-        "send": "ОТПРАВИТЬ",
         "settings": "Настройки JARVIS",
         "close": "Закрыть",
         "commands": "Команды: привет, время, дата, статус, тема, язык, настройки, помощь",
@@ -415,7 +390,6 @@ TEXTS = {
         "online": "System online",
         "welcome": "Hello! I am JARVIS.",
         "input": "Type a command...",
-        "send": "SEND",
         "settings": "JARVIS Settings",
         "close": "Close",
         "commands": "Commands: hello, time, date, status, theme, help",
@@ -476,10 +450,8 @@ TEXTS = {
     },
 }
 
-
 def hex_color(value):
     return get_color_from_hex(value)
-
 
 def make_label(text="", size=14, color="#EAFBFF", bold=False, **kwargs):
     kwargs.setdefault("halign", "center")
@@ -494,9 +466,7 @@ def make_label(text="", size=14, color="#EAFBFF", bold=False, **kwargs):
     label.bind(size=lambda instance, value: setattr(instance, "text_size", value))
     return label
 
-
 _TEX = {}
-
 
 def _lerp_stops(stops, t):
     for i in range(len(stops) - 1):
@@ -507,14 +477,12 @@ def _lerp_stops(stops, t):
             return [int(c0[j] + (c1[j] - c0[j]) * k) for j in range(4)]
     return list(stops[-1][1])
 
-
 def _make_texture(size, data):
     tex = Texture.create(size=size, colorfmt="rgba")
     tex.blit_buffer(bytes(data), colorfmt="rgba", bufferfmt="ubyte")
     tex.mag_filter = "linear"
     tex.min_filter = "linear"
     return tex
-
 
 def radial_texture(name, stops, size=96):
     if name not in _TEX:
@@ -531,7 +499,6 @@ def radial_texture(name, stops, size=96):
         _TEX[name] = _make_texture((size, size), data)
     return _TEX[name]
 
-
 def linear_texture(name, stops, rows=64):
     if name not in _TEX:
         data = bytearray()
@@ -540,9 +507,7 @@ def linear_texture(name, stops, rows=64):
         _TEX[name] = _make_texture((1, rows), data)
     return _TEX[name]
 
-
 GLASS_ERRORS = []
-
 
 def _move_glass(w, *_):
     x, y = w.pos
@@ -555,7 +520,6 @@ def _move_glass(w, *_):
     w._g_glow.pos = (x + inset, y + dp(1.5))
     w._g_glow.size = (max(wd - 2 * inset, 1), max(ht * 0.26, 1))
     w._g_line.rounded_rectangle = (x, y, wd, ht, w._g_r)
-
 
 def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
     try:
@@ -585,7 +549,6 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
                         size=lambda w, v: setattr(w._g_plain, "size", w.size))
         except Exception:
             pass
-
 
 class AnimatedCore(Widget):
     def __init__(self, theme_index=0, **kwargs):
@@ -691,10 +654,6 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R, start, start + 100), width=R * 0.08)
         Color(0.85, 0.94, 1, 0.95)
         Line(circle=(cx, cy, R, start, start + 100), width=dp(2.6) * (1 + lv), cap="round")
-        Color(0.78, 0.5, 1, 0.16)
-        Line(circle=(cx, cy, R, start + 190, start + 245), width=R * 0.07)
-        Color(0.8, 0.66, 1, 0.85)
-        Line(circle=(cx, cy, R, start + 190, start + 245), width=dp(2.2) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
         lv = self.level
@@ -869,7 +828,6 @@ class AnimatedCore(Widget):
                 self.draw_glass(self.center_x, self.y + self.height * 0.56,
                                 size * 0.34, accent, accent2)
 
-
 class GlassButton(Button):
     def __init__(self, tint=(0.3, 0.6, 1.0), active=False, radius=16, **kwargs):
         super().__init__(**kwargs)
@@ -888,7 +846,6 @@ class GlassButton(Button):
         if fc is not None:
             t = self.tint_rgb
             fc.rgba = (t[0], t[1], t[2], self.fill_base + (0.18 if self.state == "down" else 0.0))
-
 
 class SendWaveButton(Button):
     def __init__(self, tint_rgb=(0.3, 0.6, 1.0), icon_rgba=(1, 1, 1, 1), **kwargs):
@@ -944,16 +901,13 @@ class SendWaveButton(Button):
                     half = dp(22) * h / 2
                     Line(points=[x, cy - half, x, cy + half], width=dp(1.5), cap="round")
 
-
 LANG_NAMES = {"tg": "Тоҷикӣ", "ru": "Русский", "en": "English"}
-
 
 def format_time(iso):
     try:
         return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S").strftime("%d.%m.%Y %H:%M")
     except Exception:
         return ""
-
 
 class ChatStore(object):
     def __init__(self, path=None):
@@ -1063,9 +1017,7 @@ class ChatStore(object):
         else:
             self.save()
 
-
 COMMANDS = []
-
 
 def command(name, *keywords, priority=10):
     def register(fn):
@@ -1074,11 +1026,9 @@ def command(name, *keywords, priority=10):
         return fn
     return register
 
-
 def keyword_match(text, keyword):
     pattern = r"(?<!\w)" + re.escape(keyword) + (r"(?!\w)" if len(keyword) <= 3 else "")
     return re.search(pattern, text) is not None
-
 
 def run_command(app, text):
     low = text.lower().strip()
@@ -1091,19 +1041,16 @@ def run_command(app, text):
                 return app.t("cmd_error")
     return app.t("unknown")
 
-
 @command("new_chat", "чати нав", "чатӣ нав", "новый чат", "new chat", priority=90)
 def cmd_new_chat(app, text):
     app.notice = app.t("chat_created")
     app.new_chat()
     return app.t("chat_created")
 
-
 @command("chats", "чатҳои ман", "чатҳо", "мои чаты", "чаты", "my chats", "chats", priority=80)
 def cmd_chats(app, text):
     Clock.schedule_once(lambda dt: app.show_chats(), 0.4)
     return app.t("chats_opened")
-
 
 @command("language", "забон", "язык", "language", priority=70)
 def cmd_language(app, text):
@@ -1116,12 +1063,10 @@ def cmd_language(app, text):
             return app.t("lang_changed").format(LANG_NAMES[code])
     return app.t("lang_hint")
 
-
 @command("settings", "танзимот", "настройки", "settings", priority=60)
 def cmd_settings(app, text):
     Clock.schedule_once(lambda dt: app.show_settings(), 0.4)
     return app.t("settings_opened")
-
 
 @command("theme", "мавзӯъ", "мавзуъ", "тема", "theme", "design", "интерфейс",
          "aura", "particle", "glass", priority=50)
@@ -1134,42 +1079,34 @@ def cmd_theme(app, text):
         app.next_theme()
     return app.t("theme_changed").format(THEMES[app.theme_index]["name"])
 
-
 @command("about", "маълумот", "о программе", "о jarvis", "about", priority=40)
 def cmd_about(app, text):
     Clock.schedule_once(lambda dt: app.show_about(), 0.4)
     return app.t("about_opened")
 
-
 @command("voice", "овоз", "голос", "voice", "микрофон", "microphone", priority=20)
 def cmd_voice(app, text):
     return app.t("voice_how") + "\n" + app.t("voice_hint")
-
 
 @command("time", "соат", "время", "time", "clock", priority=10)
 def cmd_time(app, text):
     return app.t("time") + ": " + datetime.now().strftime("%H:%M:%S")
 
-
 @command("date", "сана", "дата", "date", "today", priority=10)
 def cmd_date(app, text):
     return app.t("date") + ": " + datetime.now().strftime("%d.%m.%Y")
-
 
 @command("status", "ҳолат", "статус", "status", "system", priority=10)
 def cmd_status(app, text):
     return app.t("system") + "\n\n" + THEMES[app.theme_index]["name"]
 
-
 @command("help", "кӯмак", "кумак", "помощь", "help", "команд", priority=10)
 def cmd_help(app, text):
     return app.t("help") + "\n" + app.t("commands")
 
-
 @command("greeting", "салом", "привет", "здравствуй", "hello", "hi", "hey", priority=5)
 def cmd_greeting(app, text):
     return app.t("welcome")
-
 
 class IconGlassButton(GlassButton):
     def __init__(self, icon_kind="dots", icon_rgba=(1, 1, 1, 1), **kwargs):
@@ -1191,7 +1128,6 @@ class IconGlassButton(GlassButton):
                 k = dp(7)
                 Line(points=[cx - k, cy - k, cx + k, cy + k], width=dp(1.6), cap="round")
                 Line(points=[cx - k, cy + k, cx + k, cy - k], width=dp(1.6), cap="round")
-
 
 class JarvisApp(App):
     def build(self):
@@ -1827,7 +1763,6 @@ class JarvisApp(App):
     def on_stop(self):
         self.save_settings()
         self.tts.shutdown()
-
 
 if __name__ == "__main__":
     JarvisApp().run()
