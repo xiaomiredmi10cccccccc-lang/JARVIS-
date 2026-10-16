@@ -20,7 +20,7 @@ version = 0.1
 
 # (list) Application requirements
 # Китобхонаҳои requests ва certifi барои пайвастшавӣ ба API илова шуданд
-requirements = python3, kivy, pyjnius, requests, certifi, charset-normalizer==2.1.1
+requirements = python3, kivy, pyjnius, requests, certifi, charset-normalizer
 # (str) Supported orientations
 orientation = portrait
 
