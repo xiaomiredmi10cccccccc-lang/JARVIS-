@@ -1,4 +1,3 @@
-
 name: Build JARVIS APK
 
 on:
@@ -16,7 +15,7 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -25,9 +24,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Java and system dependencies
+        shell: bash
         run: |
           set -euo pipefail
-
           sudo apt-get update
           sudo apt-get install -y \
             build-essential git zip unzip openjdk-17-jdk \
@@ -35,63 +34,51 @@ jobs:
             pkg-config zlib1g-dev libffi-dev libssl-dev \
             libncurses5-dev libncursesw5-dev libtinfo6 \
             cmake gettext autopoint
-
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
           echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
-
           java -version
           javac -version
 
-      - name: Accept licenses and install Android SDK
+      - name: Install Android SDK packages
+        shell: bash
         run: |
           set -euo pipefail
-
+          : "${ANDROID_HOME:?ANDROID_HOME is not set on the runner}"
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
-
           "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;35.0.0"
-
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
-
           test -x "$ANDROID_HOME/build-tools/35.0.0/aidl"
           test -d "$ANDROID_HOME/platforms/android-33"
-
           echo "Android SDK installation OK"
 
       - name: Configure Buildozer SDK paths
+        shell: bash
         run: |
           set -euo pipefail
-
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
-
-          mkdir -p "$SDK_DIR/tools/bin"
-          mkdir -p "$ANDROID_HOME/tools/bin"
-
+          mkdir -p "$SDK_DIR/tools/bin" "$ANDROID_HOME/tools/bin"
           ln -sfn "$SDKMANAGER" "$SDK_DIR/tools/bin/sdkmanager"
           ln -sfn "$AVDMANAGER" "$SDK_DIR/tools/bin/avdmanager"
           ln -sfn "$ANDROID_HOME/platform-tools" "$SDK_DIR/platform-tools"
           ln -sfn "$ANDROID_HOME/platforms" "$SDK_DIR/platforms"
           ln -sfn "$ANDROID_HOME/build-tools" "$SDK_DIR/build-tools"
-
           ln -sfn "$SDKMANAGER" "$ANDROID_HOME/tools/bin/sdkmanager"
           ln -sfn "$AVDMANAGER" "$ANDROID_HOME/tools/bin/avdmanager"
-
           test -x "$SDK_DIR/tools/bin/sdkmanager"
           test -x "$ANDROID_HOME/tools/bin/sdkmanager"
-
           echo "SDK compatibility paths configured"
 
-      - name: Configure buildozer.spec
+      - name: Configure Android SDK in buildozer.spec
+        shell: bash
         run: |
           set -euo pipefail
-
           python - <<'PY'
           import os
           import re
@@ -100,23 +87,12 @@ jobs:
           path = Path("buildozer.spec")
           if not path.is_file():
               raise SystemExit("ERROR: buildozer.spec not found")
-
           lines = path.read_text(encoding="utf-8").splitlines()
-
-          start = next(
-              (i for i, line in enumerate(lines)
-               if line.strip() == "[app]"),
-              None
-          )
+          start = next((i for i, line in enumerate(lines) if line.strip() == "[app]"), None)
           if start is None:
               raise SystemExit("ERROR: [app] section not found")
-
-          end = next(
-              (i for i in range(start + 1, len(lines))
-               if re.match(r"^\s*\[.*\]\s*$", lines[i])),
-              len(lines)
-          )
-
+          end = next((i for i in range(start + 1, len(lines))
+                      if re.match(r"^\s*\[.*\]\s*$", lines[i])), len(lines))
           settings = {
               "android.sdk_path": os.environ["ANDROID_HOME"],
               "android.accept_sdk_license": "True",
@@ -125,73 +101,52 @@ jobs:
               "android.minapi": "24",
               "android.ndk": "28c",
           }
-
           app_lines = lines[start + 1:end]
-
           for key in settings:
-              pattern = re.compile(
-                  r"^\s*" + re.escape(key) + r"\s*="
-              )
-              app_lines = [
-                  line for line in app_lines
-                  if not pattern.match(line)
-              ]
-
-          app_lines.extend([""] + [
-              f"{key} = {value}"
-              for key, value in settings.items()
-          ])
-
+              pattern = re.compile(r"^\s*" + re.escape(key) + r"\s*=")
+              app_lines = [line for line in app_lines if not pattern.match(line)]
+          app_lines.extend([""] + [f"{key} = {value}" for key, value in settings.items()])
           lines[start + 1:end] = app_lines
-          path.write_text(
-              "\n".join(lines) + "\n",
-              encoding="utf-8"
-          )
-
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           print(path.read_text(encoding="utf-8"))
           PY
 
       - name: Install Buildozer
+        shell: bash
         run: |
           set -euo pipefail
-
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer==1.6.0 cython==0.29.37
-
           buildozer --version
           cython --version
 
-      - name: Build APK
+      - name: Build debug APK
         id: build_apk
         continue-on-error: true
         shell: bash
         run: |
           set -uo pipefail
-
           rm -f build.log
-
           buildozer -v android debug 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
-
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit "$status"
 
       - name: Show build error
         if: steps.build_apk.outcome == 'failure'
+        shell: bash
         run: |
           tail -n 200 build.log || true
-
           grep -Ein \
             'error:|failed|failure|exception|traceback|command failed|not a supported wheel|aidl not found|license is not accepted' \
             build.log | tail -n 100 || true
 
       - name: Verify APK
         if: steps.build_apk.outcome == 'success'
+        shell: bash
         run: |
           set -euo pipefail
-
           APK_FILE="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
-
           test -n "$APK_FILE"
           echo "APK CREATED: $APK_FILE"
           ls -lh "$APK_FILE"
@@ -214,6 +169,7 @@ jobs:
 
       - name: Final status
         if: steps.build_apk.outcome == 'failure'
+        shell: bash
         run: |
           echo "JARVIS APK BUILD FAILED"
           echo "Download JARVIS-build-log to inspect the error."
