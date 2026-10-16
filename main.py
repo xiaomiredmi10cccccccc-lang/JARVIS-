@@ -11,6 +11,7 @@ import random
 import re
 import sys
 import time
+import threading
 import traceback
 import uuid
 import urllib.request
@@ -285,7 +286,16 @@ TEXTS = {
         "about_body": "JARVIS — ёрдамчии шахсӣ.",
         "about_chats": "Чатҳо дар телефон: {}",
         "title_account": "Ҳисоб",
-        "acct_status": "Системаи офлайн фаъол аст.",
+        "acct_status": "Сервери JARVIS: Render. Барои истифода токенро ворид кунед.",
+        "server_token_btn": "Танзими токени сервер",
+        "server_token_hint": "Токен дар танзимоти телефони шумо нигоҳ дошта мешавад. Онро бо каси дигар мубодила накунед.",
+        "server_token_title": "Токени сервери JARVIS",
+        "server_token_placeholder": "JARVIS_SERVER_TOKEN",
+        "server_save": "Сабт кардан",
+        "server_saved": "Токен сабт шуд. Паёмро санҷед.",
+        "server_missing": "Аввал дар Танзимот → Ҳисоб токени серверро ворид кунед.",
+        "server_thinking": "JARVIS фикр мекунад...",
+        "server_error": "Ба сервер пайваст нашуд. Интернет ва танзимоти Render-ро санҷед.",
         "mic_denied": "Иҷозати микрофон дода нашуд.",
         "lang_changed": "Забон иваз шуд: {}",
         "theme_changed": "Интерфейс: {}",
@@ -351,7 +361,16 @@ TEXTS = {
         "about_body": "JARVIS — персональный помощник.",
         "about_chats": "Чатов на телефоне: {}",
         "title_account": "Аккаунт",
-        "acct_status": "Офлайн режим.",
+        "acct_status": "Сервер JARVIS: Render. Для работы введите токен.",
+        "server_token_btn": "Настроить токен сервера",
+        "server_token_hint": "Токен хранится в настройках телефона. Не передавайте его другим.",
+        "server_token_title": "Токен сервера JARVIS",
+        "server_token_placeholder": "JARVIS_SERVER_TOKEN",
+        "server_save": "Сохранить",
+        "server_saved": "Токен сохранён. Проверьте отправку сообщения.",
+        "server_missing": "Сначала в Настройки → Аккаунт введите токен сервера.",
+        "server_thinking": "JARVIS думает...",
+        "server_error": "Не удалось подключиться к серверу. Проверьте интернет и настройки Render.",
         "mic_denied": "Доступ к микрофону не предоставлен.",
         "lang_changed": "Язык изменён: {}",
         "theme_changed": "Интерфейс: {}",
@@ -417,7 +436,16 @@ TEXTS = {
         "about_body": "JARVIS assistant.",
         "about_chats": "Chats: {}",
         "title_account": "Account",
-        "acct_status": "Offline mode.",
+        "acct_status": "JARVIS server: Render. Enter the token to use it.",
+        "server_token_btn": "Configure server token",
+        "server_token_hint": "The token is stored in your phone settings. Do not share it.",
+        "server_token_title": "JARVIS server token",
+        "server_token_placeholder": "JARVIS_SERVER_TOKEN",
+        "server_save": "Save",
+        "server_saved": "Token saved. Try sending a message.",
+        "server_missing": "First enter the server token in Settings → Account.",
+        "server_thinking": "JARVIS is thinking...",
+        "server_error": "Could not connect to the server. Check internet and Render settings.",
         "mic_denied": "No mic permission.",
         "lang_changed": "Language: {}",
         "theme_changed": "Theme: {}",
@@ -1150,6 +1178,7 @@ class JarvisApp(App):
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
         self.speak_enabled = False
+        self.server_token = ""
         self.last_response = ""
         self.animation_paused = False
         self.orb_state = "idle"
@@ -1231,6 +1260,7 @@ class JarvisApp(App):
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
             self.speak_enabled = bool(data.get("speak", False))
+            self.server_token = str(data.get("server_token", ""))
         if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
 
@@ -1238,7 +1268,8 @@ class JarvisApp(App):
         self.store.put("settings", language=self.language,
                        theme_v2=self.theme_index,
                        voice_profile=self.voice_profile,
-                       speak=self.speak_enabled)
+                       speak=self.speak_enabled,
+                       server_token=getattr(self, "server_token", ""))
 
     def update_colors(self):
         theme = THEMES[self.theme_index]
@@ -1425,11 +1456,91 @@ class JarvisApp(App):
             return
         self.command_input.text = ""
         chat_id = self.chats.current_id
+        # Keep prior turns for the API before adding the current user message.
+        chat = self.chats.get(chat_id) or self.chats.current()
+        history = []
+        for item in chat.get("messages", [])[-12:]:
+            role = "assistant" if item.get("role") == "jarvis" else item.get("role")
+            if role in ("user", "assistant") and item.get("text"):
+                history.append({"role": role, "content": item["text"][:4000]})
         self.add_chat_message(chat_id, "user", command_text)
         answer = run_command(self, command_text)
+        if answer == self.t("unknown"):
+            if not self.server_token.strip():
+                answer = self.t("server_missing")
+                self.add_chat_message(chat_id, "jarvis", answer)
+                self.speak_answer(answer)
+                return
+            if hasattr(self, "status_label"):
+                self.status_label.text = self.t("server_thinking")
+            self.set_orb_state("thinking")
+            threading.Thread(target=self._ask_server,
+                             args=(chat_id, command_text, history), daemon=True).start()
+            return
         self.add_chat_message(chat_id, "jarvis", answer)
         self.speak_answer(answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
+
+    def _ask_server(self, chat_id, message, history):
+        url = "https://jarvis-ai-server-3vuo.onrender.com/chat"
+        payload = {
+            "message": message[:4000],
+            "history": history[-12:],
+            "web_search": False,
+            "language": self.language if self.language in ("tg", "ru", "en") else "tg",
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Jarvis-Token": self.server_token,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=45) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            answer = data.get("answer", "").strip()
+            if not answer:
+                answer = self.t("server_error")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                answer = self.t("server_missing") + " (401)"
+            else:
+                answer = self.t("server_error") + " (HTTP %s)" % exc.code
+        except Exception:
+            answer = self.t("server_error")
+        Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
+
+    def _finish_server_answer(self, chat_id, answer):
+        self.add_chat_message(chat_id, "jarvis", answer)
+        if hasattr(self, "status_label"):
+            self.status_label.text = self.t("ready")
+        self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.02))
+        self.speak_answer(answer)
+
+    def configure_server_token(self, *_):
+        theme = THEMES[self.theme_index]
+        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
+        content.add_widget(make_label(self.t("server_token_title"), 16, theme["accent"], True,
+                                      size_hint_y=None, height=dp(30)))
+        token_input = TextInput(text=self.server_token, hint_text=self.t("server_token_placeholder"),
+                                password=True, multiline=False, size_hint_y=None, height=dp(48),
+                                font_size=dp(13))
+        content.add_widget(token_input)
+        content.add_widget(make_label(self.t("server_token_hint"), 10, theme["accent2"], False))
+        popup = self.make_popup(content, size_hint=(0.92, None), height=dp(260))
+        buttons = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        def save_token(*_):
+            self.server_token = token_input.text.strip()
+            self.save_settings()
+            popup.dismiss()
+            self.show_response(self.t("server_saved") if self.server_token else self.t("server_missing"))
+        buttons.add_widget(self.make_button(self.t("server_save"), save_token, theme["accent"], 44))
+        buttons.add_widget(self.make_button(self.t("close"), lambda *_: popup.dismiss(), theme["accent2"], 44))
+        content.add_widget(buttons)
+        popup.open()
 
     def speak_answer(self, answer):
         if not self.speak_enabled:
@@ -1698,6 +1809,10 @@ class JarvisApp(App):
             content.add_widget(Widget())
         else:
             content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
+            content.add_widget(self.make_button(self.t("server_token_btn"),
+                                                self.configure_server_token,
+                                                theme["accent"], 48))
+            content.add_widget(Widget())
 
         nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
         if section != "main":
