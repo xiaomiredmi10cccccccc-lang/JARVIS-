@@ -17,12 +17,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Install Java and system dependencies
         run: |
@@ -38,42 +38,57 @@ jobs:
 
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
           echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-          sudo update-java-alternatives --set java-1.17.0-openjdk-amd64
-
-          python --version
           java -version
           javac -version
 
-      - name: Accept Android SDK licenses and install packages
+      - name: Accept licenses and install Android SDK
         run: |
           set -euo pipefail
 
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-
           test -x "$SDKMANAGER"
 
-          yes | "$SDKMANAGER" \
-            --sdk_root="$ANDROID_HOME" \
-            --licenses || true
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
 
-          "$SDKMANAGER" \
-            --sdk_root="$ANDROID_HOME" \
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
             "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;37.0.0"
+            "platforms;android-33" \
+            "build-tools;35.0.0"
 
-          yes | "$SDKMANAGER" \
-            --sdk_root="$ANDROID_HOME" \
-            --licenses || true
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
 
-          test -x "$ANDROID_HOME/build-tools/37.0.0/aidl"
-          test -d "$ANDROID_HOME/platforms/android-36"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aidl"
+          test -d "$ANDROID_HOME/platforms/android-33"
 
-          echo "Android SDK installation: OK"
+          echo "Android SDK installation OK"
 
-      - name: Configure Buildozer
+      - name: Configure Buildozer SDK paths
+        run: |
+          set -euo pipefail
+
+          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+
+          mkdir -p "$SDK_DIR/tools/bin"
+          mkdir -p "$ANDROID_HOME/tools/bin"
+
+          ln -sfn "$SDKMANAGER" "$SDK_DIR/tools/bin/sdkmanager"
+          ln -sfn "$AVDMANAGER" "$SDK_DIR/tools/bin/avdmanager"
+          ln -sfn "$ANDROID_HOME/platform-tools" "$SDK_DIR/platform-tools"
+          ln -sfn "$ANDROID_HOME/platforms" "$SDK_DIR/platforms"
+          ln -sfn "$ANDROID_HOME/build-tools" "$SDK_DIR/build-tools"
+
+          ln -sfn "$SDKMANAGER" "$ANDROID_HOME/tools/bin/sdkmanager"
+          ln -sfn "$AVDMANAGER" "$ANDROID_HOME/tools/bin/avdmanager"
+
+          test -x "$SDK_DIR/tools/bin/sdkmanager"
+          test -x "$ANDROID_HOME/tools/bin/sdkmanager"
+
+          echo "SDK compatibility paths configured"
+
+      - name: Configure buildozer.spec
         run: |
           set -euo pipefail
 
@@ -83,23 +98,21 @@ jobs:
           from pathlib import Path
 
           path = Path("buildozer.spec")
-
           if not path.is_file():
               raise SystemExit("ERROR: buildozer.spec not found")
 
           lines = path.read_text(encoding="utf-8").splitlines()
 
-          app_start = next(
+          start = next(
               (i for i, line in enumerate(lines)
                if line.strip() == "[app]"),
               None
           )
-
-          if app_start is None:
+          if start is None:
               raise SystemExit("ERROR: [app] section not found")
 
-          app_end = next(
-              (i for i in range(app_start + 1, len(lines))
+          end = next(
+              (i for i in range(start + 1, len(lines))
                if re.match(r"^\s*\[.*\]\s*$", lines[i])),
               len(lines)
           )
@@ -107,16 +120,14 @@ jobs:
           settings = {
               "android.sdk_path": os.environ["ANDROID_HOME"],
               "android.accept_sdk_license": "True",
-              "android.skip_update": "True",
-              "android.api": "36",
-              "android.ndk": "29",
+              "android.skip_update": "False",
+              "android.api": "33",
               "android.minapi": "24",
-              "p4a.branch": "develop",
+              "android.ndk": "28c",
           }
 
-          app_lines = lines[app_start + 1:app_end]
+          app_lines = lines[start + 1:end]
 
-          # Remove existing active values to prevent duplicates.
           for key in settings:
               pattern = re.compile(
                   r"^\s*" + re.escape(key) + r"\s*="
@@ -126,37 +137,26 @@ jobs:
                   if not pattern.match(line)
               ]
 
-          # Put all settings inside [app], not [buildozer].
           app_lines.extend([""] + [
               f"{key} = {value}"
               for key, value in settings.items()
           ])
 
-          lines[app_start + 1:app_end] = app_lines
+          lines[start + 1:end] = app_lines
           path.write_text(
               "\n".join(lines) + "\n",
               encoding="utf-8"
           )
 
-          print("Buildozer settings configured.")
+          print(path.read_text(encoding="utf-8"))
           PY
 
-          echo "===== buildozer.spec ====="
-          cat buildozer.spec
-
-      - name: Install Buildozer and Python build dependencies
+      - name: Install Buildozer
         run: |
           set -euo pipefail
 
-          python -m pip install --upgrade pip wheel
-
-          python -m pip install \
-            "git+https://github.com/kivy/buildozer.git"
-
-          python -m pip install \
-            legacy-cgi \
-            setuptools \
-            "cython==0.29.34"
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install buildozer==1.6.0 cython==0.29.37
 
           buildozer --version
           cython --version
@@ -169,7 +169,6 @@ jobs:
           set -uo pipefail
 
           rm -f build.log
-          rm -rf .buildozer bin
 
           buildozer -v android debug 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
@@ -193,11 +192,7 @@ jobs:
 
           APK_FILE="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
 
-          if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK file was not created."
-            exit 1
-          fi
-
+          test -n "$APK_FILE"
           echo "APK CREATED: $APK_FILE"
           ls -lh "$APK_FILE"
 
