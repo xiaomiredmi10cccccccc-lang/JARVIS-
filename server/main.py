@@ -7,7 +7,10 @@ from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
 from openai import OpenAI
 
-app = FastAPI(title="JARVIS AI Server", version="1.2.0")
+app = FastAPI(
+    title="JARVIS AI Server",
+    version="1.3.0",
+)
 
 
 class ChatMessage(BaseModel):
@@ -71,24 +74,44 @@ def chat(
             detail="AI server is not configured",
         )
 
-    language_names = {
-        "tg": "Tajik",
-        "ru": "Russian",
-        "en": "English",
-    }
-
-    instructions = (
-        "You are JARVIS, a helpful AI assistant. "
-        f"Answer clearly and accurately in "
-        f"{language_names[request.language]}. "
-        "Do not claim to have searched the web "
-        "unless you actually did."
+    model = os.environ.get(
+        "OPENROUTER_MODEL",
+        "openrouter/free",
     )
+
+    instructions = {
+        "tg": (
+            "Ту JARVIS ҳастӣ — ёвари зеҳни сунъии муфид "
+            "ва боодоб. Ба корбар бо забони тоҷикии равон "
+            "ва табиӣ, бо алифбои кириллӣ ҷавоб деҳ. "
+            "Имло ва сохти ҷумлаҳои тоҷикиро риоя кун. "
+            "Ба савол мустақим ва фаҳмо ҷавоб деҳ. "
+            "То вақте ки корбар нахоҳад, ҷавобро бо "
+            "забонҳои русӣ ва англисӣ омехта накун. "
+            "Агар ҷавобро надонӣ, ростқавлона бигӯ. "
+            "Ҳеҷ гоҳ нагӯ, ки дар интернет ҷустуҷӯ кардӣ, "
+            "агар воқеан ҷустуҷӯ накарда бошӣ."
+        ),
+        "ru": (
+            "Ты JARVIS — полезный и вежливый ИИ-помощник. "
+            "Отвечай ясно, естественно и по существу на русском. "
+            "Если не знаешь ответа, честно скажи об этом. "
+            "Не утверждай, что искал информацию в интернете, "
+            "если поиск фактически не выполнялся."
+        ),
+        "en": (
+            "You are JARVIS, a helpful and polite AI assistant. "
+            "Answer clearly and accurately in English. "
+            "If you do not know the answer, say so honestly. "
+            "Do not claim to have searched the web unless "
+            "a web search was actually performed."
+        ),
+    }
 
     messages = [
         {
             "role": "system",
-            "content": instructions,
+            "content": instructions[request.language],
         }
     ]
 
@@ -117,24 +140,28 @@ def chat(
         )
 
         response = client.chat.completions.create(
-            model=os.environ.get(
-                "OPENROUTER_MODEL",
-                "openrouter/free",
-            ),
+            model=model,
             messages=messages,
         )
 
+        if not response.choices:
+            raise HTTPException(
+                status_code=502,
+                detail="The AI returned no choices",
+            )
+
         answer = response.choices[0].message.content
 
-        if not answer:
+        if not answer or not answer.strip():
             raise HTTPException(
                 status_code=502,
                 detail="The AI returned an empty response",
             )
 
         return {
-            "answer": answer,
+            "answer": answer.strip(),
             "web_search": False,
+            "model": response.model or model,
         }
 
     except HTTPException:
@@ -143,7 +170,7 @@ def chat(
     except Exception as exc:
         print(
             "OpenRouter request failed: "
-            f"{type(exc).__name__}"
+            f"{type(exc).__name__}: {exc}"
         )
 
         raise HTTPException(
