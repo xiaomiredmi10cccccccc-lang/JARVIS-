@@ -546,9 +546,13 @@ def linear_texture(name, stops, rows=64):
 
 GLASS_ERRORS = []
 
+# Animation state shared by all orbs: when the screen is rebuilt (language, theme,
+# settings) the new orb continues from the same moment instead of starting from zero.
+ANIM = {"phase": 0.0, "clock_t": 0.0, "level": 0.0}
+
 def _move_glass(w, *_):
-    x, y = w.pos
-    wd, ht = w.size
+    x, y = round(w.x), round(w.y)
+    wd, ht = round(w.width), round(w.height)
     inset = max(dp(2), w._g_r * 0.8)
     w._g_fill.pos = (x, y)
     w._g_fill.size = (wd, ht)
@@ -591,9 +595,9 @@ class AnimatedCore(Widget):
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
         self.theme_index = theme_index
-        self.phase = 0.0
-        self.level = 0.0
-        self.clock_t = 0.0
+        self.phase = ANIM["phase"]
+        self.level = ANIM["level"]
+        self.clock_t = ANIM["clock_t"]
         self.fib, self.dashes, self.reds = [], [], []
         if theme_index == 1:
             n = 420
@@ -620,6 +624,7 @@ class AnimatedCore(Widget):
         if app is not None and getattr(app, "animation_paused", False):
             return
         state = getattr(app, "orb_state", "idle") if app is not None else "idle"
+        dt = min(dt, 0.1)
         self.clock_t += dt
         t = self.clock_t
         if state == "listening":
@@ -631,7 +636,8 @@ class AnimatedCore(Widget):
         else:
             target, boost = 0.0, 1.0
         self.level += (target - self.level) * min(1.0, dt * 8.0)
-        self.phase = (self.phase + dt * 0.8 * boost) % (math.pi * 2)
+        self.phase += dt * 0.8 * boost
+        ANIM["phase"], ANIM["clock_t"], ANIM["level"] = self.phase, self.clock_t, self.level
         self.redraw()
 
     def draw_aura(self, cx, cy, R, accent, accent2):
@@ -640,7 +646,7 @@ class AnimatedCore(Widget):
         p = self.phase
         halo = radial_texture("aura_halo", ((0, (50, 100, 255, 115)), (0.5, (30, 70, 220, 44)),
                                             (1, (20, 40, 160, 0))))
-        hs = R * (4.4 + 1.4 * lv)
+        hs = min(R * (4.4 + 1.4 * lv), min(self.width, self.height))
         Color(1, 1, 1, 0.8 + 0.2 * lv)
         Rectangle(texture=halo, pos=(cx - hs / 2, cy - hs / 2), size=(hs, hs))
         body = radial_texture("aura_body", ((0, (1, 3, 10, 255)), (0.7, (3, 9, 30, 255)),
@@ -702,7 +708,7 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R * 1.3), width=dp(1))
         glow = radial_texture("p_glow", ((0, (40, 200, 255, 0)), (0.55, (40, 200, 255, 0)),
                                          (0.8, (40, 200, 255, 40)), (1, (40, 200, 255, 0))))
-        gs = R * 3 * (1 + 0.3 * lv)
+        gs = min(R * 3 * (1 + 0.3 * lv), min(self.width, self.height))
         Color(1, 1, 1, 1)
         Rectangle(texture=glow, pos=(cx - gs / 2, cy - gs / 2), size=(gs, gs))
         p = self.phase
@@ -1471,15 +1477,16 @@ class JarvisApp(App):
                 self.add_chat_message(chat_id, "jarvis", answer)
                 self.speak_answer(answer)
                 return
+            self.set_orb_state("thinking")
             if hasattr(self, "status_label"):
                 self.status_label.text = self.t("server_thinking")
-            self.set_orb_state("thinking")
             threading.Thread(target=self._ask_server,
                              args=(chat_id, command_text, history), daemon=True).start()
             return
         self.add_chat_message(chat_id, "jarvis", answer)
         self.speak_answer(answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
+
 
     def _ask_server(self, chat_id, message, history):
         import ssl
