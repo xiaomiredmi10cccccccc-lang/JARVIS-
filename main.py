@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+1111111ээ# -*- coding: utf-8 -*-
 """
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
@@ -1481,7 +1481,8 @@ class JarvisApp(App):
         self.speak_answer(answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
-    def _ask_server(self, chat_id, message, history):
+        def _ask_server(self, chat_id, message, history):
+        import ssl
         url = "https://jarvis-ai-server-3vuo.onrender.com/chat"
         payload = {
             "message": message[:4000],
@@ -1489,28 +1490,52 @@ class JarvisApp(App):
             "web_search": False,
             "language": self.language if self.language in ("tg", "ru", "en") else "tg",
         }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "X-Jarvis-Token": self.server_token,
-            },
-            method="POST",
-        )
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         try:
-            with urllib.request.urlopen(req, timeout=45) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            answer = data.get("answer", "").strip()
-            if not answer:
-                answer = self.t("server_error")
-        except urllib.error.HTTPError as exc:
-            if exc.code == 401:
-                answer = self.t("server_missing") + " (401)"
-            else:
-                answer = self.t("server_error") + " (HTTP %s)" % exc.code
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
         except Exception:
-            answer = self.t("server_error")
+            ctx = None
+
+        def extract(data):
+            if isinstance(data, str):
+                return data.strip()
+            if isinstance(data, dict):
+                for key in ("answer", "reply", "response", "message", "text", "content"):
+                    value = data.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+            return ""
+
+        answer, last = "", ""
+        for attempt in (1, 2):  # дафъаи дуюм барои Render-и хобида
+            try:
+                req = urllib.request.Request(
+                    url, data=body, method="POST",
+                    headers={"Content-Type": "application/json",
+                             "X-Jarvis-Token": self.server_token})
+                with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                answer = extract(data)
+                if not answer:
+                    keys = ",".join(list(data.keys())[:6]) if isinstance(data, dict) else type(data).__name__
+                    last = "формати ҷавоб: " + keys
+                break
+            except urllib.error.HTTPError as exc:
+                detail = ""
+                try:
+                    detail = str(json.loads(exc.read().decode("utf-8")).get("detail", ""))[:120]
+                except Exception:
+                    pass
+                if exc.code in (401, 403):
+                    answer = self.t("server_missing") + " (%d)" % exc.code
+                else:
+                    last = "HTTP %d %s" % (exc.code, detail)
+                break
+            except Exception as exc:
+                last = "%s: %s" % (type(exc).__name__, str(exc)[:120])
+        if not answer:
+            answer = self.t("server_error") + "\n[" + last + "]"
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _finish_server_answer(self, chat_id, answer):
