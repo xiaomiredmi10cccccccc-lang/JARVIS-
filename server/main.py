@@ -1,16 +1,26 @@
 
 import os
 import hmac
+import time
+import threading
+from collections import defaultdict, deque
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from pydantic import BaseModel, Field
 from openai import OpenAI
 
 app = FastAPI(
     title="JARVIS AI Server",
-    version="1.3.0",
+    version="1.4.0",
 )
+
+# Temporary in-memory rate limiter:
+# up to 10 requests per IP in 60 seconds.
+RATE_LIMIT = 10
+RATE_WINDOW = 60
+request_times = defaultdict(deque)
+rate_lock = threading.Lock()
 
 
 class ChatMessage(BaseModel):
@@ -42,6 +52,26 @@ def verify_token(token: str | None) -> None:
         )
 
 
+def check_rate_limit(client_ip: str) -> None:
+    now = time.monotonic()
+    cutoff = now - RATE_WINDOW
+
+    with rate_lock:
+        timestamps = request_times[client_ip]
+
+        while timestamps and timestamps[0] <= cutoff:
+            timestamps.popleft()
+
+        if len(timestamps) >= RATE_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many requests. Please try again later.",
+                headers={"Retry-After": str(RATE_WINDOW)},
+            )
+
+        timestamps.append(now)
+
+
 @app.get("/")
 def root():
     return {
@@ -62,9 +92,19 @@ def health():
 @app.post("/chat")
 def chat(
     request: ChatRequest,
+    http_request: Request,
     x_jarvis_token: str | None = Header(default=None),
 ):
     verify_token(x_jarvis_token)
+
+    # Use the direct client address. Do not trust forwarded
+    # IP headers unless the trusted proxy is configured.
+    client_ip = (
+        http_request.client.host
+        if http_request.client
+        else "unknown"
+    )
+    check_rate_limit(client_ip)
 
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
 
