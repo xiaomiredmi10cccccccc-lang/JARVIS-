@@ -1,4 +1,4 @@
-1111111ээ# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
@@ -1481,7 +1481,7 @@ class JarvisApp(App):
         self.speak_answer(answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
-        def _ask_server(self, chat_id, message, history):
+    def _ask_server(self, chat_id, message, history):
         import ssl
         url = "https://jarvis-ai-server-3vuo.onrender.com/chat"
         payload = {
