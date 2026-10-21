@@ -79,62 +79,182 @@ def android_available():
     return True
 
 class SpeechRecognizer(object):
-    REQUEST_CODE = 7041
+    """Records speech inside JARVIS and sends it to the protected STT endpoint."""
+    MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
-    def __init__(self):
-        self._bound = False
+    def __init__(self, app):
+        self.app = app
+        self._recorder = None
+        self._audio_path = None
         self._on_text = None
         self._on_error = None
+        self._language = "tg"
+        self._lock = threading.RLock()
 
     def is_supported(self):
         return android_available()
 
     def start(self, lang, prompt, on_text, on_error):
         if not android_available():
-            raise VoiceUnavailable("Speech recognition works only on Android.")
-        try:
-            from jnius import autoclass
-            from android import activity
-            Intent = autoclass("android.content.Intent")
-            RecognizerIntent = autoclass("android.speech.RecognizerIntent")
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            self._on_text, self._on_error = on_text, on_error
-            intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANG_TAGS.get(lang, "en-US"))
-            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
-            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            if not self._bound:
-                activity.bind(on_activity_result=self._on_result)
-                self._bound = True
-            PythonActivity.mActivity.startActivityForResult(intent, self.REQUEST_CODE)
-        except Exception as exc:
-            raise VoiceUnavailable(str(exc))
+            raise VoiceUnavailable("Microphone recording works only on Android.")
+        if not getattr(self.app, "server_token", "").strip():
+            raise VoiceUnavailable("server_token_missing")
 
-    def _on_result(self, request_code, result_code, intent):
-        if request_code != self.REQUEST_CODE:
-            return
-        on_text, on_error = self._on_text, self._on_error
-        try:
-            text = ""
-            if result_code == -1 and intent is not None:
+        with self._lock:
+            if self._recorder is not None:
+                raise VoiceUnavailable("Recording is already active.")
+
+            recorder = None
+            path = os.path.join(
+                self.app.user_data_dir,
+                "jarvis_voice_" + uuid.uuid4().hex + ".m4a",
+            )
+            try:
                 from jnius import autoclass
-                RecognizerIntent = autoclass("android.speech.RecognizerIntent")
-                results = intent.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                if results is not None and results.size() > 0:
-                    text = str(results.get(0))
-            if text:
-                if on_text:
-                    on_text(text)
-            elif on_error:
-                on_error("no_speech" if result_code == -1 else "cancelled")
-        except Exception as exc:
-            if on_error:
-                on_error(str(exc))
+                MediaRecorder = autoclass("android.media.MediaRecorder")
+                recorder = MediaRecorder()
+                # Android MediaRecorder constants: MIC=1, MPEG_4=2, AAC=3.
+                recorder.setAudioSource(1)
+                recorder.setOutputFormat(2)
+                recorder.setAudioEncoder(3)
+                recorder.setAudioSamplingRate(16000)
+                recorder.setAudioEncodingBitRate(64000)
+                recorder.setMaxDuration(30000)
+                recorder.setOutputFile(path)
+                recorder.prepare()
+                recorder.start()
+            except Exception as exc:
+                if recorder is not None:
+                    try:
+                        recorder.release()
+                    except Exception:
+                        pass
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception:
+                    pass
+                raise VoiceUnavailable(str(exc))
+
+            self._recorder = recorder
+            self._audio_path = path
+            self._on_text = on_text
+            self._on_error = on_error
+            self._language = lang if lang in ("tg", "ru", "en") else "tg"
 
     def stop(self):
-        return None
+        """Stop recording, then transcribe asynchronously without leaving JARVIS."""
+        with self._lock:
+            recorder = self._recorder
+            path = self._audio_path
+            on_text = self._on_text
+            on_error = self._on_error
+            language = self._language
+            self._recorder = None
+            self._audio_path = None
+            self._on_text = None
+            self._on_error = None
+
+        if recorder is None or not path:
+            return False
+
+        stopped = False
+        try:
+            recorder.stop()
+            stopped = True
+        except Exception:
+            # Android can reject stop() if the clip is too short to encode.
+            if on_error:
+                on_error("no_speech")
+        finally:
+            try:
+                recorder.release()
+            except Exception:
+                pass
+
+        if not stopped:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+            return False
+
+        threading.Thread(
+            target=self._transcribe,
+            args=(path, language, on_text, on_error),
+            daemon=True,
+        ).start()
+        return True
+
+    def _transcribe(self, path, language, on_text, on_error):
+        import ssl
+        try:
+            if not os.path.isfile(path):
+                raise RuntimeError("audio_file_missing")
+            size = os.path.getsize(path)
+            if size <= 1024:
+                raise RuntimeError("no_speech")
+            if size > self.MAX_AUDIO_BYTES:
+                raise RuntimeError("audio_too_large")
+
+            with open(path, "rb") as audio_file:
+                audio = audio_file.read()
+
+            boundary = "----JARVISBoundary" + uuid.uuid4().hex
+            parts = []
+            parts.append(
+                ("--" + boundary + "\r\n"
+                 'Content-Disposition: form-data; name="file"; filename="voice.m4a"\r\n'
+                 "Content-Type: audio/mp4\r\n\r\n").encode("ascii")
+                + audio + b"\r\n"
+            )
+            parts.append(
+                ("--" + boundary + "\r\n"
+                 'Content-Disposition: form-data; name="language"\r\n\r\n'
+                 + language + "\r\n").encode("ascii")
+            )
+            parts.append(("--" + boundary + "--\r\n").encode("ascii"))
+            body = b"".join(parts)
+            url = "https://jarvis-ai-server-3vuo.onrender.com/transcribe"
+            headers = {
+                "Content-Type": "multipart/form-data; boundary=" + boundary,
+                "X-Jarvis-Token": self.app.server_token,
+                "Accept": "application/json",
+            }
+            request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            try:
+                import certifi
+                context = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                context = ssl.create_default_context()
+
+            with urllib.request.urlopen(request, timeout=90, context=context) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            text = result.get("text", "") if isinstance(result, dict) else ""
+            text = text.strip() if isinstance(text, str) else ""
+            if not text:
+                raise RuntimeError("empty_transcription")
+            if on_text:
+                on_text(text)
+        except urllib.error.HTTPError as exc:
+            code = getattr(exc, "code", 0)
+            if on_error:
+                on_error("unauthorized" if code in (401, 403) else "transcription_http_%s" % code)
+        except Exception as exc:
+            detail = str(exc)
+            if detail in ("no_speech", "audio_too_large", "audio_file_missing", "empty_transcription"):
+                error = detail
+            else:
+                error = "network_error"
+            if on_error:
+                on_error(error)
+        finally:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
 
 class SpeechSynthesizer(object):
     def __init__(self):
@@ -308,8 +428,8 @@ TEXTS = {
         "tts_unavailable": "Хондани ҷавоб ҳоло кор намекунад.",
         "speak_on": "Ҷавобҳо бо овоз: фаъол",
         "speak_off": "Ҷавобҳо бо овоз: хомӯш",
-        "voice_hint": "Шинохти овоз тавассути хизматрасонии Android кор мекунад.",
-        "voice_how": "Барои гуфтани фармон нишони садоро пахш кунед.",
+        "voice_hint": "Овоз дар дохили JARVIS сабт шуда, бо ёрии зеҳни сунъӣ ба матн табдил меёбад.",
+        "voice_how": "Микрофонро пахш кунед, сухан гӯед ва барои анҷом боз пахш кунед.",
         "voice_note": "Овоз тавассути хизматрасонии Android хонда мешавад.",
         "lang_hint": "Забонро интихоб кунед: тоҷикӣ, русӣ ё англисӣ.",
         "sec_account": "Ҳисоб",
@@ -383,8 +503,8 @@ TEXTS = {
         "tts_unavailable": "Озвучивание не работает.",
         "speak_on": "Озвучивать ответы: вкл.",
         "speak_off": "Озвучивать ответы: выкл.",
-        "voice_hint": "Распознавание речи работает через Android.",
-        "voice_how": "Нажмите значок звука.",
+        "voice_hint": "Речь записывается внутри JARVIS и преобразуется в текст через ИИ-сервис.",
+        "voice_how": "Нажмите микрофон, говорите, затем нажмите снова для завершения.",
         "voice_note": "Озвучивание выполняется средствами Android.",
         "lang_hint": "Выберите язык: таджикский, русский или английский.",
         "sec_account": "Аккаунт",
@@ -458,8 +578,8 @@ TEXTS = {
         "tts_unavailable": "TTS unavailable.",
         "speak_on": "Voice: on",
         "speak_off": "Voice: off",
-        "voice_hint": "Android STT.",
-        "voice_how": "Tap mic.",
+        "voice_hint": "Speech is recorded inside JARVIS and transcribed by the AI service.",
+        "voice_how": "Tap the mic, speak, then tap it again to finish.",
         "voice_note": "Speech output uses Android text-to-speech.",
         "lang_hint": "Choose Tajik, Russian, or English.",
         "sec_account": "Account",
@@ -1183,7 +1303,7 @@ class JarvisApp(App):
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
-        self.speak_enabled = False
+        self.speak_enabled = True
         self.server_token = ""
         self.last_response = ""
         self.animation_paused = False
@@ -1191,12 +1311,13 @@ class JarvisApp(App):
         self._orb_event = None
         self.load_settings()
         self.account_service = get_service(self.user_data_dir)
-        self.speech = SpeechRecognizer()
+        self.speech = SpeechRecognizer(self)
         self.tts = SpeechSynthesizer()
         self.tts_fallback_noted = False
         self.tts_error_noted = False
         self.open_popups = set()
         self.app_paused = False
+        self._mic_timeout = None
         self.notice = None
         self.chat_placeholder = False
         try:
@@ -1265,7 +1386,9 @@ class JarvisApp(App):
             self.language = data.get("language", "tg")
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
-            self.speak_enabled = bool(data.get("speak", False))
+            # Enable speech by default after the voice update, while preserving
+            # the user's choice on later launches via the versioned preference.
+            self.speak_enabled = bool(data.get("speak_v2", True))
             self.server_token = str(data.get("server_token", ""))
         if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
@@ -1275,6 +1398,7 @@ class JarvisApp(App):
                        theme_v2=self.theme_index,
                        voice_profile=self.voice_profile,
                        speak=self.speak_enabled,
+                       speak_v2=self.speak_enabled,
                        server_token=getattr(self, "server_token", ""))
 
     def update_colors(self):
@@ -1611,7 +1735,7 @@ class JarvisApp(App):
 
     def toggle_listening(self):
         if self.orb_state == "listening":
-            self.set_orb_state("idle")
+            self.stop_listening()
             return
         state = microphone_permission_state()
         if state in ("granted", "not_android"):
@@ -1627,32 +1751,66 @@ class JarvisApp(App):
             self.show_response(self.t("mic_denied"))
 
     def start_listening(self):
+        if not self.server_token.strip():
+            self.show_response(self.t("server_missing"))
+            return
         if not self.speech.is_supported():
             self.show_response(self.t("stt_unavailable"))
             return
         try:
-            self.set_orb_state("listening", 45.0)
+            self.set_orb_state("listening", 30.0)
             self.speech.start(
                 self.language, self.t("listen_prompt"),
                 lambda text: Clock.schedule_once(lambda dt: self.on_speech_text(text), 0),
                 lambda err: Clock.schedule_once(lambda dt: self.on_speech_error(err), 0))
-        except VoiceUnavailable:
+            # Keep recording bounded; the mic button can stop it earlier.
+            self._mic_timeout = Clock.schedule_once(lambda dt: self.stop_listening(), 30.0)
+        except VoiceUnavailable as exc:
             self.set_orb_state("idle")
-            self.show_response(self.t("stt_unavailable"))
+            if str(exc) == "server_token_missing":
+                self.show_response(self.t("server_missing"))
+            else:
+                save_crash("start_listening failed: " + str(exc))
+                self.show_response(self.t("stt_unavailable"))
         except Exception:
             self.set_orb_state("idle")
             save_crash("start_listening failed:\n" + traceback.format_exc())
             self.show_response(self.t("stt_failed"))
 
+    def stop_listening(self):
+        timeout = getattr(self, "_mic_timeout", None)
+        if timeout is not None:
+            try:
+                timeout.cancel()
+            except Exception:
+                pass
+            self._mic_timeout = None
+        try:
+            self.speech.stop()
+            self.set_orb_state("thinking")
+            if hasattr(self, "status_label"):
+                self.status_label.text = self.t("server_thinking")
+        except Exception:
+            self.set_orb_state("idle")
+            save_crash("stop_listening failed:\n" + traceback.format_exc())
+            self.show_response(self.t("stt_failed"))
+
     def on_speech_text(self, text):
         self.set_orb_state("idle")
+        if not text.strip():
+            self.show_response(self.t("stt_failed"))
+            return
         self.command_input.text = text
         self.send_command()
 
     def on_speech_error(self, err):
         self.set_orb_state("idle")
-        if err != "cancelled":
-            self.show_response(self.t("stt_failed"))
+        if err == "unauthorized":
+            self.show_response(self.t("server_missing"))
+        elif err in ("network_error", "transcription_http_502", "transcription_http_503"):
+            self.show_response(self.t("server_error"))
+        elif err != "cancelled":
+            self.show_response(self.t("stt_failed") + " (" + str(err)[:50] + ")")
 
     def set_orb_state(self, state, seconds=None):
         self.orb_state = state
