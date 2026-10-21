@@ -1,4 +1,3 @@
-
 import os
 import re
 import hmac
@@ -104,7 +103,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="JARVIS AI Server",
-    version="1.5.0",
+    version="1.6.0",
     lifespan=lifespan,
 )
 
@@ -115,11 +114,7 @@ def client_ip(request: Request) -> str:
     return "unknown"
 
 
-def apply_limit(
-    store,
-    ip: str,
-    limit: int,
-) -> None:
+def apply_limit(store, ip: str, limit: int) -> None:
     now = time.monotonic()
     cutoff = now - RATE_WINDOW
 
@@ -175,6 +170,7 @@ def normalize_email(email: str) -> str:
 
 def create_access_token(user_id: int, email: str) -> str:
     now = datetime.now(timezone.utc)
+
     payload = {
         "sub": str(user_id),
         "email": email,
@@ -211,7 +207,12 @@ def get_current_user(authorization: str | None):
             algorithms=["HS256"],
         )
         user_id = int(payload["sub"])
-    except (jwt.InvalidTokenError, ValueError, KeyError, TypeError):
+    except (
+        jwt.InvalidTokenError,
+        ValueError,
+        KeyError,
+        TypeError,
+    ):
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired token",
@@ -227,6 +228,7 @@ def get_current_user(authorization: str | None):
                 "SELECT id, email, created_at FROM users WHERE id = %s",
                 (user_id,),
             ).fetchone()
+
     except HTTPException:
         raise
     except Exception as exc:
@@ -386,17 +388,17 @@ def chat(
     verify_token(x_jarvis_token)
     check_rate_limit(client_ip(http_request))
 
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    api_key = os.environ.get("GROQ_API_KEY", "")
 
     if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="AI server is not configured",
+            detail="Groq API key is not configured",
         )
 
     model = os.environ.get(
-        "OPENROUTER_MODEL",
-        "openrouter/free",
+        "GROQ_MODEL",
+        "openai/gpt-oss-120b",
     )
 
     instructions = {
@@ -405,7 +407,8 @@ def chat(
             "ва боодоб. Ба корбар бо забони тоҷикии равон "
             "ва табиӣ, бо алифбои кириллӣ ҷавоб деҳ. "
             "Имло ва сохти ҷумлаҳои тоҷикиро риоя кун. "
-            "Ба савол мустақим ва фаҳмо ҷавоб деҳ. "
+            "Ба савол мустақим, дақиқ ва фаҳмо ҷавоб деҳ. "
+            "Барои саволҳои мураккаб бодиққат таҳлил кун. "
             "То вақте ки корбар нахоҳад, ҷавобро бо "
             "забонҳои русӣ ва англисӣ омехта накун. "
             "Агар ҷавобро надонӣ, ростқавлона бигӯ. "
@@ -414,14 +417,16 @@ def chat(
         ),
         "ru": (
             "Ты JARVIS — полезный и вежливый ИИ-помощник. "
-            "Отвечай ясно, естественно и по существу на русском. "
+            "Отвечай ясно, точно и по существу на русском. "
+            "Для сложных вопросов рассуждай внимательно. "
             "Если не знаешь ответа, честно скажи об этом. "
             "Не утверждай, что искал информацию в интернете, "
             "если поиск фактически не выполнялся."
         ),
         "en": (
             "You are JARVIS, a helpful and polite AI assistant. "
-            "Answer clearly and accurately in English. "
+            "Answer clearly, accurately, and directly in English. "
+            "Think carefully about complex questions. "
             "If you do not know the answer, say so honestly. "
             "Do not claim to have searched the web unless "
             "a web search was actually performed."
@@ -447,8 +452,7 @@ def chat(
     try:
         client = OpenAI(
             api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
-            default_headers={"X-Title": "JARVIS"},
+            base_url="https://api.groq.com/openai/v1",
         )
 
         response = client.chat.completions.create(
@@ -479,11 +483,8 @@ def chat(
     except HTTPException:
         raise
     except Exception as exc:
-        print(
-            "OpenRouter request failed:",
-            type(exc).__name__,
-        )
+        print("Groq request failed:", type(exc).__name__)
         raise HTTPException(
             status_code=502,
-            detail="The AI service could not complete the request",
+            detail="The Groq AI service could not complete the request",
         )
