@@ -1,34 +1,28 @@
 [app]
 
-# (str) Title of your application
 title = JARVIS
-
-# (str) Package name
 package.name = jarvis
-
-# (str) Package domain (needed for android packaging)
 package.domain = org.jarvis
 
-# (str) Source files where the relevent code lives (relative to directory of buildozer.spec)
+source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 
-# (str) Directory where the source code is located (Ин сатр хатогиро нест мекунад)
-source.dir = .
-
-# (str) Application versioning (Версияи барнома)
 version = 0.1
 
-# (list) Application requirements
-requirements = python3,kivy,pyjnius,android
+requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,pyjnius,requests,certifi,urllib3,idna,chardet
 
-# (str) Supported orientations
 orientation = portrait
 
-# (list) Permissions
-android.permissions = INTERNET,RECORD_AUDIO
+android.permissions = INTERNET,RECORD_AUDIO,ACCESS_NETWORK_STATE
+
+p4a.branch = v2024.01.21
+android.api = 33
+android.minapi = 24
+android.ndk = 25b
+android.archs = arm64-v8a
+android.accept_sdk_license = True
 
 [buildozer]
 
-# (int) Log level (0 = error only, 1 = info, 2 = debug)
 log_level = 2
-
+warn_on_root = 1
