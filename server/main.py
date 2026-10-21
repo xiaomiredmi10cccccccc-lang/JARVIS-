@@ -3,9 +3,12 @@ import re
 import hmac
 import time
 import threading
+import asyncio
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from email import policy
+from email.parser import BytesParser
 from typing import Literal
 
 import jwt
@@ -21,7 +24,7 @@ from openai import OpenAI
 RATE_LIMIT = 10
 RATE_WINDOW = 60
 AUTH_RATE_LIMIT = 5
-
+MAX_TRANSCRIPTION_BYTES = 20 * 1024 * 1024
 request_times = defaultdict(deque)
 auth_request_times = defaultdict(deque)
 rate_lock = threading.Lock()
@@ -36,10 +39,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
-    history: list[ChatMessage] = Field(
-        default_factory=list,
-        max_length=12,
-    )
+    history: list[ChatMessage] = Field(default_factory=list, max_length=12)
     web_search: bool = False
     language: Literal["tg", "ru", "en"] = "tg"
 
@@ -57,20 +57,14 @@ class LoginRequest(BaseModel):
 def database_url() -> str:
     url = os.environ.get("DATABASE_URL", "")
     if not url:
-        raise HTTPException(
-            status_code=503,
-            detail="Database is not configured",
-        )
+        raise HTTPException(status_code=503, detail="Database is not configured")
     return url
 
 
 def jwt_secret() -> str:
     secret = os.environ.get("JWT_SECRET", "")
     if len(secret) < 32:
-        raise HTTPException(
-            status_code=503,
-            detail="Authentication is not configured",
-        )
+        raise HTTPException(status_code=503, detail="Authentication is not configured")
     return secret
 
 
@@ -79,7 +73,6 @@ def init_database() -> None:
     if not url:
         print("DATABASE_URL is not configured")
         return
-
     try:
         with psycopg.connect(url, connect_timeout=10) as conn:
             conn.execute("""
@@ -103,7 +96,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="JARVIS AI Server",
-    version="1.6.0",
+    version="1.7.0",
     lifespan=lifespan,
 )
 
@@ -117,20 +110,16 @@ def client_ip(request: Request) -> str:
 def apply_limit(store, ip: str, limit: int) -> None:
     now = time.monotonic()
     cutoff = now - RATE_WINDOW
-
     with rate_lock:
         timestamps = store[ip]
-
         while timestamps and timestamps[0] <= cutoff:
             timestamps.popleft()
-
         if len(timestamps) >= limit:
             raise HTTPException(
                 status_code=429,
                 detail="Too many requests. Please try again later.",
                 headers={"Retry-After": str(RATE_WINDOW)},
             )
-
         timestamps.append(now)
 
 
@@ -144,138 +133,75 @@ def check_auth_rate_limit(ip: str) -> None:
 
 def verify_token(token: str | None) -> None:
     expected = os.environ.get("JARVIS_SERVER_TOKEN", "")
-
-    if (
-        not expected
-        or not token
-        or not hmac.compare_digest(token, expected)
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized",
-        )
+    if not expected or not token or not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def normalize_email(email: str) -> str:
     email = email.strip().lower()
-
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide a valid email address",
-        )
-
+        raise HTTPException(status_code=400, detail="Please provide a valid email address")
     return email
 
 
 def create_access_token(user_id: int, email: str) -> str:
     now = datetime.now(timezone.utc)
-
     payload = {
         "sub": str(user_id),
         "email": email,
         "iat": now,
         "exp": now + timedelta(hours=24),
     }
-
-    return jwt.encode(
-        payload,
-        jwt_secret(),
-        algorithm="HS256",
-    )
+    return jwt.encode(payload, jwt_secret(), algorithm="HS256")
 
 
 def get_current_user(authorization: str | None):
     if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Bearer token required",
-        )
-
+        raise HTTPException(status_code=401, detail="Bearer token required")
     parts = authorization.split()
-
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization header",
-        )
-
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
     try:
-        payload = jwt.decode(
-            parts[1],
-            jwt_secret(),
-            algorithms=["HS256"],
-        )
+        payload = jwt.decode(parts[1], jwt_secret(), algorithms=["HS256"])
         user_id = int(payload["sub"])
-    except (
-        jwt.InvalidTokenError,
-        ValueError,
-        KeyError,
-        TypeError,
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token",
-        )
-
+    except (jwt.InvalidTokenError, ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     try:
         with psycopg.connect(
-            database_url(),
-            connect_timeout=10,
-            row_factory=dict_row,
+            database_url(), connect_timeout=10, row_factory=dict_row
         ) as conn:
             user = conn.execute(
                 "SELECT id, email, created_at FROM users WHERE id = %s",
                 (user_id,),
             ).fetchone()
-
     except HTTPException:
         raise
     except Exception as exc:
         print("User lookup failed:", type(exc).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail="Database is temporarily unavailable",
-        )
-
+        raise HTTPException(status_code=503, detail="Database is temporarily unavailable")
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found",
-        )
-
+        raise HTTPException(status_code=401, detail="User not found")
     return user
 
 
 @app.get("/")
 def root():
-    return {
-        "service": "JARVIS AI Server",
-        "status": "online",
-        "docs": "/docs",
-    }
+    return {"service": "JARVIS AI Server", "status": "online", "docs": "/docs"}
 
 
 @app.get("/health")
 def health():
-    return {
-        "status": "online",
-        "service": "JARVIS",
-    }
+    return {"status": "online", "service": "JARVIS"}
 
 
 @app.post("/auth/register", status_code=201)
 def register(data: RegisterRequest, request: Request):
     check_auth_rate_limit(client_ip(request))
     email = normalize_email(data.email)
-
     try:
         hashed_password = password_hash.hash(data.password)
-
         with psycopg.connect(
-            database_url(),
-            connect_timeout=10,
-            row_factory=dict_row,
+            database_url(), connect_timeout=10, row_factory=dict_row
         ) as conn:
             user = conn.execute(
                 """
@@ -285,32 +211,19 @@ def register(data: RegisterRequest, request: Request):
                 """,
                 (email, hashed_password),
             ).fetchone()
-
     except psycopg.errors.UniqueViolation:
-        raise HTTPException(
-            status_code=409,
-            detail="An account with this email already exists",
-        )
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
     except HTTPException:
         raise
     except Exception as exc:
         print("Registration failed:", type(exc).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail="Registration service is temporarily unavailable",
-        )
-
+        raise HTTPException(status_code=503, detail="Registration service is temporarily unavailable")
     token = create_access_token(user["id"], user["email"])
-
     return {
         "message": "Account created successfully",
         "access_token": token,
         "token_type": "bearer",
-        "user": {
-            "id": user["id"],
-            "email": user["email"],
-            "created_at": user["created_at"],
-        },
+        "user": {"id": user["id"], "email": user["email"], "created_at": user["created_at"]},
     }
 
 
@@ -318,12 +231,9 @@ def register(data: RegisterRequest, request: Request):
 def login(data: LoginRequest, request: Request):
     check_auth_rate_limit(client_ip(request))
     email = normalize_email(data.email)
-
     try:
         with psycopg.connect(
-            database_url(),
-            connect_timeout=10,
-            row_factory=dict_row,
+            database_url(), connect_timeout=10, row_factory=dict_row
         ) as conn:
             user = conn.execute(
                 """
@@ -333,50 +243,29 @@ def login(data: LoginRequest, request: Request):
                 """,
                 (email,),
             ).fetchone()
-
     except HTTPException:
         raise
     except Exception as exc:
         print("Login database lookup failed:", type(exc).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail="Login service is temporarily unavailable",
-        )
-
+        raise HTTPException(status_code=503, detail="Login service is temporarily unavailable")
     if not user or not password_hash.verify(
         data.password,
-        user["password_hash"] if user else password_hash.hash(
-            "invalid-password-placeholder"
-        ),
+        user["password_hash"] if user else password_hash.hash("invalid-password-placeholder"),
     ):
-        raise HTTPException(
-            status_code=401,
-            detail="Incorrect email or password",
-        )
-
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
     token = create_access_token(user["id"], user["email"])
-
     return {
         "message": "Login successful",
         "access_token": token,
         "token_type": "bearer",
-        "user": {
-            "id": user["id"],
-            "email": user["email"],
-            "created_at": user["created_at"],
-        },
+        "user": {"id": user["id"], "email": user["email"], "created_at": user["created_at"]},
     }
 
 
 @app.get("/auth/me")
 def me(authorization: str | None = Header(default=None)):
     user = get_current_user(authorization)
-
-    return {
-        "id": user["id"],
-        "email": user["email"],
-        "created_at": user["created_at"],
-    }
+    return {"id": user["id"], "email": user["email"], "created_at": user["created_at"]}
 
 
 @app.post("/chat")
@@ -387,20 +276,11 @@ def chat(
 ):
     verify_token(x_jarvis_token)
     check_rate_limit(client_ip(http_request))
-
     api_key = os.environ.get("GROQ_API_KEY", "")
-
     if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Groq API key is not configured",
-        )
+        raise HTTPException(status_code=503, detail="Groq API key is not configured")
 
-    model = os.environ.get(
-        "GROQ_MODEL",
-        "openai/gpt-oss-120b",
-    )
-
+    model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
     instructions = {
         "tg": (
             "Ту JARVIS ҳастӣ — ёвари зеҳни сунъии муфид "
@@ -432,59 +312,123 @@ def chat(
             "a web search was actually performed."
         ),
     }
-
-    messages = [
-        {
-            "role": "system",
-            "content": instructions[request.language],
-        }
-    ]
-
-    messages.extend(
-        {"role": item.role, "content": item.content}
-        for item in request.history
-    )
-
-    messages.append(
-        {"role": "user", "content": request.message}
-    )
-
+    messages = [{"role": "system", "content": instructions[request.language]}]
+    messages.extend({"role": item.role, "content": item.content} for item in request.history)
+    messages.append({"role": "user", "content": request.message})
     try:
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://api.groq.com/openai/v1",
-        )
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-        )
-
+        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        response = client.chat.completions.create(model=model, messages=messages)
         if not response.choices:
-            raise HTTPException(
-                status_code=502,
-                detail="The AI returned no choices",
-            )
-
+            raise HTTPException(status_code=502, detail="The AI returned no choices")
         answer = response.choices[0].message.content
-
         if not answer or not answer.strip():
-            raise HTTPException(
-                status_code=502,
-                detail="The AI returned an empty response",
-            )
-
-        return {
-            "answer": answer.strip(),
-            "web_search": False,
-            "model": response.model or model,
-        }
-
+            raise HTTPException(status_code=502, detail="The AI returned an empty response")
+        return {"answer": answer.strip(), "web_search": False, "model": response.model or model}
     except HTTPException:
         raise
     except Exception as exc:
         print("Groq request failed:", type(exc).__name__)
-        raise HTTPException(
-            status_code=502,
-            detail="The Groq AI service could not complete the request",
+        raise HTTPException(status_code=502, detail="The Groq AI service could not complete the request")
+
+
+def _parse_multipart(content_type: str, body: bytes):
+    """Parse multipart/form-data using the standard library (no extra package)."""
+    try:
+        header = (
+            "Content-Type: " + content_type + "\r\n"
+            "MIME-Version: 1.0\r\n\r\n"
+        ).encode("latin-1", "replace")
+        message = BytesParser(policy=policy.default).parsebytes(header + body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid multipart request")
+    if not message.is_multipart():
+        raise HTTPException(status_code=400, detail="Expected multipart/form-data")
+    audio = None
+    filename = "voice.m4a"
+    audio_type = "audio/mp4"
+    language = "tg"
+    for part in message.iter_parts():
+        field_name = part.get_param("name", header="content-disposition")
+        data = part.get_payload(decode=True) or b""
+        if field_name == "file":
+            audio = data
+            audio_type = part.get_content_type() or "audio/mp4"
+            supplied_name = part.get_filename()
+            if supplied_name:
+                filename = os.path.basename(supplied_name.replace("\\", "/"))
+        elif field_name == "language":
+            requested_language = data.decode("utf-8", "ignore").strip().lower()
+            if requested_language in ("tg", "ru", "en"):
+                language = requested_language
+    if not audio:
+        raise HTTPException(status_code=400, detail="Audio file is missing")
+    if len(audio) > MAX_TRANSCRIPTION_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file is too large")
+    allowed_extensions = (".m4a", ".mp4", ".wav", ".mp3", ".webm", ".ogg", ".flac", ".mpeg", ".mpga")
+    if not filename.lower().endswith(allowed_extensions):
+        filename = "voice.m4a"
+    # MediaRecorder usually reports audio/mp4; avoid forwarding arbitrary client MIME types.
+    allowed_types = {
+        "audio/mp4", "audio/m4a", "audio/aac", "audio/wav", "audio/x-wav",
+        "audio/mpeg", "audio/webm", "audio/ogg", "audio/flac", "application/octet-stream",
+    }
+    if audio_type not in allowed_types:
+        audio_type = "audio/mp4"
+    return filename, audio, audio_type, language
+
+
+def _call_groq_transcription(api_key: str, filename: str, audio: bytes, audio_type: str, language: str):
+    model = os.environ.get("GROQ_STT_MODEL", "whisper-large-v3-turbo")
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+        timeout=60.0,
+    )
+    response = client.audio.transcriptions.create(
+        model=model,
+        file=(filename, audio, audio_type),
+        language=language,
+        response_format="json",
+        temperature=0.0,
+    )
+    text = getattr(response, "text", "")
+    return text.strip(), model
+
+
+@app.post("/transcribe")
+async def transcribe(
+    http_request: Request,
+    x_jarvis_token: str | None = Header(default=None),
+):
+    """Transcribe audio recorded within the Android app, including Tajik (tg)."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    # Allow a little room for multipart headers while preserving Groq's audio limit.
+    if len(body) > MAX_TRANSCRIPTION_BYTES + 64 * 1024:
+        raise HTTPException(status_code=413, detail="Audio request is too large")
+    filename, audio, audio_type, language = _parse_multipart(content_type, body)
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Groq API key is not configured")
+    try:
+        transcript, model = await asyncio.to_thread(
+            _call_groq_transcription,
+            api_key,
+            filename,
+            audio,
+            audio_type,
+            language,
         )
+        if not transcript:
+            raise HTTPException(status_code=502, detail="Speech was not recognized")
+        return {"text": transcript, "language": language, "model": model}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Groq transcription failed:", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The speech recognition service could not complete the request")
+    
