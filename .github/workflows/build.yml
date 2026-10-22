@@ -99,7 +99,7 @@ jobs:
               "android.skip_update": "False",
               "android.api": "33",
               "android.minapi": "24",
-              "android.ndk": "25d",
+              "android.ndk": "25b",
           }
           app_lines = lines[start + 1:end]
           for key in settings:
