@@ -1,4 +1,5 @@
 import os
+import base64
 import re
 import hmac
 import time
@@ -424,6 +425,92 @@ def _call_groq_transcription(api_key: str, filename: str, audio: bytes, audio_ty
     client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1", timeout=60.0)
     response = client.audio.transcriptions.create(model=model, file=(filename, audio, audio_type), language=language, response_format="json", temperature=0.0)
     return getattr(response, "text", "").strip(), model
+
+
+@app.post("/analyze")
+async def analyze_attachment(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Analyze uploaded images or plain-text files using the configured Groq service."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    max_bytes = 20 * 1024 * 1024
+    if len(body) > max_bytes + 64 * 1024:
+        raise HTTPException(status_code=413, detail="File is too large (20 MB maximum)")
+    try:
+        header = ("Content-Type: " + content_type + "\r\nMIME-Version: 1.0\r\n\r\n").encode("latin-1", "replace")
+        form = BytesParser(policy=policy.default).parsebytes(header + body)
+        if not form.is_multipart():
+            raise ValueError("not multipart")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid multipart request")
+    uploaded = None
+    prompt = "Таҳлил кун ва натиҷаро фаҳмо шарҳ деҳ."
+    language = "tg"
+    for part in form.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        data = part.get_payload(decode=True) or b""
+        if name == "file":
+            uploaded = (os.path.basename((part.get_filename() or "attachment").replace("\\", "/")), data, part.get_content_type() or "application/octet-stream")
+        elif name == "prompt":
+            prompt = data.decode("utf-8", "replace").strip()[:4000] or prompt
+        elif name == "language":
+            candidate = data.decode("utf-8", "ignore").strip().lower()
+            if candidate in ("tg", "ru", "en"):
+                language = candidate
+    if not uploaded or not uploaded[1]:
+        raise HTTPException(status_code=400, detail="File is missing or empty")
+    filename, raw, mime = uploaded
+    if len(raw) > max_bytes:
+        raise HTTPException(status_code=413, detail="File is too large (20 MB maximum)")
+    instructions = {
+        "tg": "Ҷавобро бо забони тоҷикии равон ва кириллӣ деҳ. Файлро таҳлил кун, далел насоз ва агар маълумот хонда нашавад, бигӯ.",
+        "ru": "Отвечай по-русски. Проанализируй файл, не выдумывай факты и сообщи, если данные прочитать нельзя.",
+        "en": "Answer in English. Analyze the file, do not invent facts, and say if its contents cannot be read.",
+    }[language]
+    api_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Groq API key is not configured")
+    try:
+        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1", timeout=60.0)
+        if mime.startswith("image/"):
+            if mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+                raise HTTPException(status_code=415, detail="Supported images: JPEG, PNG, WEBP, GIF")
+            data_url = "data:" + mime + ";base64," + base64.b64encode(raw).decode("ascii")
+            model = os.environ.get("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+            messages = [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt or "Тасвирро таҳлил кун."},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ]},
+            ]
+        elif mime.startswith("text/") or filename.lower().endswith((".txt", ".csv", ".json", ".md", ".log")):
+            try:
+                file_text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                raise HTTPException(status_code=415, detail="Text file must use UTF-8 encoding")
+            if len(file_text) > 30000:
+                file_text = file_text[:30000] + "\n[Файл барои таҳлил кӯтоҳ карда шуд]"
+            model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+            messages = [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": "Файл: " + filename + "\nДархост: " + prompt + "\n\nМундариҷаи файл:\n" + file_text},
+            ]
+        else:
+            raise HTTPException(status_code=415, detail="Currently supported: images and UTF-8 text files (TXT, CSV, JSON, MD, LOG). PDF and Office documents are not supported yet.")
+        response = client.chat.completions.create(model=model, messages=messages, max_tokens=1500)
+        answer = response.choices[0].message.content if response.choices else ""
+        if not answer or not answer.strip():
+            raise HTTPException(status_code=502, detail="The AI returned an empty analysis")
+        return {"answer": answer.strip(), "filename": filename, "model": response.model or model}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Attachment analysis failed:", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The AI service could not analyze this file. Check the configured vision model and try again.")
 
 
 @app.post("/transcribe")
