@@ -293,8 +293,9 @@ class SpeechSynthesizer(object):
                 result = "fallback"
             if code < 0:
                 raise VoiceUnavailable("No voice for this language is installed.")
-            if tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis") != 0:
-                raise VoiceUnavailable("The speech engine is still starting.")
+            speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis")
+            if speak_code != 0:
+                return "starting"
             return result
         except VoiceUnavailable:
             raise
@@ -1217,6 +1218,9 @@ def cmd_chats(app, text):
 
 @command("language", "забон", "язык", "language", priority=70)
 def cmd_language(app, text):
+    # Mentioning a language as the target of a translation is not a UI-language command.
+    if any(phrase in text for phrase in ("тарҷума", "переведи", "перевести", "translate", "translation")):
+        return app.t("unknown")
     targets = (("tg", ("тоҷик", "таджик", "tajik", "tg")),
                ("ru", ("русӣ", "русск", "russian", "ru")),
                ("en", ("англис", "англий", "english", "en")))
@@ -1313,6 +1317,12 @@ class JarvisApp(App):
         self.account_service = get_service(self.user_data_dir)
         self.speech = SpeechRecognizer(self)
         self.tts = SpeechSynthesizer()
+        try:
+            from android import activity
+            activity.bind(on_activity_result=self.on_activity_result)
+        except Exception:
+            pass
+        self._attachment_pending = False
         self.tts_fallback_noted = False
         self.tts_error_noted = False
         self.open_popups = set()
@@ -1469,10 +1479,20 @@ class JarvisApp(App):
         )
         self.command_input.bind(on_text_validate=self.send_command)
         self.command_input.bind(text=self.on_text_change)
+        self.attach_btn = Button(text="+", font_size=dp(28), size_hint_x=None, width=dp(42),
+                                 background_normal="", background_color=(0, 0, 0, 0),
+                                 color=hex_color(theme["accent"]))
+        self.attach_btn.bind(on_release=self.pick_attachment)
+        self.stop_speech_btn = Button(text="✕", font_size=dp(20), size_hint_x=None, width=dp(38),
+                                      background_normal="", background_color=(0, 0, 0, 0),
+                                      color=hex_color(theme["text"]))
+        self.stop_speech_btn.bind(on_release=self.stop_speaking)
         self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
-                                       size_hint_x=None, width=dp(58))
+                                       size_hint_x=None, width=dp(52))
         self.action_btn.bind(on_release=self.on_action)
+        command_row.add_widget(self.attach_btn)
         command_row.add_widget(self.command_input)
+        command_row.add_widget(self.stop_speech_btn)
         command_row.add_widget(self.action_btn)
         main.add_widget(command_row)
 
@@ -1516,7 +1536,7 @@ class JarvisApp(App):
         theme = THEMES[self.theme_index]
         user = role == "user"
         tint = (0.45, 0.55, 1.0) if user else hex_color(theme["accent"])[:3]
-        bubble = BoxLayout(orientation="vertical", size_hint=(0.84, None), padding=dp(9))
+        bubble = BoxLayout(orientation="vertical", size_hint=(1, None), padding=[dp(12), dp(9), dp(12), dp(9)])
         bubble.bind(minimum_height=bubble.setter("height"))
         glass_style(bubble, tint, dp(14), fill=0.26 if user else 0.12, sheen=0.3, border=0.35)
         label = Label(text=text, font_size=dp(13), color=hex_color(theme["text"]),
@@ -1526,12 +1546,7 @@ class JarvisApp(App):
         bubble.add_widget(label)
         row = BoxLayout(orientation="horizontal", size_hint_y=None)
         bubble.bind(height=lambda inst, h: setattr(row, "height", h))
-        if user:
-            row.add_widget(Widget())
-            row.add_widget(bubble)
-        else:
-            row.add_widget(bubble)
-            row.add_widget(Widget())
+        row.add_widget(bubble)
         return row
 
     def scroll_chat_down(self):
@@ -1577,6 +1592,105 @@ class JarvisApp(App):
         self.render_chat()
         if getattr(self, "chats_popup", None) is not None:
             self.chats_popup.dismiss()
+
+    def pick_attachment(self, *_):
+        """Open Android document picker and send the selected image/text file to JARVIS."""
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("*/*")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            self._attachment_pending = True
+            PythonActivity.mActivity.startActivityForResult(intent, 7412)
+        except Exception as exc:
+            save_crash("Attachment picker failed: " + str(exc))
+            self.show_response("Интихоби файл дар ин дастгоҳ кушода нашуд.")
+
+    def on_activity_result(self, request_code, result_code, data):
+        if request_code != 7412 or not getattr(self, "_attachment_pending", False):
+            return
+        self._attachment_pending = False
+        try:
+            from jnius import autoclass
+            Activity = autoclass("android.app.Activity")
+            if result_code != Activity.RESULT_OK or data is None:
+                return
+            uri = data.getData()
+            if uri is None:
+                self.show_response("Файл интихоб нашуд.")
+                return
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            resolver = PythonActivity.mActivity.getContentResolver()
+            mime = str(resolver.getType(uri) or "application/octet-stream")
+            stream = resolver.openInputStream(uri)
+            output = autoclass("java.io.ByteArrayOutputStream")()
+            buffer = autoclass("byte[]") if False else None
+            # Read in bounded chunks without needing filesystem permission.
+            chunk = autoclass("byte[]") if False else None
+            from jnius import cast, jarray, jbyte
+            buf = jarray(jbyte)(8192)
+            total = 0
+            while True:
+                count = stream.read(buf)
+                if count < 0:
+                    break
+                total += count
+                if total > 20 * 1024 * 1024:
+                    raise RuntimeError("Файл аз 20 МБ калон аст.")
+                output.write(buf, 0, count)
+            stream.close()
+            raw = bytes(output.toByteArray())
+            if not raw:
+                raise RuntimeError("Файл холӣ аст.")
+            name = str(uri.getLastPathSegment() or "attachment")
+            prompt = self.command_input.text.strip() if hasattr(self, "command_input") else ""
+            if hasattr(self, "command_input"):
+                self.command_input.text = ""
+            chat_id = self.chats.current_id
+            display = "📎 " + name + ("\n" + prompt if prompt else "\nЛутфан ин файлро таҳлил кун.")
+            self.add_chat_message(chat_id, "user", display)
+            threading.Thread(target=self._upload_attachment, args=(chat_id, name, mime, raw, prompt), daemon=True).start()
+        except Exception as exc:
+            save_crash("Attachment read failed:\n" + traceback.format_exc())
+            Clock.schedule_once(lambda dt, message=str(exc): self.show_response("Файл хонда нашуд: " + message), 0)
+
+    def _upload_attachment(self, chat_id, filename, mime, raw, prompt):
+        import ssl
+        boundary = "----JARVIS" + uuid.uuid4().hex
+        def field(name, value):
+            return ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n").encode("utf-8")
+        safe_name = os.path.basename(filename).replace('"', "_")
+        body = field("prompt", prompt or "Таҳлил кун ва натиҷаро фаҳмо шарҳ деҳ.")
+        body += field("language", self.language if self.language in ("tg", "ru", "en") else "tg")
+        body += ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + safe_name + "\"\r\nContent-Type: " + mime + "\r\n\r\n").encode("utf-8") + raw + ("\r\n--" + boundary + "--\r\n").encode("utf-8")
+        try:
+            ctx = None
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                pass
+            req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/analyze", data=body, method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary, "X-Jarvis-Token": self.server_token})
+            with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            answer = str(result.get("answer", "Ҷавоби таҳлил гирифта нашуд."))
+            Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, answer), 0)
+        except urllib.error.HTTPError as exc:
+            detail = "Хатои сервер: HTTP " + str(exc.code)
+            try:
+                payload = json.loads(exc.read().decode("utf-8")); detail = str(payload.get("detail", detail))
+            except Exception:
+                pass
+            Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, detail), 0)
+        except Exception as exc:
+            Clock.schedule_once(lambda dt, message=str(exc): self._attachment_answer(chat_id, "Фиристодани файл ноком шуд: " + message), 0)
+
+    def _attachment_answer(self, chat_id, answer):
+        self.add_chat_message(chat_id, "jarvis", answer)
+        self.speak_answer(answer)
 
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
@@ -1699,25 +1813,108 @@ class JarvisApp(App):
         popup.open()
 
     def speak_answer(self, answer):
-        if not self.speak_enabled:
+        """Speak locally through the Android TTS engine selected in system settings (e.g. RH Voice)."""
+        if not self.speak_enabled or not answer:
             return
         try:
-            if self.tts.speak(answer, self.language) == "fallback" and not self.tts_fallback_noted:
-                self.tts_fallback_noted = True
-                self.show_response(self.t("tts_fallback"))
-        except VoiceUnavailable:
-            if not self.tts_error_noted:
-                self.tts_error_noted = True
-                self.show_response(self.t("tts_unavailable"))
+            self.tts.stop()
+            # Android TextToSpeech may initialize asynchronously; retry briefly on the UI clock.
+            def attempt(_dt=None, tries=0):
+                try:
+                    result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language))
+                    if result == "starting" and tries < 8:
+                        Clock.schedule_once(lambda dt: attempt(dt, tries + 1), 0.5)
+                except Exception as exc:
+                    save_crash("Local speech failed: " + str(exc))
+                    if not self.tts_error_noted:
+                        self.tts_error_noted = True
+                        self.show_response("Овоз фаъол нашуд. Танзимоти Text-to-Speech ва RH Voice-ро санҷед.")
+            Clock.schedule_once(attempt, 0.15)
         except Exception:
-            save_crash("speak_answer failed:\n" + traceback.format_exc())
+            save_crash("Could not schedule local speech:\n" + traceback.format_exc())
+
+    def stop_speaking(self, *_):
+        try:
+            self.tts.stop()
+        except Exception:
+            pass
+        player = getattr(self, "_server_speech_player", None)
+        if player is not None:
+            try:
+                player.stop()
+                player.release()
+            except Exception:
+                pass
+            self._server_speech_player = None
+        self.set_orb_state("idle")
+
+    def _request_server_speech(self, text):
+        import ssl
+        import tempfile
+        url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
+        payload = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
+        try:
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = None
+            req = urllib.request.Request(
+                url, data=payload, method="POST",
+                headers={"Content-Type": "application/json",
+                         "X-Jarvis-Token": self.server_token,
+                         "Accept": "audio/mpeg"})
+            with urllib.request.urlopen(req, timeout=75, context=ctx) as response:
+                audio = response.read(15 * 1024 * 1024 + 1)
+            if not audio or len(audio) > 15 * 1024 * 1024:
+                raise RuntimeError("Audio is empty or too large")
+            fd, path = tempfile.mkstemp(prefix="jarvis_speech_", suffix=".mp3")
+            with os.fdopen(fd, "wb") as out:
+                out.write(audio)
+            Clock.schedule_once(lambda dt: self._play_server_audio(path), 0)
+        except urllib.error.HTTPError as exc:
+            detail = "HTTP %d" % exc.code
+            try:
+                data = json.loads(exc.read().decode("utf-8"))
+                detail = str(data.get("detail", detail))[:140]
+            except Exception:
+                pass
+            save_crash("Server speech error: " + detail)
+            Clock.schedule_once(lambda dt: self.show_response(self.t("tts_unavailable")), 0)
+        except Exception:
+            save_crash("Server speech failed:\n" + traceback.format_exc())
+            Clock.schedule_once(lambda dt: self.show_response(self.t("tts_unavailable")), 0)
+
+    def _play_server_audio(self, path):
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            MediaPlayer = autoclass("android.media.MediaPlayer")
+            File = autoclass("java.io.File")
+            Uri = autoclass("android.net.Uri")
+            player = MediaPlayer.create(PythonActivity.mActivity, Uri.fromFile(File(path)))
+            if player is None:
+                raise VoiceUnavailable("Could not open generated speech audio")
+            old_player = getattr(self, "_server_speech_player", None)
+            if old_player is not None:
+                try:
+                    old_player.stop()
+                    old_player.release()
+                except Exception:
+                    pass
+            self._server_speech_player = player
+            player.start()
+        except Exception:
+            save_crash("Server audio playback failed:\n" + traceback.format_exc())
+            try:
+                os.remove(path)
+            except Exception:
+                pass
 
     def toggle_speak(self, *_):
         self.speak_enabled = not self.speak_enabled
         self.tts_error_noted = False
         self.save_settings()
-        if self.speak_enabled:
-            self.tts.warm_up()
         self.open_section("voice")
 
     def process_command(self, command_text):
@@ -2032,8 +2229,6 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
 
     def on_start(self):
-        if self.speak_enabled:
-            self.tts.warm_up()
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
 
     def show_pending_errors(self):
