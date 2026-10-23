@@ -26,6 +26,7 @@ RATE_LIMIT = 10
 RATE_WINDOW = 60
 AUTH_RATE_LIMIT = 5
 MAX_TRANSCRIPTION_BYTES = 20 * 1024 * 1024
+MAX_SPEECH_CHARS = 4000
 TAVILY_TIMEOUT_SECONDS = 12
 MAX_SEARCH_RESULTS = 5
 request_times = defaultdict(deque)
@@ -42,6 +43,9 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list, max_length=12)
     web_search: bool = False
     language: Literal["tg", "ru", "en"] = "tg"
+
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_SPEECH_CHARS)
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
@@ -342,6 +346,42 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
         print("Groq request failed:", type(exc).__name__)
         raise HTTPException(status_code=502, detail="The Groq AI service could not complete the request")
 
+
+
+@app.post("/speak")
+def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Generate multilingual speech audio on the server; client plays the returned MP3."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured for speech")
+    payload = {
+        "model": os.environ.get("TTS_MODEL", "gpt-4o-mini-tts"),
+        "voice": os.environ.get("TTS_VOICE", "alloy"),
+        "input": request.text.strip(),
+        "response_format": "mp3",
+        "instructions": "Speak the text naturally in the same language it is written in. If the text is Tajik, speak Tajik clearly. Do not translate or paraphrase it.",
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/audio/speech",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json", "Accept": "audio/mpeg"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            audio = response.read(15 * 1024 * 1024 + 1)
+        if not audio or len(audio) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
+        from fastapi.responses import Response
+        return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+    except urllib.error.HTTPError as exc:
+        print("OpenAI speech failed: HTTP", exc.code)
+        raise HTTPException(status_code=502, detail="The speech generation service could not complete the request")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print("OpenAI speech request failed:", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The speech generation service is temporarily unavailable")
 
 def _parse_multipart(content_type: str, body: bytes):
     """Parse multipart/form-data using the standard library (no extra package)."""
