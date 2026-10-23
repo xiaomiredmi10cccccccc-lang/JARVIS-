@@ -1450,7 +1450,7 @@ class JarvisApp(App):
         main.add_widget(self.visual_area)
         self.build_theme_layout()
 
-        chat_h = max(dp(120), min(dp(190), Window.height * 0.21))
+        chat_h = max(dp(160), min(dp(330), Window.height * 0.38))
         chat_panel = BoxLayout(orientation="vertical", padding=dp(10),
                                spacing=dp(4), size_hint_y=None, height=chat_h)
         glass_style(chat_panel, tint, dp(18), fill=0.10, sheen=0.28, border=0.30)
@@ -1535,18 +1535,37 @@ class JarvisApp(App):
     def make_bubble(self, role, text):
         theme = THEMES[self.theme_index]
         user = role == "user"
-        tint = (0.45, 0.55, 1.0) if user else hex_color(theme["accent"])[:3]
-        bubble = BoxLayout(orientation="vertical", size_hint=(1, None), padding=[dp(12), dp(9), dp(12), dp(9)])
+        accent = hex_color(theme["accent"])[:3]
+        if user:
+            tint, fill, who = (0.12, 0.45, 0.95), 0.60, "Шумо"
+            who_color = (0.80, 0.90, 1, 1)
+        else:
+            tint, fill, who = (0.05, 0.07, 0.14), 0.55, "JARVIS"
+            who_color = (accent[0], accent[1], accent[2], 1)
+        bubble = BoxLayout(orientation="vertical", size_hint=(0.86, None),
+                           padding=[dp(12), dp(9), dp(12), dp(9)], spacing=dp(2))
         bubble.bind(minimum_height=bubble.setter("height"))
-        glass_style(bubble, tint, dp(14), fill=0.26 if user else 0.12, sheen=0.3, border=0.35)
-        label = Label(text=text, font_size=dp(13), color=hex_color(theme["text"]),
-                      halign="left", valign="top", size_hint_y=None)
+        glass_style(bubble, tint, dp(14), fill=fill, sheen=0.25,
+                    border=0.30 if user else 0.55)
+        caption = Label(text=who, font_size=dp(10), bold=True, color=who_color,
+                        halign="right" if user else "left", valign="middle",
+                        size_hint_y=None, height=dp(14))
+        caption.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+        bubble.add_widget(caption)
+        label = Label(text=text, font_size=dp(13),
+                      color=(1, 1, 1, 1) if user else hex_color(theme["text"]),
+                      halign="right" if user else "left", valign="top", size_hint_y=None)
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
         bubble.add_widget(label)
         row = BoxLayout(orientation="horizontal", size_hint_y=None)
         bubble.bind(height=lambda inst, h: setattr(row, "height", h))
-        row.add_widget(bubble)
+        if user:
+            row.add_widget(Widget())
+            row.add_widget(bubble)
+        else:
+            row.add_widget(bubble)
+            row.add_widget(Widget())
         return row
 
     def scroll_chat_down(self):
