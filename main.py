@@ -1832,25 +1832,40 @@ class JarvisApp(App):
         popup.open()
 
     def speak_answer(self, answer):
-        """Speak locally through the Android TTS engine selected in system settings (e.g. RH Voice)."""
+        """Prefer server-generated speech; fall back to Android TTS if the server is unavailable."""
+        if not self.speak_enabled or not answer:
+            return
+        text = str(answer).strip()[:4000]
+        if not text:
+            return
+        # Server speech/network work must run off the Kivy UI thread.
+        if self.server_token.strip():
+            threading.Thread(target=self._request_server_speech,
+                             args=(text,), daemon=True).start()
+        else:
+            self._speak_local_fallback(text)
+
+    def _speak_local_fallback(self, answer):
+        """Use the Android TTS engine selected in system settings if server speech fails."""
         if not self.speak_enabled or not answer:
             return
         try:
             self.tts.stop()
-            # Android TextToSpeech may initialize asynchronously; retry briefly on the UI clock.
             def attempt(_dt=None, tries=0):
+                if not self.speak_enabled:
+                    return
                 try:
                     result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language))
                     if result == "starting" and tries < 8:
                         Clock.schedule_once(lambda dt: attempt(dt, tries + 1), 0.5)
                 except Exception as exc:
-                    save_crash("Local speech failed: " + str(exc))
+                    save_crash("Local speech fallback failed: " + str(exc))
                     if not self.tts_error_noted:
                         self.tts_error_noted = True
-                        self.show_response("Овоз фаъол нашуд. Танзимоти Text-to-Speech ва RH Voice-ро санҷед.")
+                        self.show_response("Овози сервер дастрас нест ва овози маҳаллӣ низ кор накард. Танзимоти Text-to-Speech-ро санҷед.")
             Clock.schedule_once(attempt, 0.15)
         except Exception:
-            save_crash("Could not schedule local speech:\n" + traceback.format_exc())
+            save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
 
     def stop_speaking(self, *_):
         try:
@@ -1899,10 +1914,10 @@ class JarvisApp(App):
             except Exception:
                 pass
             save_crash("Server speech error: " + detail)
-            Clock.schedule_once(lambda dt: self.show_response(self.t("tts_unavailable")), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0)
         except Exception:
             save_crash("Server speech failed:\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt: self.show_response(self.t("tts_unavailable")), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0)
 
     def _play_server_audio(self, path):
         try:
