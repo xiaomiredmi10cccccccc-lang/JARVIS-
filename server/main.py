@@ -20,8 +20,14 @@ import psycopg
 from psycopg.rows import dict_row
 from pwdlib import PasswordHash
 from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from openai import OpenAI
+
+try:
+    import edge_tts
+except ImportError:  # the rest of the server must keep working if the package is missing
+    edge_tts = None
 
 RATE_LIMIT = 10
 RATE_WINDOW = 60
@@ -30,6 +36,14 @@ MAX_TRANSCRIPTION_BYTES = 20 * 1024 * 1024
 MAX_SPEECH_CHARS = 4000
 TAVILY_TIMEOUT_SECONDS = 12
 MAX_SEARCH_RESULTS = 5
+MAX_SPEECH_AUDIO_BYTES = 15 * 1024 * 1024
+TTS_TIMEOUT_SECONDS = 45
+TTS_VOICE_LIST_TTL_SECONDS = 3600
+# Default Edge TTS voices. Tajik (tg) is intentionally NOT listed here: it is only
+# used if Edge TTS really offers a "tg-*" voice (or TTS_VOICE_TG is set explicitly).
+DEFAULT_TTS_VOICES = {"ru": "ru-RU-SvetlanaNeural", "en": "en-US-AriaNeural"}
+TAJIK_ONLY_LETTERS = set("ғӣқӯҳҷҒӢҚӮҲҶ")
+_tajik_voice_cache = {"checked_at": 0.0, "voice": None}
 request_times = defaultdict(deque)
 auth_request_times = defaultdict(deque)
 rate_lock = threading.Lock()
@@ -47,6 +61,8 @@ class ChatRequest(BaseModel):
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_SPEECH_CHARS)
+    # Optional: older app versions send only "text"; then the language is detected.
+    language: Literal["tg", "ru", "en"] | None = None
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
@@ -97,7 +113,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="JARVIS AI Server", version="1.8.1", lifespan=lifespan)
+app = FastAPI(title="JARVIS AI Server", version="1.9.0", lifespan=lifespan)
 
 
 def client_ip(request: Request) -> str:
@@ -349,40 +365,82 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
 
 
 
+def detect_speech_language(text: str) -> str:
+    """Guess tg/ru/en from the text. Letters used only in Tajik mean Tajik."""
+    if any(ch in TAJIK_ONLY_LETTERS for ch in text):
+        return "tg"
+    cyrillic = sum(1 for ch in text if "\u0400" <= ch <= "\u04ff")
+    latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+    if cyrillic and cyrillic >= latin:
+        return "ru"
+    return "en"
+
+
+async def find_tajik_voice() -> str | None:
+    """Return a real Tajik Edge TTS voice, or None if Edge TTS has no Tajik voice."""
+    override = os.environ.get("TTS_VOICE_TG", "").strip()
+    if override:
+        return override
+    now = time.monotonic()
+    checked_at = _tajik_voice_cache["checked_at"]
+    if checked_at and now - checked_at < TTS_VOICE_LIST_TTL_SECONDS:
+        return _tajik_voice_cache["voice"]
+    try:
+        voices = await asyncio.wait_for(edge_tts.list_voices(), timeout=20)
+    except Exception as exc:
+        print("Edge TTS voice list failed:", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The speech generation service is temporarily unavailable")
+    voice = next((v.get("ShortName") for v in voices if str(v.get("Locale", "")).lower().startswith("tg")), None)
+    _tajik_voice_cache["checked_at"] = now
+    _tajik_voice_cache["voice"] = voice
+    return voice
+
+
+async def _synthesize_edge_tts(text: str, voice: str) -> bytes:
+    communicate = edge_tts.Communicate(text, voice)
+    chunks, size = [], 0
+    async for chunk in communicate.stream():
+        if chunk.get("type") != "audio":
+            continue
+        data = chunk.get("data") or b""
+        size += len(data)
+        if size > MAX_SPEECH_AUDIO_BYTES:
+            raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
+        chunks.append(data)
+    return b"".join(chunks)
+
+
 @app.post("/speak")
-def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
-    """Generate multilingual speech audio on the server; client plays the returned MP3."""
+async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Generate speech audio (MP3) with Edge TTS. Never substitutes another language for Tajik."""
     verify_token(x_jarvis_token)
     check_rate_limit(client_ip(http_request))
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured for speech")
-    payload = {
-        "model": os.environ.get("TTS_MODEL", "gpt-4o-mini-tts"),
-        "voice": os.environ.get("TTS_VOICE", "alloy"),
-        "input": request.text.strip(),
-        "response_format": "mp3",
-        "instructions": "Speak the text naturally in the same language it is written in. If the text is Tajik, speak Tajik clearly. Do not translate or paraphrase it.",
-    }
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/audio/speech",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json", "Accept": "audio/mpeg"},
-        method="POST",
-    )
+    if edge_tts is None:
+        raise HTTPException(status_code=503, detail="edge-tts is not installed on the server")
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is empty")
+    language = request.language or detect_speech_language(text)
+    if language == "tg":
+        voice = await find_tajik_voice()
+        if not voice:
+            raise HTTPException(status_code=501, detail="Tajik voice is not available in Edge TTS; the app should use the device voice instead")
+    else:
+        voice = os.environ.get("TTS_VOICE_" + language.upper(), "").strip() or DEFAULT_TTS_VOICES[language]
     try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            audio = response.read(15 * 1024 * 1024 + 1)
-        if not audio or len(audio) > 15 * 1024 * 1024:
-            raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
-        from fastapi.responses import Response
-        return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
-    except urllib.error.HTTPError as exc:
-        print("OpenAI speech failed: HTTP", exc.code)
+        audio = await asyncio.wait_for(_synthesize_edge_tts(text, voice), timeout=TTS_TIMEOUT_SECONDS)
+    except HTTPException:
+        raise
+    except asyncio.TimeoutError:
+        print("Edge TTS timed out")
+        raise HTTPException(status_code=504, detail="The speech generation service timed out")
+    except Exception as exc:
+        print("Edge TTS failed:", type(exc).__name__)
         raise HTTPException(status_code=502, detail="The speech generation service could not complete the request")
-    except (urllib.error.URLError, TimeoutError) as exc:
-        print("OpenAI speech request failed:", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="The speech generation service is temporarily unavailable")
+    if not audio:
+        raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store", "X-TTS-Voice": voice, "X-TTS-Language": language})
+
 
 def _parse_multipart(content_type: str, body: bytes):
     """Parse multipart/form-data using the standard library (no extra package)."""
