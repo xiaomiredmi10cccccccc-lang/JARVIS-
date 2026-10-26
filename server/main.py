@@ -41,7 +41,11 @@ TTS_TIMEOUT_SECONDS = 45
 TTS_VOICE_LIST_TTL_SECONDS = 3600
 # Default Edge TTS voices. Tajik (tg) is intentionally NOT listed here: it is only
 # used if Edge TTS really offers a "tg-*" voice (or TTS_VOICE_TG is set explicitly).
-DEFAULT_TTS_VOICES = {"ru": "ru-RU-SvetlanaNeural", "en": "en-US-AriaNeural"}
+# Voice profiles match the app's "JARVIS Classic" (male) and "Aura" (female) choices.
+DEFAULT_TTS_VOICES = {
+    "classic": {"ru": "ru-RU-DmitryNeural", "en": "en-US-GuyNeural"},
+    "aura": {"ru": "ru-RU-SvetlanaNeural", "en": "en-US-AriaNeural"},
+}
 TAJIK_ONLY_LETTERS = set("ғӣқӯҳҷҒӢҚӮҲҶ")
 _tajik_voice_cache = {"checked_at": 0.0, "voice": None}
 request_times = defaultdict(deque)
@@ -63,6 +67,7 @@ class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_SPEECH_CHARS)
     # Optional: older app versions send only "text"; then the language is detected.
     language: Literal["tg", "ru", "en"] | None = None
+    voice_profile: Literal["classic", "aura"] | None = None
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
@@ -421,12 +426,14 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
     if not text:
         raise HTTPException(status_code=400, detail="Text is empty")
     language = request.language or detect_speech_language(text)
+    profile = request.voice_profile or "aura"
     if language == "tg":
         voice = await find_tajik_voice()
         if not voice:
             raise HTTPException(status_code=501, detail="Tajik voice is not available in Edge TTS; the app should use the device voice instead")
     else:
-        voice = os.environ.get("TTS_VOICE_" + language.upper(), "").strip() or DEFAULT_TTS_VOICES[language]
+        env_name = "TTS_VOICE_" + language.upper() + "_" + profile.upper()
+        voice = os.environ.get(env_name, "").strip() or DEFAULT_TTS_VOICES[profile][language]
     try:
         audio = await asyncio.wait_for(_synthesize_edge_tts(text, voice), timeout=TTS_TIMEOUT_SECONDS)
     except HTTPException:
@@ -439,7 +446,7 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
         raise HTTPException(status_code=502, detail="The speech generation service could not complete the request")
     if not audio:
         raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
-    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store", "X-TTS-Voice": voice, "X-TTS-Language": language})
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store", "X-TTS-Voice": voice, "X-TTS-Language": language, "X-TTS-Profile": profile})
 
 
 def _parse_multipart(content_type: str, body: bytes):
