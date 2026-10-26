@@ -278,7 +278,7 @@ class SpeechSynthesizer(object):
             except Exception:
                 pass
 
-    def speak(self, text, lang="ru"):
+    def speak(self, text, lang="ru", pitch=1.0):
         if not android_available():
             raise VoiceUnavailable("Speech synthesis works only on Android.")
         try:
@@ -287,6 +287,10 @@ class SpeechSynthesizer(object):
             TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
             tts = self._engine()
             result = "ok"
+            try:
+                tts.setPitch(float(pitch))
+            except Exception:
+                pass
             code = tts.setLanguage(Locale(lang))
             if code < 0 and lang == "tg":
                 code = tts.setLanguage(Locale("ru"))
@@ -379,6 +383,9 @@ THEMES = [
 ]
 
 VOICES = ("JARVIS Classic", "Aura")
+# Server voice profile and Android TTS pitch for each voice choice.
+VOICE_PROFILE_IDS = {"JARVIS Classic": "classic", "Aura": "aura"}
+VOICE_LOCAL_PITCH = {"JARVIS Classic": 0.8, "Aura": 1.1}
 
 TEXTS = {
     "tg": {
@@ -1855,7 +1862,8 @@ class JarvisApp(App):
                 if not self.speak_enabled:
                     return
                 try:
-                    result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language))
+                    result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language),
+                                           pitch=VOICE_LOCAL_PITCH.get(self.voice_profile, 1.0))
                     if result == "starting" and tries < 8:
                         Clock.schedule_once(lambda dt: attempt(dt, tries + 1), 0.5)
                 except Exception as exc:
@@ -1886,7 +1894,7 @@ class JarvisApp(App):
         import ssl
         import tempfile
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
-        payload = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
+        payload = json.dumps({"text": text, "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, ensure_ascii=False).encode("utf-8")
         try:
             try:
                 import certifi
