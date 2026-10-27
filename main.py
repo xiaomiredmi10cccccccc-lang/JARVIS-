@@ -382,8 +382,22 @@ THEMES = [
      "background": "#01050A", "panel": "#08141F", "text": "#E8F8FF"},
 ]
 
+def visible_chars(words, position_ms):
+    """How many characters of the spoken text should be visible at this playback position.
+    `words` is [[start_ms, end_char], ...] from the server, in order."""
+    shown = 0
+    for start_ms, end_char in words:
+        if start_ms > position_ms:
+            break
+        shown = end_char
+    return shown
+
+
+# Two Edge TTS voices: male and female. The stored value stays "JARVIS Classic"/"Aura"
+# so saved settings keep working; the labels below are what the user sees.
 VOICES = ("JARVIS Classic", "Aura")
-# Server voice profile and Android TTS pitch for each voice choice.
+VOICE_LABELS = {"JARVIS Classic": "Мардона / Мужской / Male", "Aura": "Занона / Женский / Female"}
+# Server voice profile and Android TTS pitch (only used if the server voice fails).
 VOICE_PROFILE_IDS = {"JARVIS Classic": "classic", "Aura": "aura"}
 VOICE_LOCAL_PITCH = {"JARVIS Classic": 0.8, "Aura": 1.1}
 
@@ -438,7 +452,7 @@ TEXTS = {
         "speak_off": "Ҷавобҳо бо овоз: хомӯш",
         "voice_hint": "Овоз дар дохили JARVIS сабт шуда, бо ёрии зеҳни сунъӣ ба матн табдил меёбад.",
         "voice_how": "Микрофонро пахш кунед, сухан гӯед ва барои анҷом боз пахш кунед.",
-        "voice_note": "Овоз тавассути хизматрасонии Android хонда мешавад.",
+        "voice_note": "Ҷавобҳо бо овози Edge (мардона ё занона) хонда мешаванд; агар сервер кор накунад, овози телефон истифода мешавад.",
         "lang_hint": "Забонро интихоб кунед: тоҷикӣ, русӣ ё англисӣ.",
         "sec_account": "Ҳисоб",
         "help": "Ман ҳоло фармонҳои асосии офлайнро иҷро карда метавонам",
@@ -513,7 +527,7 @@ TEXTS = {
         "speak_off": "Озвучивать ответы: выкл.",
         "voice_hint": "Речь записывается внутри JARVIS и преобразуется в текст через ИИ-сервис.",
         "voice_how": "Нажмите микрофон, говорите, затем нажмите снова для завершения.",
-        "voice_note": "Озвучивание выполняется средствами Android.",
+        "voice_note": "Ответы озвучиваются голосом Edge (мужской или женский); если сервер недоступен, используется голос телефона.",
         "lang_hint": "Выберите язык: таджикский, русский или английский.",
         "sec_account": "Аккаунт",
         "help": "Команды офлайн",
@@ -588,7 +602,7 @@ TEXTS = {
         "speak_off": "Voice: off",
         "voice_hint": "Speech is recorded inside JARVIS and transcribed by the AI service.",
         "voice_how": "Tap the mic, speak, then tap it again to finish.",
-        "voice_note": "Speech output uses Android text-to-speech.",
+        "voice_note": "Replies are read with an Edge voice (male or female); the phone voice is used only if the server fails.",
         "lang_hint": "Choose Tajik, Russian, or English.",
         "sec_account": "Account",
         "help": "Offline commands",
@@ -1403,6 +1417,8 @@ class JarvisApp(App):
             self.language = data.get("language", "tg")
             self.theme_index = int(data.get("theme_v2", 0)) % len(THEMES)
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
+            if self.voice_profile not in VOICES:
+                self.voice_profile = "JARVIS Classic"
             # Enable speech by default after the voice update, while preserving
             # the user's choice on later launches via the versioned preference.
             self.speak_enabled = bool(data.get("speak_v2", True))
@@ -1566,6 +1582,7 @@ class JarvisApp(App):
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
         bubble.add_widget(label)
         row = BoxLayout(orientation="horizontal", size_hint_y=None)
+        row.jarvis_label = label
         bubble.bind(height=lambda inst, h: setattr(row, "height", h))
         if user:
             row.add_widget(Widget())
@@ -1715,8 +1732,7 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt, message=str(exc): self._attachment_answer(chat_id, "Фиристодани файл ноком шуд: " + message), 0)
 
     def _attachment_answer(self, chat_id, answer):
-        self.add_chat_message(chat_id, "jarvis", answer)
-        self.speak_answer(answer)
+        self.deliver_answer(chat_id, answer)
 
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
@@ -1738,8 +1754,7 @@ class JarvisApp(App):
         if answer == self.t("unknown"):
             if not self.server_token.strip():
                 answer = self.t("server_missing")
-                self.add_chat_message(chat_id, "jarvis", answer)
-                self.speak_answer(answer)
+                self.deliver_answer(chat_id, answer)
                 return
             self.set_orb_state("thinking")
             if hasattr(self, "status_label"):
@@ -1747,8 +1762,7 @@ class JarvisApp(App):
             threading.Thread(target=self._ask_server,
                              args=(chat_id, command_text, history), daemon=True).start()
             return
-        self.add_chat_message(chat_id, "jarvis", answer)
-        self.speak_answer(answer)
+        self.deliver_answer(chat_id, answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
 
@@ -1810,11 +1824,10 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _finish_server_answer(self, chat_id, answer):
-        self.add_chat_message(chat_id, "jarvis", answer)
         if hasattr(self, "status_label"):
             self.status_label.text = self.t("ready")
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.02))
-        self.speak_answer(answer)
+        self.deliver_answer(chat_id, answer)
 
     def configure_server_token(self, *_):
         theme = THEMES[self.theme_index]
@@ -1875,6 +1888,110 @@ class JarvisApp(App):
         except Exception:
             save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
 
+    def deliver_answer(self, chat_id, answer):
+        """Show a JARVIS answer. With server speech the words appear while they are spoken."""
+        text = str(answer).strip()[:4000]
+        if self.speak_enabled and text and self.server_token.strip():
+            threading.Thread(target=self._request_synced_speech,
+                             args=(chat_id, answer, text), daemon=True).start()
+        else:
+            self.add_chat_message(chat_id, "jarvis", answer)
+            self.speak_answer(answer)
+
+    def _request_synced_speech(self, chat_id, answer, text):
+        import ssl
+        import base64
+        import tempfile
+        url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
+        payload = json.dumps({"text": text, "timings": True,
+                              "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")},
+                             ensure_ascii=False).encode("utf-8")
+        try:
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = None
+            req = urllib.request.Request(
+                url, data=payload, method="POST",
+                headers={"Content-Type": "application/json",
+                         "X-Jarvis-Token": self.server_token,
+                         "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=75, context=ctx) as response:
+                data = json.loads(response.read(30 * 1024 * 1024).decode("utf-8"))
+            audio = base64.b64decode(data.get("audio_base64", ""))
+            words = [[int(w[0]), int(w[1])] for w in data.get("words", [])]
+            if not audio:
+                raise RuntimeError("Audio is empty")
+            fd, path = tempfile.mkstemp(prefix="jarvis_speech_", suffix=".mp3")
+            with os.fdopen(fd, "wb") as out:
+                out.write(audio)
+            Clock.schedule_once(lambda dt: self._start_synced_answer(chat_id, answer, text, path, words), 0)
+        except Exception as exc:
+            detail = "network"
+            if isinstance(exc, urllib.error.HTTPError):
+                detail = "HTTP %d" % exc.code
+                try:
+                    detail = str(json.loads(exc.read().decode("utf-8")).get("detail", detail))[:140]
+                except Exception:
+                    pass
+            save_crash("Synced speech failed: " + detail + "\n" + traceback.format_exc())
+            def fallback(dt):
+                self.add_chat_message(chat_id, "jarvis", answer)
+                self._note_server_speech_error(detail)
+                self._speak_local_fallback(text)
+            Clock.schedule_once(fallback, 0)
+
+    def _start_synced_answer(self, chat_id, answer, text, path, words):
+        """Start the audio, then reveal the answer word by word at the spoken positions."""
+        self.chats.add_message(chat_id, "jarvis", answer)
+        label = None
+        if self.chats.current_id == chat_id:
+            if self.chat_placeholder:
+                self.chat_box.clear_widgets()
+                self.chat_placeholder = False
+            row = self.make_bubble("jarvis", "")
+            self.chat_box.add_widget(row)
+            label = getattr(row, "jarvis_label", None)
+            self.response_title.text = self.chat_title()
+            self.scroll_chat_down()
+        started = self._play_server_audio(path)
+        player = getattr(self, "_server_speech_player", None) if started else None
+        if label is None or not words:
+            if label is not None:
+                label.text = answer
+            return
+        begin = time.monotonic()
+        state = {"shown": 0}
+
+        def finish():
+            label.text = answer
+            self.scroll_chat_down()
+
+        def tick(dt):
+            if player is None or getattr(self, "_server_speech_player", None) is not player:
+                finish()  # no audio, or speech was stopped/replaced: show everything
+                return False
+            try:
+                position = int(player.getCurrentPosition())
+                playing = bool(player.isPlaying())
+            except Exception:
+                position, playing = int((time.monotonic() - begin) * 1000), True
+            chars = visible_chars(words, position)
+            if chars != state["shown"]:
+                state["shown"] = chars
+                label.text = text[:chars]
+                self.scroll_chat_down()
+            if not playing and position > 0:
+                finish()
+                return False
+            return True
+
+        if player is None:
+            finish()
+        else:
+            Clock.schedule_interval(tick, 0.04)
+
     def stop_speaking(self, *_):
         try:
             self.tts.stop()
@@ -1922,10 +2039,22 @@ class JarvisApp(App):
             except Exception:
                 pass
             save_crash("Server speech error: " + detail)
+            Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
             Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0)
         except Exception:
             save_crash("Server speech failed:\n" + traceback.format_exc())
+            Clock.schedule_once(lambda dt: self._note_server_speech_error("network"), 0)
             Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0)
+
+    def _note_server_speech_error(self, detail):
+        """Tell the user (once per launch) why the Edge voice was replaced by the phone voice."""
+        if getattr(self, "server_speech_error_noted", False):
+            return
+        self.server_speech_error_noted = True
+        try:
+            self.show_response("Овози Edge дастрас нест (%s). Овози телефон истифода мешавад." % detail)
+        except Exception:
+            pass
 
     def _play_server_audio(self, path):
         try:
@@ -1946,12 +2075,14 @@ class JarvisApp(App):
                     pass
             self._server_speech_player = player
             player.start()
+            return True
         except Exception:
             save_crash("Server audio playback failed:\n" + traceback.format_exc())
             try:
                 os.remove(path)
             except Exception:
                 pass
+            return False
 
     def toggle_speak(self, *_):
         self.speak_enabled = not self.speak_enabled
@@ -2183,137 +2314,4 @@ class JarvisApp(App):
     def set_language(self, code):
         if code in TEXTS:
             self.language = code
-            self.save_settings()
-            self.build_interface()
-
-    def set_theme(self, index):
-        self.theme_index = index % len(THEMES)
-        self.save_settings()
-        self.update_colors()
-        self.build_interface()
-
-    def next_theme(self, *_):
-        self.set_theme(self.theme_index + 1)
-
-    def show_settings(self, *_):
-        self.open_section("main")
-
-    def open_section(self, section):
-        old = getattr(self, "settings_popup", None)
-        if old is not None:
-            old.dismiss()
-        theme = THEMES[self.theme_index]
-        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
-        titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
-                  "voice": "title_voice", "account": "title_account"}
-        content.add_widget(make_label(self.t(titles[section]), 17, theme["accent"], True,
-                                      size_hint_y=None, height=dp(30)))
-
-        def option(text, active, callback, height=54):
-            self.glass_option(content, text, active, callback, height)
-
-        if section == "main":
-            for key, target in (("sec_theme", "theme"), ("sec_lang", "language"),
-                                ("sec_voice", "voice"), ("sec_account", "account")):
-                option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=58)
-            content.add_widget(Widget())
-        elif section == "theme":
-            for i, item in enumerate(THEMES):
-                option(item["name"], i == self.theme_index,
-                       lambda inst, ix=i: self.choose_theme(ix, self.settings_popup))
-            content.add_widget(Widget())
-        elif section == "language":
-            for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
-                option(label, self.language == code,
-                       lambda inst, c=code: self.choose_language(c, self.settings_popup))
-            content.add_widget(Widget())
-        elif section == "voice":
-            option(self.t("speak_on") if self.speak_enabled else self.t("speak_off"),
-                   self.speak_enabled, self.toggle_speak)
-            for name in VOICES:
-                option(name, self.voice_profile == name,
-                       lambda inst, n=name: self.choose_voice(n, self.settings_popup))
-            content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
-            content.add_widget(make_label(self.t("voice_hint"), 10, theme["accent2"]))
-            content.add_widget(Widget())
-        else:
-            content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
-            content.add_widget(self.make_button(self.t("server_token_btn"),
-                                                self.configure_server_token,
-                                                theme["accent"], 48))
-            content.add_widget(Widget())
-
-        nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-        if section != "main":
-            nav.add_widget(self.make_button(self.t("back"), lambda *_: self.open_section("main"),
-                                            theme["accent2"], 44))
-        nav.add_widget(self.make_button(self.t("close"), lambda *_: self.settings_popup.dismiss(),
-                                        theme["accent"], 44))
-        content.add_widget(nav)
-        self.settings_popup = self.make_popup(content)
-        self.settings_popup.open()
-
-    def choose_theme(self, index, popup):
-        self.theme_index = index
-        self.save_settings()
-        popup.dismiss()
-        self.update_colors()
-        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
-
-    def choose_language(self, code, popup):
-        popup.dismiss()
-        Clock.schedule_once(lambda dt: self.set_language(code), 0.1)
-
-    def choose_voice(self, name, popup):
-        self.voice_profile = name
-        self.save_settings()
-        popup.dismiss()
-        Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
-
-    def on_start(self):
-        Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
-
-    def show_pending_errors(self):
-        text = self.startup_error or read_last_crash()
-        if not text and GLASS_ERRORS:
-            text = "Glass style fallback:\n" + GLASS_ERRORS[0]
-        if text:
-            self.show_error_popup(text)
-
-    def report_error(self, text):
-        if text == self._last_err or self._err_count >= 3:
-            return
-        self._last_err = text
-        self._err_count += 1
-        Clock.schedule_once(lambda dt: self.show_error_popup(text), 0.2)
-
-    def show_error_popup(self, text):
-        try:
-            box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
-            box.add_widget(TextInput(text=self.t("error_hint") + "\n\n" + text[-3500:], readonly=True, font_size=dp(10),
-                                     background_color=(0.05, 0.05, 0.08, 1),
-                                     foreground_color=(1, 0.85, 0.85, 1)))
-            ok = Button(text="OK", size_hint_y=None, height=dp(44))
-            box.add_widget(ok)
-            pop = Popup(title="JARVIS error log", content=box, size_hint=(0.96, 0.9))
-            ok.bind(on_release=pop.dismiss)
-            pop.open()
-        except Exception:
-            pass
-
-    def on_pause(self):
-        self.app_paused = True
-        self.update_pause()
-        self.save_settings()
-        return True
-
-    def on_resume(self):
-        self.app_paused = False
-        self.update_pause()
-
-    def on_stop(self):
-        self.save_settings()
-        self.tts.shutdown()
-
-if __name__ == "__main__":
-    JarvisApp().run()
+            self.save_settings(
