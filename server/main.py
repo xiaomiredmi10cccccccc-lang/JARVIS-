@@ -68,6 +68,8 @@ class SpeechRequest(BaseModel):
     # Optional: older app versions send only "text"; then the language is detected.
     language: Literal["tg", "ru", "en"] | None = None
     voice_profile: Literal["classic", "aura"] | None = None
+    # When true, return JSON {audio_base64, words} so the app can show text in sync with speech.
+    timings: bool = False
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
@@ -401,18 +403,29 @@ async def find_tajik_voice() -> str | None:
     return voice
 
 
-async def _synthesize_edge_tts(text: str, voice: str) -> bytes:
-    communicate = edge_tts.Communicate(text, voice)
-    chunks, size = [], 0
+async def _synthesize_edge_tts(text: str, voice: str) -> tuple[bytes, list[list[int]]]:
+    """Return (mp3 bytes, [[start_ms, end_char], ...]) where end_char indexes into `text`."""
+    try:
+        communicate = edge_tts.Communicate(text, voice, boundary="WordBoundary")
+    except TypeError:  # older edge-tts versions only emit word boundaries anyway
+        communicate = edge_tts.Communicate(text, voice)
+    chunks, words, size, cursor = [], [], 0, 0
     async for chunk in communicate.stream():
-        if chunk.get("type") != "audio":
-            continue
-        data = chunk.get("data") or b""
-        size += len(data)
-        if size > MAX_SPEECH_AUDIO_BYTES:
-            raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
-        chunks.append(data)
-    return b"".join(chunks)
+        kind = chunk.get("type")
+        if kind == "audio":
+            data = chunk.get("data") or b""
+            size += len(data)
+            if size > MAX_SPEECH_AUDIO_BYTES:
+                raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
+            chunks.append(data)
+        elif kind in ("WordBoundary", "SentenceBoundary"):
+            token = str(chunk.get("text") or "")
+            index = text.find(token, cursor) if token else -1
+            if index < 0:
+                continue  # cannot be located in the original text: skip, never guess
+            cursor = index + len(token)
+            words.append([int(chunk.get("offset", 0)) // 10000, cursor])  # 100 ns ticks -> ms
+    return b"".join(chunks), words
 
 
 @app.post("/speak")
@@ -435,7 +448,7 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
         env_name = "TTS_VOICE_" + language.upper() + "_" + profile.upper()
         voice = os.environ.get(env_name, "").strip() or DEFAULT_TTS_VOICES[profile][language]
     try:
-        audio = await asyncio.wait_for(_synthesize_edge_tts(text, voice), timeout=TTS_TIMEOUT_SECONDS)
+        audio, words = await asyncio.wait_for(_synthesize_edge_tts(text, voice), timeout=TTS_TIMEOUT_SECONDS)
     except HTTPException:
         raise
     except asyncio.TimeoutError:
@@ -446,6 +459,9 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
         raise HTTPException(status_code=502, detail="The speech generation service could not complete the request")
     if not audio:
         raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
+    if request.timings:
+        return {"audio_base64": base64.b64encode(audio).decode("ascii"), "words": words,
+                "voice": voice, "language": language, "profile": profile}
     return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store", "X-TTS-Voice": voice, "X-TTS-Language": language, "X-TTS-Profile": profile})
 
 
