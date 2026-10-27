@@ -2314,4 +2314,137 @@ class JarvisApp(App):
     def set_language(self, code):
         if code in TEXTS:
             self.language = code
-            self.save_settings(
+            self.save_settings()
+            self.build_interface()
+
+    def set_theme(self, index):
+        self.theme_index = index % len(THEMES)
+        self.save_settings()
+        self.update_colors()
+        self.build_interface()
+
+    def next_theme(self, *_):
+        self.set_theme(self.theme_index + 1)
+
+    def show_settings(self, *_):
+        self.open_section("main")
+
+    def open_section(self, section):
+        old = getattr(self, "settings_popup", None)
+        if old is not None:
+            old.dismiss()
+        theme = THEMES[self.theme_index]
+        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
+        titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
+                  "voice": "title_voice", "account": "title_account"}
+        content.add_widget(make_label(self.t(titles[section]), 17, theme["accent"], True,
+                                      size_hint_y=None, height=dp(30)))
+
+        def option(text, active, callback, height=54):
+            self.glass_option(content, text, active, callback, height)
+
+        if section == "main":
+            for key, target in (("sec_theme", "theme"), ("sec_lang", "language"),
+                                ("sec_voice", "voice"), ("sec_account", "account")):
+                option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=58)
+            content.add_widget(Widget())
+        elif section == "theme":
+            for i, item in enumerate(THEMES):
+                option(item["name"], i == self.theme_index,
+                       lambda inst, ix=i: self.choose_theme(ix, self.settings_popup))
+            content.add_widget(Widget())
+        elif section == "language":
+            for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
+                option(label, self.language == code,
+                       lambda inst, c=code: self.choose_language(c, self.settings_popup))
+            content.add_widget(Widget())
+        elif section == "voice":
+            option(self.t("speak_on") if self.speak_enabled else self.t("speak_off"),
+                   self.speak_enabled, self.toggle_speak)
+            for name in VOICES:
+                option(VOICE_LABELS.get(name, name), self.voice_profile == name,
+                       lambda inst, n=name: self.choose_voice(n, self.settings_popup))
+            content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
+            content.add_widget(make_label(self.t("voice_hint"), 10, theme["accent2"]))
+            content.add_widget(Widget())
+        else:
+            content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
+            content.add_widget(self.make_button(self.t("server_token_btn"),
+                                                self.configure_server_token,
+                                                theme["accent"], 48))
+            content.add_widget(Widget())
+
+        nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        if section != "main":
+            nav.add_widget(self.make_button(self.t("back"), lambda *_: self.open_section("main"),
+                                            theme["accent2"], 44))
+        nav.add_widget(self.make_button(self.t("close"), lambda *_: self.settings_popup.dismiss(),
+                                        theme["accent"], 44))
+        content.add_widget(nav)
+        self.settings_popup = self.make_popup(content)
+        self.settings_popup.open()
+
+    def choose_theme(self, index, popup):
+        self.theme_index = index
+        self.save_settings()
+        popup.dismiss()
+        self.update_colors()
+        Clock.schedule_once(lambda dt: self.build_interface(), 0.1)
+
+    def choose_language(self, code, popup):
+        popup.dismiss()
+        Clock.schedule_once(lambda dt: self.set_language(code), 0.1)
+
+    def choose_voice(self, name, popup):
+        self.voice_profile = name
+        self.save_settings()
+        popup.dismiss()
+        Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
+
+    def on_start(self):
+        Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
+
+    def show_pending_errors(self):
+        text = self.startup_error or read_last_crash()
+        if not text and GLASS_ERRORS:
+            text = "Glass style fallback:\n" + GLASS_ERRORS[0]
+        if text:
+            self.show_error_popup(text)
+
+    def report_error(self, text):
+        if text == self._last_err or self._err_count >= 3:
+            return
+        self._last_err = text
+        self._err_count += 1
+        Clock.schedule_once(lambda dt: self.show_error_popup(text), 0.2)
+
+    def show_error_popup(self, text):
+        try:
+            box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+            box.add_widget(TextInput(text=self.t("error_hint") + "\n\n" + text[-3500:], readonly=True, font_size=dp(10),
+                                     background_color=(0.05, 0.05, 0.08, 1),
+                                     foreground_color=(1, 0.85, 0.85, 1)))
+            ok = Button(text="OK", size_hint_y=None, height=dp(44))
+            box.add_widget(ok)
+            pop = Popup(title="JARVIS error log", content=box, size_hint=(0.96, 0.9))
+            ok.bind(on_release=pop.dismiss)
+            pop.open()
+        except Exception:
+            pass
+
+    def on_pause(self):
+        self.app_paused = True
+        self.update_pause()
+        self.save_settings()
+        return True
+
+    def on_resume(self):
+        self.app_paused = False
+        self.update_pause()
+
+    def on_stop(self):
+        self.save_settings()
+        self.tts.shutdown()
+
+if __name__ == "__main__":
+    JarvisApp().run()
