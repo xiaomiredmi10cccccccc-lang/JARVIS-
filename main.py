@@ -25,7 +25,8 @@ from kivy.metrics import dp
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
-                           RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate)
+                           RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate,
+                           RenderContext)
 from kivy.graphics.texture import Texture
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -829,6 +830,200 @@ def aura_layers():
     return result
 
 
+# GPU shader for the Aura orb: flowing energy veins, voice rings and orbiting sparks, all procedural.
+# If the shader cannot be compiled on a device, AnimatedCore falls back to the PNG layers / drawn orb.
+AURA_FRAG = r"""
+$HEADER$
+uniform float u_time;
+uniform float u_phase;
+uniform float u_level;
+
+float hash31(vec3 p) {
+    p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float vnoise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash31(i);
+    float b = hash31(i + vec3(1.0, 0.0, 0.0));
+    float c = hash31(i + vec3(0.0, 1.0, 0.0));
+    float d = hash31(i + vec3(1.0, 1.0, 0.0));
+    float e = hash31(i + vec3(0.0, 0.0, 1.0));
+    float g = hash31(i + vec3(1.0, 0.0, 1.0));
+    float h = hash31(i + vec3(0.0, 1.0, 1.0));
+    float k = hash31(i + vec3(1.0, 1.0, 1.0));
+    return mix(mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+               mix(mix(e, g, f.x), mix(h, k, f.x), f.y), f.z);
+}
+float fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 3; i++) {
+        v += a * vnoise(p);
+        p = p * 2.03 + vec3(1.7, 9.2, 3.1);
+        a *= 0.5;
+    }
+    return v;
+}
+vec3 rotY(vec3 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
+}
+vec3 rotX(vec3 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z);
+}
+
+void main() {
+    vec2 p = (tex_coord0 - 0.5) * 2.0;
+    float r = length(p);
+    float R = 0.58;
+    float lv = clamp(u_level, 0.0, 1.0);
+    float ph = u_phase;
+    vec3 cCyan = vec3(0.35, 0.85, 1.0);
+    vec3 cBlue = vec3(0.14, 0.38, 1.0);
+    vec3 cViol = vec3(0.62, 0.32, 1.0);
+
+    vec3 col = vec3(0.0);
+    float alpha = 0.0;
+
+    // ---- outer halo, breathing with the voice
+    float hr = max(r - R, 0.0);
+    float halo = exp(-hr * (5.2 - 1.6 * lv)) * (0.55 + 0.5 * lv) * smoothstep(0.0, 0.05, r - R * 0.5);
+    col += mix(cBlue, cViol, 0.5 + 0.5 * sin(ph * 0.3 + p.x * 2.0)) * halo * 0.55;
+    alpha = max(alpha, halo * 0.8);
+
+    // ---- radiating energy rings
+    for (int k = 0; k < 3; k++) {
+        float u = fract(ph * 0.28 + float(k) / 3.0);
+        float rr = R * (1.03 + 0.60 * u);
+        float ring = exp(-pow((r - rr) / 0.012, 2.0)) * (1.0 - u) * (0.10 + 0.9 * lv);
+        col += cCyan * ring;
+        alpha = max(alpha, ring);
+    }
+
+    // ---- orbiting particles on a tilted ring (back half is dimmer)
+    for (int k = 0; k < 2; k++) {
+        float tilt = 0.9 + 0.5 * float(k);
+        float speed = (k == 0) ? 0.55 : -0.38;
+        float ang = atan(p.y, p.x);
+        // inverse of the tilted ellipse: take the point on the ellipse nearest in angle
+        float ra = R * (1.35 + 0.18 * float(k));
+        float rb = ra * (0.30 + 0.12 * float(k));
+        float ca = cos(tilt); float sa = sin(tilt);
+        vec2 q = vec2(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
+        float e = length(vec2(q.x / ra, q.y / rb));
+        float band = exp(-pow((e - 1.0) / 0.022, 2.0));
+        float th = atan(q.y / rb, q.x / ra);
+        float cells = 90.0;
+        float x = (th + ph * speed) * cells / 6.2831853;
+        float id = floor(x);
+        float fx = fract(x) - 0.5;
+        float rnd = hash21(vec2(id, float(k) * 7.0));
+        float dot_ = smoothstep(0.30, 0.0, abs(fx)) * step(0.45, rnd);
+        float front = 0.55 + 0.45 * sin(th + ph * speed * 0.0 + 1.5708 * 2.0);
+        float tw = 0.5 + 0.5 * sin(u_time * (2.0 + 4.0 * rnd) + rnd * 20.0);
+        float behind = (q.y > 0.0 && length(p) < R * 1.0) ? 0.0 : 1.0;
+        float pv = band * dot_ * tw * behind * (0.5 + 0.9 * front);
+        col += mix(cCyan, vec3(1.0), 0.4) * pv * 1.6;
+        alpha = max(alpha, pv);
+    }
+
+    // ---- the sphere
+    if (r < R) {
+        float edge = smoothstep(R, R - 0.008, r);
+        vec2 sp = p / R;
+        float z = sqrt(max(1.0 - dot(sp, sp), 0.0));
+        vec3 n = vec3(sp, z);
+        vec3 q = rotX(rotY(n, ph * 0.22), 0.35);
+
+        // deep glassy body
+        float lam = clamp(dot(n, normalize(vec3(-0.4, -0.5, 0.75))), 0.0, 1.0);
+        vec3 body = vec3(0.008, 0.02, 0.06) * (0.5 + lam);
+
+        // domain-warped flowing energy
+        vec3 w = q * 1.55 + vec3(0.0, ph * 0.10, 0.0);
+        float f1 = fbm(w + 1.8 * vec3(fbm(w + ph * 0.11), fbm(w + 3.1 - ph * 0.09), fbm(w + 5.2)));
+        // counter-rotating second layer
+        vec3 q2 = rotY(rotX(n, -0.5), -ph * 0.34);
+        float f2 = fbm(q2 * 2.1 + 1.3 * vec3(fbm(q2 * 1.2 + ph * 0.15), 0.0, fbm(q2 + 4.0)));
+
+        float wdt = 0.020 + 0.014 * lv;
+        float rib1 = exp(-pow((f1 - 0.50) / wdt, 2.0));
+        float rib2 = exp(-pow((f1 - 0.64) / (wdt * 1.3), 2.0));
+        float rib3 = exp(-pow((f2 - 0.47) / (wdt * 1.1), 2.0));
+        float glowF = smoothstep(0.30, 0.75, f1);
+
+        float vis = 0.25 + 1.2 * pow(1.0 - z, 1.1);
+        vec3 e = vec3(0.0);
+        e += cCyan * rib1 * 1.1;
+        e += cViol * rib2 * 0.95;
+        e += cBlue * rib3 * 1.0;
+        e += vec3(0.9, 0.95, 1.0) * (rib1 * rib1 * 0.45 + rib3 * rib3 * 0.3);
+        e *= vis * (0.58 + 0.55 * lv);
+        e += cBlue * glowF * 0.035 * (0.4 + z);   // soft inner plasma
+
+        // sparks inside the sphere
+        vec3 sq = q * 16.0;
+        float sh = hash31(floor(sq));
+        float sparkle = step(0.965, sh) * (0.5 + 0.5 * sin(u_time * 3.0 + sh * 50.0));
+        sparkle *= smoothstep(0.5, 0.0, length(fract(sq) - 0.5));
+        e += vec3(0.7, 0.9, 1.0) * sparkle * (0.4 + 0.8 * lv);
+
+        // Fresnel rim and bright outline
+        float fres = pow(1.0 - z, 2.4);
+        e += cBlue * fres * 0.75 + cViol * pow(1.0 - z, 5.0) * (0.5 + 0.5 * sin(ph * 0.5 + 3.0 * sp.x)) * 0.8;
+        e += vec3(0.55, 0.8, 1.0) * exp(-pow((r / R - 0.985) / 0.012, 2.0)) * 0.9;
+        // moving glare
+        vec2 gc = vec2(-0.42 + 0.03 * sin(u_time * 0.7), -0.5 + 0.03 * cos(u_time * 0.9));
+        e += vec3(0.5, 0.7, 1.0) * exp(-dot(sp - gc, sp - gc) / 0.035) * 0.28;
+
+        vec3 sph = body + e;
+        sph = 1.0 - exp(-sph * 1.35);
+        col = mix(col, sph, edge);
+        alpha = max(alpha, edge);
+    }
+
+    col = clamp(col, 0.0, 1.0);
+    gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0)) * frag_color;
+}
+"""
+
+
+class AuraShaderView(Widget):
+    """A quad drawn with AURA_FRAG; `ok` is False when the shader failed to compile."""
+
+    def __init__(self, **kwargs):
+        self.canvas = RenderContext(use_parent_projection=True, use_parent_modelview=True,
+                                    use_parent_frag_modelview=True)
+        super().__init__(**kwargs)
+        self.ok = False
+        try:
+            self.canvas.shader.fs = AURA_FRAG
+            self.ok = bool(getattr(self.canvas.shader, "success", True))
+        except Exception:
+            self.ok = False
+        if self.ok:
+            with self.canvas:
+                Color(1, 1, 1, 1)
+                self.quad = Rectangle(pos=self.pos, size=self.size)
+
+    def place(self, cx, cy, side):
+        self.quad.pos = (cx - side / 2, cy - side / 2)
+        self.quad.size = (side, side)
+
+    def update(self, t, phase, level):
+        self.canvas["u_time"] = float(t % 1000.0)
+        self.canvas["u_phase"] = float(phase)
+        self.canvas["u_level"] = float(level)
+
+
 class AnimatedCore(Widget):
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
@@ -1106,6 +1301,54 @@ class AnimatedCore(Widget):
         Rectangle(texture=tex, pos=(cx - side / 2, cy - side / 2), size=(side, side))
         PopMatrix()
 
+    def update_aura_shader(self, size):
+        """Run the GPU Aura orb. Returns False (once and for all) if the shader is unavailable."""
+        if getattr(self, "_shader_failed", False):
+            return False
+        try:
+            view = getattr(self, "_shader_view", None)
+            if view is None:
+                view = AuraShaderView()
+                if not view.ok:
+                    self._shader_failed = True
+                    return False
+                self._shader_view = view
+                self.add_widget(view)
+            cx, cy = self.center
+            view.place(cx, cy, size * 1.34)
+            view.update(self.clock_t, self.phase, self.level)
+            self.draw_ribbon_overlay(cx, cy, size)
+            return True
+        except Exception:
+            self._shader_failed = True
+            try:
+                if getattr(self, "_shader_view", None) is not None:
+                    self.remove_widget(self._shader_view)
+            except Exception:
+                pass
+            return False
+
+    def draw_ribbon_overlay(self, cx, cy, size):
+        """PNG ribbons spinning over the shader orb (drawn in canvas.after, i.e. above the child)."""
+        self.canvas.after.clear()
+        layers = aura_layers()
+        if layers is None:
+            return
+        lv, p, t = self.level, self.phase, self.clock_t
+        # shader sphere diameter = 0.58 of its quad (size*1.34); PNG sphere = 0.60 of its image
+        side = size * 1.34 * 0.58 / 0.60
+        spec = (("aura_ribbon1", 13.0, 0.0, 1.0, 1.0), ("aura_ribbon2", -19.0, 2.1, 0.96, 1.0),
+                ("aura_ribbon3", 27.0, 4.2, 1.04, 1.0))
+        with self.canvas.after:
+            for name, speed, ph, scale, alpha in spec * 2:  # drawn twice: PNG ribbons glow brighter than the shader veins
+                angle = p * speed + 6 * math.sin(t * 0.5 + ph)
+                s2 = side * (scale + 0.03 * math.sin(t * 1.3 + ph) + 0.06 * lv * math.sin(t * 5 + ph))
+                Color(1, 1, 1, min(1.0, alpha * (0.75 + 0.2 * math.sin(t * 1.1 + ph) + 0.3 * lv)))
+                PushMatrix()
+                Rotate(angle=angle, origin=(cx, cy))
+                Rectangle(texture=layers[name], pos=(cx - s2 / 2, cy - s2 / 2), size=(s2, s2))
+                PopMatrix()
+
     def draw_aura_layers(self, layers, size):
         """Multi-layer Aura: three ribbons spin at different speeds/directions, the body breathes,
         the glare drifts, and energy rings radiate while JARVIS listens or speaks."""
@@ -1155,9 +1398,13 @@ class AnimatedCore(Widget):
                 app.report_error(traceback.format_exc())
 
     def _redraw_impl(self):
-        self.canvas.clear()
         if self.width <= 0 or self.height <= 0:
+            self.canvas.clear()
             return
+        # The shader orb is a child widget: do not clear the canvas (that would drop it).
+        if self.theme_index == 0 and self.update_aura_shader(min(self.width, self.height)):
+            return
+        self.canvas.clear()
         theme = THEMES[self.theme_index]
         accent = hex_color(theme["accent"])[:3]
         accent2 = hex_color(theme["accent2"])[:3]
