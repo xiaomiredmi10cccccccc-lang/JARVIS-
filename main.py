@@ -789,6 +789,46 @@ def orb_texture(index):
     return tex
 
 
+AURA_LAYER_NAMES = ("aura_body", "aura_ribbon1", "aura_ribbon2", "aura_ribbon3", "aura_glare")
+_LAYER_TEXTURES = {}
+
+
+def aura_layers():
+    """Separate Aura layers (body, 3 ribbons, glare) for the multi-layer animation, or None.
+
+    Looks in the same folders as orb_texture(); if any layer is missing the single
+    orb_aura.png (or the drawn orb) is used instead, so nothing breaks.
+    """
+    if "aura" in _LAYER_TEXTURES:
+        return _LAYER_TEXTURES["aura"]
+    folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]
+    try:
+        app = App.get_running_app()
+        if app is not None and getattr(app, "directory", None):
+            folders.append(app.directory)
+    except Exception:
+        pass
+    folders += ["/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
+    layers = {}
+    for name in AURA_LAYER_NAMES:
+        for folder in folders:
+            for path in (os.path.join(folder, "assets", name + ".png"), os.path.join(folder, name + ".png")):
+                try:
+                    if os.path.exists(path):
+                        from kivy.core.image import Image as CoreImage
+                        tex = CoreImage(path).texture
+                        if tex is not None:
+                            layers[name] = tex
+                            break
+                except Exception:
+                    pass
+            if name in layers:
+                break
+    result = layers if len(layers) == len(AURA_LAYER_NAMES) else None
+    _LAYER_TEXTURES["aura"] = result
+    return result
+
+
 class AnimatedCore(Widget):
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
@@ -1052,6 +1092,11 @@ class AnimatedCore(Widget):
             # the sphere centre sits 500/1280 of the way down the image
             Rectangle(texture=tex, pos=(self.center_x - w / 2, sphere_y - 0.609 * h), size=(w, h))
             return
+        if self.theme_index == 0:
+            layers = aura_layers()
+            if layers is not None:
+                self.draw_aura_layers(layers, size)
+                return
         side = size * 1.3 * breathe
         cx, cy = self.center
         angle = 7 * math.sin(t * 0.35) if self.theme_index == 0 else (t * 8) % 360
@@ -1060,6 +1105,39 @@ class AnimatedCore(Widget):
         Color(1, 1, 1, 0.9 + 0.1 * lv)
         Rectangle(texture=tex, pos=(cx - side / 2, cy - side / 2), size=(side, side))
         PopMatrix()
+
+    def draw_aura_layers(self, layers, size):
+        """Multi-layer Aura: three ribbons spin at different speeds/directions, the body breathes,
+        the glare drifts, and energy rings radiate while JARVIS listens or speaks."""
+        lv, p, t = self.level, self.phase, self.clock_t
+        app = App.get_running_app()
+        state = getattr(app, "orb_state", "idle") if app is not None else "idle"
+        cx, cy = self.center
+        breathe = 1 + 0.022 * math.sin(t * 0.9) + 0.07 * lv
+        side = size * 1.3 * breathe
+        R = side * 0.30  # sphere radius inside the image
+        # radiating rings (only when active)
+        if state in ("listening", "speaking") or lv > 0.05:
+            for k in range(3):
+                u = ((p * 0.55) + k / 3.0) % 1.0
+                Color(0.45, 0.7, 1.0, (1 - u) ** 1.6 * min(0.55, 0.15 + lv))
+                rad = R * (1.02 + 0.55 * u)
+                Line(circle=(cx, cy, rad), width=dp(1.3))
+        Color(1, 1, 1, 0.95 + 0.05 * lv)
+        Rectangle(texture=layers["aura_body"], pos=(cx - side / 2, cy - side / 2), size=(side, side))
+        spec = (("aura_ribbon1", 13.0, 0.0, 1.0), ("aura_ribbon2", -19.0, 2.1, 0.96),
+                ("aura_ribbon3", 27.0, 4.2, 1.04))
+        for name, speed, ph, scale in spec:
+            angle = p * speed + 6 * math.sin(t * 0.5 + ph)
+            s2 = side * (scale + 0.03 * math.sin(t * 1.3 + ph) + 0.06 * lv * math.sin(t * 5 + ph))
+            Color(1, 1, 1, min(1.0, 0.72 + 0.2 * math.sin(t * 1.1 + ph) + 0.3 * lv))
+            PushMatrix()
+            Rotate(angle=angle, origin=(cx, cy))
+            Rectangle(texture=layers[name], pos=(cx - s2 / 2, cy - s2 / 2), size=(s2, s2))
+            PopMatrix()
+        gx, gy = 0.012 * side * math.sin(t * 0.7), 0.012 * side * math.cos(t * 0.9)
+        Color(1, 1, 1, 0.75 + 0.25 * math.sin(t * 1.6))
+        Rectangle(texture=layers["aura_glare"], pos=(cx - side / 2 + gx, cy - side / 2 + gy), size=(side, side))
 
     def redraw(self, *_):
         try:
@@ -1086,6 +1164,11 @@ class AnimatedCore(Widget):
         cx, cy = self.center
         size = min(self.width, self.height)
         with self.canvas:
+            if self.theme_index == 0:
+                layers = aura_layers()
+                if layers is not None:
+                    self.draw_aura_layers(layers, size)
+                    return
             photo = orb_texture(self.theme_index)
             if photo is not None:
                 self.draw_photo(photo, size)
