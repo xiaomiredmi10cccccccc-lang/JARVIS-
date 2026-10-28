@@ -1,4 +1,4 @@
-    # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
@@ -733,8 +733,18 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
         except Exception:
             pass
 
+def flat_style(widget, rgba, radius):
+    """Plain rounded fill (no glass): used everywhere except the command input."""
+    with widget.canvas.before:
+        Color(*rgba)
+        widget._flat = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[radius])
+    widget.bind(pos=lambda w, v: setattr(w._flat, "pos", w.pos),
+                size=lambda w, v: setattr(w._flat, "size", w.size))
+
+
 ORB_FILES = {0: "orb_aura.png", 1: "orb_particle.png", 2: "orb_glass.png"}
 _ORB_TEXTURES = {}
+_ORB_PROBLEM = {}
 
 
 def orb_texture(index):
@@ -742,13 +752,38 @@ def orb_texture(index):
     if index in _ORB_TEXTURES:
         return _ORB_TEXTURES[index]
     tex = None
+    name = ORB_FILES[index]
+    folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]
     try:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", ORB_FILES[index])
-        if os.path.exists(path):
-            from kivy.core.image import Image as CoreImage
-            tex = CoreImage(path).texture
+        app = App.get_running_app()
+        if app is not None and getattr(app, "directory", None):
+            folders.append(app.directory)
     except Exception:
-        tex = None
+        pass
+    # Folders the user can reach with a file manager (Pydroid keeps main.py in a private folder).
+    for shared in ("/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/storage/emulated/0",
+                   "/storage/emulated/0/Documents", "/storage/emulated/0/Pydroid3", "/sdcard/Download"):
+        folders.append(shared)
+    tried = []
+    candidates = []
+    for folder in folders:
+        candidates.append(os.path.join(folder, "assets", name))
+        candidates.append(os.path.join(folder, name))
+    for path in candidates:
+        if path in tried:
+            continue
+        tried.append(path)
+        try:
+            if os.path.exists(path):
+                from kivy.core.image import Image as CoreImage
+                tex = CoreImage(path).texture
+                if tex is not None:
+                    break
+                _ORB_PROBLEM[index] = "файл хонда нашуд: " + path
+        except Exception as exc:
+            _ORB_PROBLEM[index] = "хатои хондан (%s): %s" % (type(exc).__name__, path)
+    if tex is None and index not in _ORB_PROBLEM:
+        _ORB_PROBLEM[index] = "файл ёфт нашуд: " + name + ". Се тасвири orb_*.png-ро ба папкаи Download (ё /storage/emulated/0/JARVIS) гузоред ва барномаро аз нав оғоз кунед."
     _ORB_TEXTURES[index] = tex
     return tex
 
@@ -1000,6 +1035,16 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R * 0.9, 303, 327), width=R * 0.035, cap="round")
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
 
+    def _note_missing_orb(self):
+        """Once per launch, say why the realistic orb is not shown (the drawn orb is used instead)."""
+        problem = _ORB_PROBLEM.get(self.theme_index)
+        if not problem or _ORB_PROBLEM.get("noted"):
+            return
+        _ORB_PROBLEM["noted"] = True
+        app = App.get_running_app()
+        if app is not None:
+            Clock.schedule_once(lambda dt: app.show_response("Тасвири орб истифода намешавад: " + problem), 2.0)
+
     def draw_photo(self, tex, size):
         """Draw the realistic orb image with a slow breathing motion that follows the voice level."""
         lv, t = self.level, self.clock_t
@@ -1050,6 +1095,7 @@ class AnimatedCore(Widget):
             if photo is not None:
                 self.draw_photo(photo, size)
                 return
+            self._note_missing_orb()
             if self.theme_index == 0:
                 self.draw_aura(cx, cy, size * 0.30, accent, accent2)
             elif self.theme_index == 1:
@@ -1362,6 +1408,73 @@ class IconGlassButton(GlassButton):
                 Line(points=[cx - k, cy - k, cx + k, cy + k], width=dp(1.6), cap="round")
                 Line(points=[cx - k, cy + k, cx + k, cy - k], width=dp(1.6), cap="round")
 
+# Pre-rendered icon masks (alpha only, zlib + base64): drawn as plain textures, which is safe
+# inside a ScrollView (line-based canvas icons left stray dots outside the chat area).
+ICON_SIZE = 96
+ICON_DATA = {
+    "dots": "eNrtmLENhDAMRRkgA7AAA9CmYAEWoE3BLjTZgwUyAVukYQI2iJQT3HFJfeI1p/8GeALHtmw3jRBCCCEEijGgvPV7zrtvIf145ItjRPR9yh9ST/hD/hIAfZcruuf9U+2fnvfPtX8Gsqf2AxlkUtEnosp88XukALZbv0G9Z33rV6wHDT4EP6jLix+xzlnO7uKZ/tFB+uWu34X5+tJ/kD+IxR+Jp637v0XDgwSI9tPxod8Xz0+6vvD+gPc38eew8xU9H8LzLTyf0/sFvR/R+x29n9L7NX0fwO8b9H0Gvy9dVUbex4QQQgghTl7ixYEk",
+    "copy": "eNrt2MEJgzAUgOFMUcFBdIWcPBVcwEuHcA4XUGdwAzfoIDl5KFikhxYq8fESQcL/3wKP75Qc8owhIiJKs+pxXJOr+WGV5AolX66yeqVvhf50ZX8evYX73pEaHz8lv3PLt/h++/f44/oT/rFfZ5/sWf559xMfHx8fHx9f5Ge+wv24/7uk/NtL5rdK39yfy07byM/RdUbr7zZvI1b5ZcHHv7zv3yiF+4Ku6vdCv1T6hRPxg3plmzeClXBliIiIEu0NWAHXCQ==",
+    "check": "eNrtmD9EhGEcx78N0ZAaoqHkRENpOG44Go6GuCEaoiGSdBEncUdqaIgikmiIhmiIhmiIhmhoSA2RpIZoSA1xw3HD8Q7Rrz/3e/SHnnjvvrX8Psv7vr/n8fnyeofv8wKGYRiGYRjG/9BcxbQP30uwwNOPyRtzXL3IEFcvz11UvchtI1UvcsDVi6yx9EW9Zjj6q35310fRRzClt4VOih5Y14fzGooeONTHHY4eTXc6WKTogYQbpSh6YMQNuyl6YF6nDy0UPbCt8yOOHtVnurJB0QPteV2boeiBXrc6EFLf4dUDk7ocxML5s349sKobruvL8f+oB/Y1YK+M9+PRo+FGA1ZCBaQCkZOIb0f8SQPSoQLqkr8VhUH3DSRJlWhW/bk2UsCmBpyyeumxBmyR/K2PGsCqpT3CraUYp9bSV5aItfSdXVotLVF7Saqljiinln5AqaWfIdTSr1S8ln7H1dJlkt/V0gvW8TVRicrlo1RLR3nn+4mcFKa5vz/sD5BhGIZhGMZf8AIu1A4D",
+    "speaker": "eNrtmE0oRUEUx49IWFAKCUkiFj6Tj8hHWUhYSCyUCLGxkGRFSjYKKykrFmJBkiILJUWxodiIQj42iBRFMpxzDe+963rcN0ep+e/+55z7qzt35tyZAdDS0tLS0tLSMqm5O0MRKba+wBxcFEJUKcHXvpGGXIP5b0HxUqQA34YkEeUSLaToZbLH+B4CiVTX+CqF9yM8xA8LC37oLsU3/DzCjwsrPiReUGLBA7rvvLDmQ94jZRps48PWxHd8qKDMiY9NfMKegT6y4kMD5fvs4XPODXynM7+1N/uzZokq4u3gSx8MfCM48ZFY81GURSWTNhctrtBKcOLnUbT4o2yEfInNRSuusQE48qktiJs0WRdyh37K5qI9JKrT+KwYiQBZ2YH23tsdMGXl1lEGfisaTPzgHUoNyAf9n9FWuuNvC7OWA8HMh7hTSiZJP4tuwg0+/Av8tEy6zP9sys5IW0cf5Pf8UbDgwxDl899dELmy3/L7wZIfdIWBQWkX0I39gP8Q/alAsOZDO00h6ZrQrf+Eb5E08WPpDWWbyERzrJIPG44jGInmSSm/y7HreNHbhKnkV2NkVbozdOkq+bkYOZBuE125Sn4MNR3p5tC1/Cc+9/hwf1/u+cm8vuz2B+b+xt2f//T/ovb/yP1/Z9+fcO+v/nh/yL6/Zd+fs58v2M9H7Oc79vMp+/ma/36A/X6D/X6G/X6J/X6M/X5PS0tLS0tL61/oFd0WXc0=",
+}
+_ICON_TEXTURES = {}
+
+
+def icon_texture(kind):
+    if kind in _ICON_TEXTURES:
+        return _ICON_TEXTURES[kind]
+    import base64
+    import zlib
+    tex = None
+    try:
+        alpha = zlib.decompress(base64.b64decode(ICON_DATA[kind]))
+        buf = bytearray(b"\xff\xff\xff\xff" * (ICON_SIZE * ICON_SIZE))
+        buf[3::4] = alpha
+        tex = Texture.create(size=(ICON_SIZE, ICON_SIZE), colorfmt="rgba")
+        tex.blit_buffer(bytes(buf), colorfmt="rgba", bufferfmt="ubyte")
+        tex.mag_filter = "linear"
+        tex.min_filter = "linear"
+    except Exception:
+        save_crash("Icon texture failed:\n" + traceback.format_exc())
+        tex = None
+    _ICON_TEXTURES[kind] = tex
+    return tex
+
+
+class FlatIconButton(Button):
+    """Icon-only flat button without any text. Kinds: dots, copy, check, speaker."""
+    def __init__(self, icon_kind="copy", icon_rgba=(1, 1, 1, 1), fill=0.0, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal = ""
+        self.background_down = ""
+        self.background_color = (0, 0, 0, 0)
+        self.icon_kind = icon_kind
+        self.icon_rgba = icon_rgba
+        with self.canvas:
+            self._fill_color = Color(1, 1, 1, fill)
+            self._fill_shape = Ellipse(pos=self.pos, size=self.size)
+            self._icon_color = Color(*icon_rgba)
+            self._icon_rect = Rectangle(texture=icon_texture(icon_kind), pos=self.pos, size=self.size)
+        self.bind(pos=self._place, size=self._place, state=self._tint)
+        self._place()
+
+    def _place(self, *_):
+        u = min(self.width, self.height)
+        pos = (self.center_x - u / 2, self.center_y - u / 2)
+        self._fill_shape.pos = pos
+        self._fill_shape.size = (u, u)
+        self._icon_rect.pos = pos
+        self._icon_rect.size = (u, u)
+
+    def _tint(self, *_):
+        r, g, b, a = self.icon_rgba
+        self._icon_color.rgba = (r, g, b, a * (0.55 if self.state == "down" else 1.0))
+
+    def set_kind(self, kind):
+        self.icon_kind = kind
+        self._icon_rect.texture = icon_texture(kind)
+
+
 class JarvisApp(App):
     def build(self):
         self.title = "JARVIS"
@@ -1503,8 +1616,8 @@ class JarvisApp(App):
 
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
-        menu_btn = IconGlassButton(icon_kind="dots", icon_rgba=hex_color(theme["text"]),
-                                   tint=tint, size_hint_x=None, width=dp(48), radius=24)
+        menu_btn = FlatIconButton(icon_kind="dots", icon_rgba=hex_color(theme["text"]), fill=0.10,
+                                  size_hint_x=None, width=dp(48))
         menu_btn.bind(on_release=self.show_menu)
         header.add_widget(title)
         header.add_widget(menu_btn)
@@ -1521,7 +1634,6 @@ class JarvisApp(App):
         chat_h = max(dp(160), min(dp(330), Window.height * 0.38))
         chat_panel = BoxLayout(orientation="vertical", padding=dp(10),
                                spacing=dp(4), size_hint_y=None, height=chat_h)
-        glass_style(chat_panel, tint, dp(18), fill=0.10, sheen=0.28, border=0.30)
         self.response_title = make_label(self.chat_title(), 10, theme["accent"], True,
                                          size_hint_y=None, height=dp(18))
         self.chat_scroll = ScrollView(do_scroll_x=False)
@@ -1551,7 +1663,7 @@ class JarvisApp(App):
                                  background_normal="", background_color=(0, 0, 0, 0),
                                  color=hex_color(theme["accent"]))
         self.attach_btn.bind(on_release=self.pick_attachment)
-        self.stop_speech_btn = Button(text="✕", font_size=dp(20), size_hint_x=None, width=dp(38),
+        self.stop_speech_btn = Button(text="\u00d7", font_size=dp(30), size_hint_x=None, width=dp(38),
                                       background_normal="", background_color=(0, 0, 0, 0),
                                       color=hex_color(theme["text"]))
         self.stop_speech_btn.bind(on_release=self.stop_speaking)
@@ -1600,7 +1712,7 @@ class JarvisApp(App):
         chat = chat or self.chats.current()
         return chat.get("title") or self.t("chat_default")
 
-    def make_bubble(self, role, text):
+    def make_bubble(self, role, text, full_text=None):
         theme = THEMES[self.theme_index]
         user = role == "user"
         accent = hex_color(theme["accent"])[:3]
@@ -1610,11 +1722,12 @@ class JarvisApp(App):
         else:
             tint, fill, who = (0.05, 0.07, 0.14), 0.55, "JARVIS"
             who_color = (accent[0], accent[1], accent[2], 1)
-        bubble = BoxLayout(orientation="vertical", size_hint=(0.86, None),
-                           padding=[dp(12), dp(9), dp(12), dp(9)], spacing=dp(2))
+        bubble = BoxLayout(orientation="vertical", size_hint=(0.86 if user else 0.97, None),
+                           padding=[dp(12), dp(9), dp(12), dp(9)] if user else [dp(4), dp(4), dp(4), dp(2)],
+                           spacing=dp(2))
         bubble.bind(minimum_height=bubble.setter("height"))
-        glass_style(bubble, tint, dp(14), fill=fill, sheen=0.25,
-                    border=0.30 if user else 0.55)
+        if user:
+            flat_style(bubble, (0.14, 0.40, 0.92, 0.85), dp(16))
         caption = Label(text=who, font_size=dp(10), bold=True, color=who_color,
                         halign="right" if user else "left", valign="middle",
                         size_hint_y=None, height=dp(14))
@@ -1626,6 +1739,20 @@ class JarvisApp(App):
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
         bubble.add_widget(label)
+        message = str(full_text if full_text is not None else text)
+        if not user and message.strip():
+            icon_color = (*hex_color(theme["text"])[:3], 0.8)
+            actions = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36), spacing=dp(4))
+            copy_btn = FlatIconButton(icon_kind="copy", icon_rgba=icon_color,
+                                      size_hint=(None, None), size=(dp(36), dp(36)))
+            read_btn = FlatIconButton(icon_kind="speaker", icon_rgba=icon_color,
+                                      size_hint=(None, None), size=(dp(36), dp(36)))
+            copy_btn.bind(on_release=lambda btn, m=message: self.copy_message(m, btn))
+            read_btn.bind(on_release=lambda btn, m=message: self.read_message(m))
+            actions.add_widget(copy_btn)
+            actions.add_widget(read_btn)
+            actions.add_widget(Widget())
+            bubble.add_widget(actions)
         row = BoxLayout(orientation="horizontal", size_hint_y=None)
         row.jarvis_label = label
         bubble.bind(height=lambda inst, h: setattr(row, "height", h))
@@ -1910,14 +2037,14 @@ class JarvisApp(App):
         else:
             self._speak_local_fallback(text)
 
-    def _speak_local_fallback(self, answer):
+    def _speak_local_fallback(self, answer, force=False):
         """Use the Android TTS engine selected in system settings if server speech fails."""
-        if not self.speak_enabled or not answer:
+        if (not self.speak_enabled and not force) or not answer:
             return
         try:
             self.tts.stop()
             def attempt(_dt=None, tries=0):
-                if not self.speak_enabled:
+                if not self.speak_enabled and not force:
                     return
                 try:
                     result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language),
@@ -1995,7 +2122,7 @@ class JarvisApp(App):
             if self.chat_placeholder:
                 self.chat_box.clear_widgets()
                 self.chat_placeholder = False
-            row = self.make_bubble("jarvis", "")
+            row = self.make_bubble("jarvis", "", full_text=answer)
             self.chat_box.add_widget(row)
             label = getattr(row, "jarvis_label", None)
             self.response_title.text = self.chat_title()
@@ -2037,6 +2164,37 @@ class JarvisApp(App):
         else:
             Clock.schedule_interval(tick, 0.04)
 
+    def copy_message(self, text, button=None):
+        try:
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(str(text))
+        except Exception:
+            save_crash("Copy failed:\n" + traceback.format_exc())
+            self.show_response("Нусхабардорӣ кор накард.")
+            return
+        if button is not None:
+            button.set_kind("check")
+            Clock.schedule_once(lambda dt: button.set_kind("copy"), 1.2)
+
+    def read_message(self, text):
+        """Read a reply aloud: the text goes to the server again (works even if auto-voice is off)."""
+        text = str(text).strip()[:4000]
+        if not text:
+            return
+        player = getattr(self, "_server_speech_player", None)
+        try:
+            playing = bool(player is not None and player.isPlaying())
+        except Exception:
+            playing = False
+        self.stop_speaking()
+        if playing:
+            return  # a second tap while it is reading stops it
+        if self.server_token.strip():
+            self.set_orb_state("speaking", min(4.0, 0.8 + len(text) * 0.02))
+            threading.Thread(target=self._request_server_speech, args=(text, True), daemon=True).start()
+        else:
+            self._speak_local_fallback(text, force=True)
+
     def stop_speaking(self, *_):
         try:
             self.tts.stop()
@@ -2052,7 +2210,7 @@ class JarvisApp(App):
             self._server_speech_player = None
         self.set_orb_state("idle")
 
-    def _request_server_speech(self, text):
+    def _request_server_speech(self, text, force=False):
         import ssl
         import tempfile
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
@@ -2085,11 +2243,11 @@ class JarvisApp(App):
                 pass
             save_crash("Server speech error: " + detail)
             Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
-            Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
         except Exception:
             save_crash("Server speech failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt: self._note_server_speech_error("network"), 0)
-            Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
 
     def _note_server_speech_error(self, detail):
         """Tell the user (once per launch) why the Edge voice was replaced by the phone voice."""
