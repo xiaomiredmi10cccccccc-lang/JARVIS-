@@ -782,8 +782,9 @@ def orb_texture(index):
                 _ORB_PROBLEM[index] = "файл хонда нашуд: " + path
         except Exception as exc:
             _ORB_PROBLEM[index] = "хатои хондан (%s): %s" % (type(exc).__name__, path)
-    if tex is None and index not in _ORB_PROBLEM:
-        _ORB_PROBLEM[index] = "файл ёфт нашуд: " + name + ". Се тасвири orb_*.png-ро ба папкаи Download (ё /storage/emulated/0/JARVIS) гузоред ва барномаро аз нав оғоз кунед."
+    # PNG orb artwork is optional: AnimatedCore draws a procedural orb when
+    # no image is found. Missing files are therefore not an application error.
+    # Keep genuine image-read errors in _ORB_PROBLEM for diagnostics.
     _ORB_TEXTURES[index] = tex
     return tex
 
@@ -1036,14 +1037,8 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
 
     def _note_missing_orb(self):
-        """Once per launch, say why the realistic orb is not shown (the drawn orb is used instead)."""
-        problem = _ORB_PROBLEM.get(self.theme_index)
-        if not problem or _ORB_PROBLEM.get("noted"):
-            return
-        _ORB_PROBLEM["noted"] = True
-        app = App.get_running_app()
-        if app is not None:
-            Clock.schedule_once(lambda dt: app.show_response("Тасвири орб истифода намешавад: " + problem), 2.0)
+        """PNG orb images are optional; the procedural orb is the normal fallback."""
+        return
 
     def draw_photo(self, tex, size):
         """Draw the realistic orb image with a slow breathing motion that follows the voice level."""
@@ -1112,9 +1107,10 @@ class GlassButton(Button):
         self.background_normal = ""
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
-        self.fill_base = 0.42 if active else 0.18
-        glass_style(self, tint, dp(radius), fill=self.fill_base, sheen=0.55,
-                    border=0.55 if active else 0.40)
+        self.fill_base = 0.25 if active else 0.10
+        # Softer theme-tinted glass: avoid the strong white shine seen in menus.
+        glass_style(self, tint, dp(radius), fill=self.fill_base, sheen=0.16,
+                    border=0.34 if active else 0.20)
         self.bind(state=self.state_changed)
 
     def state_changed(self, *_):
@@ -1524,8 +1520,8 @@ class JarvisApp(App):
         with self.root_layout.canvas.before:
             self.bg_color = Color(*hex_color(THEMES[self.theme_index]["background"]))
             self.bg_rect = Rectangle(pos=self.root_layout.pos, size=self.root_layout.size)
-            self.grad_color = Color(1, 1, 1, 1 if self.theme_index == 0 else 0)
-            self.grad_rect = Rectangle(texture=self.make_gradient(),
+            self.grad_color = Color(1, 1, 1, 1)
+            self.grad_rect = Rectangle(texture=self.make_gradient(THEMES[self.theme_index]),
                                        pos=self.root_layout.pos, size=(0, 0))
         self.root_layout.bind(pos=self.update_background, size=self.update_background)
         try:
@@ -1544,15 +1540,25 @@ class JarvisApp(App):
                 self.root_layout.add_widget(make_label(err[-1500:], 10, "#FF8080"))
         return self.root_layout
 
-    def make_gradient(self):
-        rows = 64
+    def make_gradient(self, theme=None):
+        # Match the glow to each theme's actual orb engine, not one generic blue.
+        # The glow rises from the bottom and fades smoothly toward the top.
+        theme = theme or THEMES[self.theme_index]
+        engine_colors = {
+            "AURA ORB": (0.24, 0.18, 0.82),       # blue-violet aura
+            "PARTICLE CORE": (0.08, 0.58, 0.68),   # cyan/teal particles
+            "GLASS ORB": (0.10, 0.36, 0.82),       # deep blue glass glow
+        }
+        rgb = engine_colors.get(theme.get("name"), hex_color(theme["accent"])[:3])
+        rows = 96
         data = bytearray()
         for i in range(rows):
-            t = i / (rows - 1.0)
-            r = int(60 + (2 - 60) * t)
-            g = int(130 + (6 - 130) * t)
-            b = int(255 + (20 - 255) * t)
-            a = int(235 * (1 - t) ** 1.6)
+            t = i / (rows - 1.0)  # bottom -> top
+            strength = (1.0 - t) ** 1.65
+            r = int(max(0, min(255, rgb[0] * 255 * strength)))
+            g = int(max(0, min(255, rgb[1] * 255 * strength)))
+            b = int(max(0, min(255, rgb[2] * 255 * strength)))
+            a = int(220 * strength)
             data.extend((r, g, b, a))
         tex = Texture.create(size=(1, rows), colorfmt="rgba")
         tex.blit_buffer(bytes(data), colorfmt="rgba", bufferfmt="ubyte")
@@ -1564,7 +1570,7 @@ class JarvisApp(App):
         self.bg_rect.pos = self.root_layout.pos
         self.bg_rect.size = self.root_layout.size
         self.grad_rect.pos = self.root_layout.pos
-        self.grad_rect.size = (self.root_layout.width, self.root_layout.height * 0.42)
+        self.grad_rect.size = (self.root_layout.width, self.root_layout.height * 0.44)
 
     def t(self, key):
         return TEXTS.get(self.language, TEXTS["tg"]).get(key, key)
@@ -1596,7 +1602,8 @@ class JarvisApp(App):
         theme = THEMES[self.theme_index]
         Window.clearcolor = hex_color(theme["background"])
         self.bg_color.rgba = hex_color(theme["background"])
-        self.grad_color.rgba = (1, 1, 1, 1 if self.theme_index == 0 else 0)
+        self.grad_color.rgba = (1, 1, 1, 1)
+        self.grad_rect.texture = self.make_gradient(theme)
 
     def make_button(self, text, callback, color=None, height=44):
         theme = THEMES[self.theme_index]
@@ -1627,13 +1634,16 @@ class JarvisApp(App):
                                        size_hint_y=None, height=dp(25))
         main.add_widget(self.status_label)
 
-        self.visual_area = BoxLayout(orientation="vertical", spacing=dp(8))
+        # Keep the animated engine visible, but reserve most of the screen for
+        # the conversation so long AI replies can be read like a normal chat.
+        self.visual_area = BoxLayout(orientation="vertical", spacing=dp(8),
+                                     size_hint_y=None,
+                                     height=min(dp(330), max(dp(205), Window.height * 0.33)))
         main.add_widget(self.visual_area)
         self.build_theme_layout()
 
-        chat_h = max(dp(160), min(dp(330), Window.height * 0.38))
         chat_panel = BoxLayout(orientation="vertical", padding=dp(10),
-                               spacing=dp(4), size_hint_y=None, height=chat_h)
+                               spacing=dp(4), size_hint_y=1)
         self.response_title = make_label(self.chat_title(), 10, theme["accent"], True,
                                          size_hint_y=None, height=dp(18))
         self.chat_scroll = ScrollView(do_scroll_x=False)
@@ -1647,11 +1657,11 @@ class JarvisApp(App):
 
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
-        glass_style(command_row, tint, dp(26), fill=0.16, sheen=0.50, border=0.50)
+        glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
         self.command_input = TextInput(
             hint_text=self.t("input"), multiline=False, size_hint_x=1,
             font_size=dp(15), foreground_color=hex_color(theme["text"]),
-            hint_text_color=(*hex_color(theme["text"])[:3], 0.7),
+            hint_text_color=(*hex_color(theme["accent"])[:3], 0.52),
             cursor_color=hex_color(theme["accent"]),
             background_normal="", background_active="",
             background_color=(0, 0, 0, 0),
@@ -1717,23 +1727,27 @@ class JarvisApp(App):
         user = role == "user"
         accent = hex_color(theme["accent"])[:3]
         if user:
-            tint, fill, who = (0.12, 0.45, 0.95), 0.60, "Шумо"
-            who_color = (0.80, 0.90, 1, 1)
+            tint, fill, who = accent, 0.20, "Шумо"
+            who_color = (accent[0], accent[1], accent[2], 1)
         else:
             tint, fill, who = (0.05, 0.07, 0.14), 0.55, "JARVIS"
             who_color = (accent[0], accent[1], accent[2], 1)
-        bubble = BoxLayout(orientation="vertical", size_hint=(0.86 if user else 0.97, None),
-                           padding=[dp(12), dp(9), dp(12), dp(9)] if user else [dp(4), dp(4), dp(4), dp(2)],
-                           spacing=dp(2))
+        # ChatGPT-like transcript: user messages appear in a distinct rounded
+        # accent bubble; JARVIS replies use the full available width on the
+        # dark background. Keep the animated engine area unchanged in size.
+        bubble = BoxLayout(orientation="vertical", size_hint=(None, None),
+                           padding=[dp(14), dp(11), dp(14), dp(11)] if user else [dp(12), dp(9), dp(12), dp(7)],
+                           spacing=dp(4))
         bubble.bind(minimum_height=bubble.setter("height"))
         if user:
-            flat_style(bubble, (0.14, 0.40, 0.92, 0.85), dp(16))
+            # User bubble follows the selected engine accent without a bright glow.
+            flat_style(bubble, (*accent, 0.20), dp(18))
         caption = Label(text=who, font_size=dp(10), bold=True, color=who_color,
                         halign="right" if user else "left", valign="middle",
                         size_hint_y=None, height=dp(14))
         caption.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         bubble.add_widget(caption)
-        label = Label(text=text, font_size=dp(13),
+        label = Label(text=text, font_size=dp(15),
                       color=(1, 1, 1, 1) if user else hex_color(theme["text"]),
                       halign="right" if user else "left", valign="top", size_hint_y=None)
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
@@ -1753,8 +1767,15 @@ class JarvisApp(App):
             actions.add_widget(read_btn)
             actions.add_widget(Widget())
             bubble.add_widget(actions)
-        row = BoxLayout(orientation="horizontal", size_hint_y=None)
+        row = BoxLayout(orientation="horizontal", size_hint=(1, None))
         row.jarvis_label = label
+        # Explicitly size each bubble from the full chat-row width. This avoids
+        # Kivy measuring assistant replies only as wide as their text texture.
+        def fit_bubble_width(instance, width):
+            target = width * (0.86 if user else 0.99)
+            bubble.width = max(dp(80), target)
+        row.bind(width=fit_bubble_width)
+        bubble.width = dp(300)
         bubble.bind(height=lambda inst, h: setattr(row, "height", h))
         if user:
             row.add_widget(Widget())
