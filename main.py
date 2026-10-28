@@ -736,7 +736,7 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
 def flat_style(widget, rgba, radius):
     """Plain rounded fill (no glass): used everywhere except the command input."""
     with widget.canvas.before:
-        Color(*rgba)
+        widget._flat_c = Color(*rgba)
         widget._flat = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[radius])
     widget.bind(pos=lambda w, v: setattr(w._flat, "pos", w.pos),
                 size=lambda w, v: setattr(w._flat, "size", w.size))
@@ -1107,17 +1107,16 @@ class GlassButton(Button):
         self.background_normal = ""
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
-        self.fill_base = 0.25 if active else 0.10
-        # Softer theme-tinted glass: avoid the strong white shine seen in menus.
-        glass_style(self, tint, dp(radius), fill=self.fill_base, sheen=0.16,
-                    border=0.34 if active else 0.20)
+        # Flat style: plain tinted fill, no glass sheen/border (glass stays only on the command input).
+        self.fill_base = 0.26 if active else 0.12
+        flat_style(self, (tint[0], tint[1], tint[2], self.fill_base), dp(radius))
         self.bind(state=self.state_changed)
 
     def state_changed(self, *_):
-        fc = getattr(self, "_g_fillc", None)
+        fc = getattr(self, "_flat_c", None)
         if fc is not None:
             t = self.tint_rgb
-            fc.rgba = (t[0], t[1], t[2], self.fill_base + (0.18 if self.state == "down" else 0.0))
+            fc.rgba = (t[0], t[1], t[2], self.fill_base + (0.16 if self.state == "down" else 0.0))
 
 class SendWaveButton(Button):
     def __init__(self, tint_rgb=(0.3, 0.6, 1.0), icon_rgba=(1, 1, 1, 1), **kwargs):
