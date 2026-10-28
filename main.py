@@ -1650,6 +1650,14 @@ class JarvisApp(App):
         self.chat_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
         self.chat_box.bind(minimum_height=self.chat_box.setter("height"))
         self.chat_scroll.add_widget(self.chat_box)
+        # A narrow background-colored overlay creates a real visual fade at
+        # the viewport edges. Because it is drawn above the ScrollView content,
+        # it affects every part of a message frame that crosses the edge, while
+        # content away from the edge and the command row remain untouched.
+        self._init_chat_fade_overlay(theme)
+        self.chat_scroll.bind(scroll_y=self.update_chat_fades,
+                              pos=self.update_chat_fades,
+                              size=self.update_chat_fades)
         chat_panel.add_widget(self.response_title)
         chat_panel.add_widget(self.chat_scroll)
         main.add_widget(chat_panel)
@@ -1785,8 +1793,52 @@ class JarvisApp(App):
             row.add_widget(Widget())
         return row
 
+    def _init_chat_fade_overlay(self, theme):
+        """Create a narrow fade overlay clipped to the visible chat viewport.
+
+        The overlay is background-colored, so it visually dissolves whatever
+        part of a message frame reaches the top/bottom edge. It does not change
+        the alpha of the message Label or fade the entire message.
+        """
+        bg = hex_color(theme["background"])
+        self._chat_fade_rects = []
+        self._chat_fade_colors = []
+        # Twelve half-dp strips on each edge create a smoother, narrow fade.
+        # The edge is covered most strongly; each strip inward is lighter.
+        with self.chat_scroll.canvas.after:
+            for i in range(24):
+                layer = i % 12
+                alpha = 0.88 * (1.0 - (layer / 12.0))
+                c = Color(bg[0], bg[1], bg[2], alpha)
+                r = Rectangle(pos=(0, 0), size=(0, 0))
+                self._chat_fade_colors.append(c)
+                self._chat_fade_rects.append(r)
+        self.update_chat_fades()
+
+    def update_chat_fades(self, *_):
+        """Position the edge-fade strips without changing message opacity."""
+        if not getattr(self, "_chat_fade_rects", None):
+            return
+        x, y = self.chat_scroll.pos
+        w, h = self.chat_scroll.size
+        strip_h = dp(0.5)
+        for i, rect in enumerate(self._chat_fade_rects):
+            layer = i % 12
+            if i < 12:
+                # Top edge: strongest strip at the very top.
+                rect.pos = (x, y + h - strip_h * (layer + 1))
+            else:
+                # Bottom edge: strongest strip at the very bottom.
+                rect.pos = (x, y + strip_h * layer)
+            rect.size = (w, strip_h)
+        # The canvas overlay moves with the ScrollView and stays within its
+        # visible bounds; command controls are outside this viewport.
+
     def scroll_chat_down(self):
-        Clock.schedule_once(lambda dt: setattr(self.chat_scroll, "scroll_y", 0), 0.15)
+        def finish_scroll(_dt):
+            self.chat_scroll.scroll_y = 0
+            self.update_chat_fades()
+        Clock.schedule_once(finish_scroll, 0.15)
 
     def render_chat(self):
         self.chat_box.clear_widgets()
@@ -1799,10 +1851,12 @@ class JarvisApp(App):
         for m in messages:
             self.chat_box.add_widget(self.make_bubble(m["role"], m["text"]))
         self.response_title.text = self.chat_title(chat)
+        Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.2)
         self.scroll_chat_down()
 
     def append_bubble(self, role, text):
         self.chat_box.add_widget(self.make_bubble(role, text))
+        Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.1)
         self.scroll_chat_down()
 
     def add_chat_message(self, chat_id, role, text):
