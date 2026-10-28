@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+    # -*- coding: utf-8 -*-
 """
 JARVIS Android Assistant
 Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
@@ -25,7 +25,7 @@ from kivy.metrics import dp
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
-                           RoundedRectangle, Triangle)
+                           RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate)
 from kivy.graphics.texture import Texture
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -733,6 +733,26 @@ def glass_style(widget, tint, radius, fill=0.18, sheen=0.5, border=0.4):
         except Exception:
             pass
 
+ORB_FILES = {0: "orb_aura.png", 1: "orb_particle.png", 2: "orb_glass.png"}
+_ORB_TEXTURES = {}
+
+
+def orb_texture(index):
+    """Realistic orb image for a theme, or None (then the drawn orb is used)."""
+    if index in _ORB_TEXTURES:
+        return _ORB_TEXTURES[index]
+    tex = None
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", ORB_FILES[index])
+        if os.path.exists(path):
+            from kivy.core.image import Image as CoreImage
+            tex = CoreImage(path).texture
+    except Exception:
+        tex = None
+    _ORB_TEXTURES[index] = tex
+    return tex
+
+
 class AnimatedCore(Widget):
     def __init__(self, theme_index=0, **kwargs):
         super().__init__(**kwargs)
@@ -980,6 +1000,27 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R * 0.9, 303, 327), width=R * 0.035, cap="round")
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
 
+    def draw_photo(self, tex, size):
+        """Draw the realistic orb image with a slow breathing motion that follows the voice level."""
+        lv, t = self.level, self.clock_t
+        breathe = 1 + 0.025 * math.sin(t * 0.9) + 0.07 * lv
+        if self.theme_index == 2:
+            w = size * 0.95 * breathe
+            h = w * tex.height / tex.width
+            sphere_y = self.y + self.height * 0.56 + 0.012 * size * math.sin(t * 0.8)
+            Color(1, 1, 1, 0.92 + 0.08 * lv)
+            # the sphere centre sits 500/1280 of the way down the image
+            Rectangle(texture=tex, pos=(self.center_x - w / 2, sphere_y - 0.609 * h), size=(w, h))
+            return
+        side = size * 1.3 * breathe
+        cx, cy = self.center
+        angle = 7 * math.sin(t * 0.35) if self.theme_index == 0 else (t * 8) % 360
+        PushMatrix()
+        Rotate(angle=angle, origin=(cx, cy))
+        Color(1, 1, 1, 0.9 + 0.1 * lv)
+        Rectangle(texture=tex, pos=(cx - side / 2, cy - side / 2), size=(side, side))
+        PopMatrix()
+
     def redraw(self, *_):
         try:
             self._redraw_impl()
@@ -1005,6 +1046,10 @@ class AnimatedCore(Widget):
         cx, cy = self.center
         size = min(self.width, self.height)
         with self.canvas:
+            photo = orb_texture(self.theme_index)
+            if photo is not None:
+                self.draw_photo(photo, size)
+                return
             if self.theme_index == 0:
                 self.draw_aura(cx, cy, size * 0.30, accent, accent2)
             elif self.theme_index == 1:
