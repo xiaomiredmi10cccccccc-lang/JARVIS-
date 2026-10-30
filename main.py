@@ -258,72 +258,6 @@ class SpeechRecognizer(object):
             except Exception:
                 pass
 
-class SpeechSynthesizer(object):
-    def __init__(self):
-        self._tts = None
-
-    def is_supported(self):
-        return android_available()
-
-    def _engine(self):
-        if self._tts is None:
-            from jnius import autoclass
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-            self._tts = TextToSpeech(PythonActivity.mActivity, None)
-        return self._tts
-
-    def warm_up(self):
-        if android_available():
-            try:
-                self._engine()
-            except Exception:
-                pass
-
-    def speak(self, text, lang="ru", pitch=1.0):
-        if not android_available():
-            raise VoiceUnavailable("Speech synthesis works only on Android.")
-        try:
-            from jnius import autoclass
-            Locale = autoclass("java.util.Locale")
-            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-            tts = self._engine()
-            result = "ok"
-            try:
-                tts.setPitch(float(pitch))
-            except Exception:
-                pass
-            code = tts.setLanguage(Locale(lang))
-            if code < 0 and lang == "tg":
-                code = tts.setLanguage(Locale("ru"))
-                result = "fallback"
-            if code < 0:
-                raise VoiceUnavailable("No voice for this language is installed.")
-            speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis")
-            if speak_code != 0:
-                return "starting"
-            return result
-        except VoiceUnavailable:
-            raise
-        except Exception as exc:
-            raise VoiceUnavailable(str(exc))
-
-    def stop(self):
-        try:
-            if self._tts is not None:
-                self._tts.stop()
-        except Exception:
-            pass
-
-    def shutdown(self):
-        try:
-            if self._tts is not None:
-                self._tts.stop()
-                self._tts.shutdown()
-        except Exception:
-            pass
-        self._tts = None
-
 class LocalAccountService(object):
     def is_configured(self):
         return False
@@ -401,7 +335,6 @@ VOICES = ("JARVIS Classic", "Aura")
 VOICE_LABELS = {"JARVIS Classic": "Мардона / Мужской / Male", "Aura": "Занона / Женский / Female"}
 # Server voice profile and Android TTS pitch (only used if the server voice fails).
 VOICE_PROFILE_IDS = {"JARVIS Classic": "classic", "Aura": "aura"}
-VOICE_LOCAL_PITCH = {"JARVIS Classic": 0.8, "Aura": 1.1}
 
 TEXTS = {
     "tg": {
@@ -2740,15 +2673,12 @@ class JarvisApp(App):
         self.load_settings()
         self.account_service = get_service(self.user_data_dir)
         self.speech = SpeechRecognizer(self)
-        self.tts = SpeechSynthesizer()
         try:
             from android import activity
             activity.bind(on_activity_result=self.on_activity_result)
         except Exception:
             pass
         self._attachment_pending = False
-        self.tts_fallback_noted = False
-        self.tts_error_noted = False
         self.open_popups = set()
         self.app_paused = False
         self._mic_timeout = None
@@ -3179,8 +3109,10 @@ class JarvisApp(App):
             buffer = autoclass("byte[]") if False else None
             # Read in bounded chunks without needing filesystem permission.
             chunk = autoclass("byte[]") if False else None
-            from jnius import cast, jarray, jbyte
-            buf = jarray(jbyte)(8192)
+            from jnius import cast
+            Byte = autoclass("java.lang.Byte")
+            JavaArray = autoclass("java.lang.reflect.Array")
+            buf = cast("[B", JavaArray.newInstance(Byte.TYPE, 8192))
             total = 0
             while True:
                 count = stream.read(buf)
@@ -3358,41 +3290,13 @@ class JarvisApp(App):
         popup.open()
 
     def speak_answer(self, answer):
-        """Prefer server-generated speech; fall back to Android TTS if the server is unavailable."""
-        if not self.speak_enabled or not answer:
+        """Use server-generated speech only; keep the written answer available otherwise."""
+        if not self.speak_enabled or not answer or not self.server_token.strip():
             return
         text = str(answer).strip()[:4000]
-        if not text:
-            return
-        # Server speech/network work must run off the Kivy UI thread.
-        if self.server_token.strip():
+        if text:
             threading.Thread(target=self._request_server_speech,
                              args=(text,), daemon=True).start()
-        else:
-            self._speak_local_fallback(text)
-
-    def _speak_local_fallback(self, answer, force=False):
-        """Use the Android TTS engine selected in system settings if server speech fails."""
-        if (not self.speak_enabled and not force) or not answer:
-            return
-        try:
-            self.tts.stop()
-            def attempt(_dt=None, tries=0):
-                if not self.speak_enabled and not force:
-                    return
-                try:
-                    result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language),
-                                           pitch=VOICE_LOCAL_PITCH.get(self.voice_profile, 1.0))
-                    if result == "starting" and tries < 8:
-                        Clock.schedule_once(lambda dt: attempt(dt, tries + 1), 0.5)
-                except Exception as exc:
-                    save_crash("Local speech fallback failed: " + str(exc))
-                    if not self.tts_error_noted:
-                        self.tts_error_noted = True
-                        self.show_response("Овози сервер дастрас нест ва овози маҳаллӣ низ кор накард. Танзимоти Text-to-Speech-ро санҷед.")
-            Clock.schedule_once(attempt, 0.15)
-        except Exception:
-            save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
 
     def deliver_answer(self, chat_id, answer):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
@@ -3445,7 +3349,6 @@ class JarvisApp(App):
             def fallback(dt):
                 self.add_chat_message(chat_id, "jarvis", answer)
                 self._note_server_speech_error(detail)
-                self._speak_local_fallback(text)
             Clock.schedule_once(fallback, 0)
 
     def _start_synced_answer(self, chat_id, answer, text, path, words):
@@ -3527,13 +3430,9 @@ class JarvisApp(App):
             self.set_orb_state("speaking", min(4.0, 0.8 + len(text) * 0.02))
             threading.Thread(target=self._request_server_speech, args=(text, True), daemon=True).start()
         else:
-            self._speak_local_fallback(text, force=True)
+            self._note_server_speech_error("server token missing")
 
     def stop_speaking(self, *_):
-        try:
-            self.tts.stop()
-        except Exception:
-            pass
         player = getattr(self, "_server_speech_player", None)
         if player is not None:
             try:
@@ -3577,19 +3476,17 @@ class JarvisApp(App):
                 pass
             save_crash("Server speech error: " + detail)
             Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
-            Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
         except Exception:
             save_crash("Server speech failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt: self._note_server_speech_error("network"), 0)
-            Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
 
     def _note_server_speech_error(self, detail):
-        """Tell the user (once per launch) why the Edge voice was replaced by the phone voice."""
+        """Tell the user (once per launch) when server-generated speech is unavailable."""
         if getattr(self, "server_speech_error_noted", False):
             return
         self.server_speech_error_noted = True
         try:
-            self.show_response("Овози Edge дастрас нест (%s). Овози телефон истифода мешавад." % detail)
+            self.show_response("Овози сервер дастрас нест (%s). Ҷавоб ҳамчун матн нишон дода мешавад." % detail)
         except Exception:
             pass
 
@@ -3623,7 +3520,6 @@ class JarvisApp(App):
 
     def toggle_speak(self, *_):
         self.speak_enabled = not self.speak_enabled
-        self.tts_error_noted = False
         self.save_settings()
         self.open_section("voice")
 
@@ -3981,7 +3877,6 @@ class JarvisApp(App):
 
     def on_stop(self):
         self.save_settings()
-        self.tts.shutdown()
 
 if __name__ == "__main__":
     JarvisApp().run()
