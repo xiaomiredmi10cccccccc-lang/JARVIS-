@@ -3109,10 +3109,9 @@ class JarvisApp(App):
             buffer = autoclass("byte[]") if False else None
             # Read in bounded chunks without needing filesystem permission.
             chunk = autoclass("byte[]") if False else None
-            from jnius import cast
-            Byte = autoclass("java.lang.Byte")
-            JavaArray = autoclass("java.lang.reflect.Array")
-            buf = cast("[B", JavaArray.newInstance(Byte.TYPE, 8192))
+            # PyJNIus converts Python bytearray to Java byte[] automatically.
+            # This avoids incompatible Java reflection/cast conversions.
+            buf = bytearray(8192)
             total = 0
             while True:
                 count = stream.read(buf)
