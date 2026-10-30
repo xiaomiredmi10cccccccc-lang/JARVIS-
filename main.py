@@ -839,6 +839,16 @@ $HEADER$
 uniform float u_time;
 uniform float u_phase;
 uniform float u_level;
+uniform float u_think;
+uniform float u_gather;
+uniform float u_ofac;
+uniform float u_flash;
+uniform float u_listen;
+uniform float u_speak;
+uniform float u_cycles;
+uniform float u_orbit;
+uniform float u_age;
+uniform vec4 u_clip;
 
 float hash31(vec3 p) {
     p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
@@ -883,11 +893,14 @@ vec3 rotX(vec3 v, float a) {
 }
 
 void main() {
-    vec2 p = (tex_coord0 - 0.5) * 2.0;
+    vec2 p = (tex_coord0 - 0.5) * 2.0 * 2.32;   // sphere radius 0.58 as before; the quad is 4x larger for the surroundings
     float r = length(p);
     float R = 0.58;
     float lv = clamp(u_level, 0.0, 1.0);
     float ph = u_phase;
+    float ofac = max(u_ofac, 0.04);
+    vec2 spo = p / R;
+    float rso = r / R;
     vec3 cCyan = vec3(0.35, 0.85, 1.0);
     vec3 cBlue = vec3(0.14, 0.38, 1.0);
     vec3 cViol = vec3(0.62, 0.32, 1.0);
@@ -916,7 +929,7 @@ void main() {
         float speed = (k == 0) ? 0.55 : -0.38;
         float ang = atan(p.y, p.x);
         // inverse of the tilted ellipse: take the point on the ellipse nearest in angle
-        float ra = R * (1.35 + 0.18 * float(k));
+        float ra = R * (1.35 + 0.18 * float(k)) * ofac;   // the orbiting sparks fly in and burst out with the energy
         float rb = ra * (0.30 + 0.12 * float(k));
         float ca = cos(tilt); float sa = sin(tilt);
         vec2 q = vec2(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
@@ -943,7 +956,12 @@ void main() {
         vec2 sp = p / R;
         float z = sqrt(max(1.0 - dot(sp, sp), 0.0));
         vec3 n = vec3(sp, z);
-        vec3 q = rotX(rotY(n, ph * 0.22), 0.35);
+        // the energy pattern can shrink to the core and burst outwards ("answer ready")
+        vec2 spv = sp / ofac;
+        float zv = sqrt(max(1.0 - dot(spv, spv), 0.0));
+        vec3 nv = vec3(spv, zv);
+        float vm = smoothstep(1.0, 0.90, length(spv));
+        vec3 q = rotX(rotY(nv, ph * 0.22 + u_think * 0.9 * sin(ph * 0.9) * nv.y), 0.35);
 
         // deep glassy body
         float lam = clamp(dot(n, normalize(vec3(-0.4, -0.5, 0.75))), 0.0, 1.0);
@@ -953,7 +971,7 @@ void main() {
         vec3 w = q * 1.55 + vec3(0.0, ph * 0.10, 0.0);
         float f1 = fbm(w + 1.8 * vec3(fbm(w + ph * 0.11), fbm(w + 3.1 - ph * 0.09), fbm(w + 5.2)));
         // counter-rotating second layer
-        vec3 q2 = rotY(rotX(n, -0.5), -ph * 0.34);
+        vec3 q2 = rotY(rotX(nv, -0.5), -ph * 0.34);
         float f2 = fbm(q2 * 2.1 + 1.3 * vec3(fbm(q2 * 1.2 + ph * 0.15), 0.0, fbm(q2 + 4.0)));
 
         float wdt = 0.020 + 0.014 * lv;
@@ -962,7 +980,7 @@ void main() {
         float rib3 = exp(-pow((f2 - 0.47) / (wdt * 1.1), 2.0));
         float glowF = smoothstep(0.30, 0.75, f1);
 
-        float vis = 0.25 + 1.2 * pow(1.0 - z, 1.1);
+        float vis = 0.25 + 1.2 * pow(1.0 - zv, 1.1);
         vec3 e = vec3(0.0);
         e += cCyan * rib1 * 1.1;
         e += cViol * rib2 * 0.95;
@@ -978,6 +996,9 @@ void main() {
         sparkle *= smoothstep(0.5, 0.0, length(fract(sq) - 0.5));
         e += vec3(0.7, 0.9, 1.0) * sparkle * (0.4 + 0.8 * lv);
 
+        e *= vm;
+        // bright core while the energy gathers and when it bursts
+        e += vec3(0.85, 0.93, 1.0) * exp(-dot(sp, sp) * (12.0 - 8.0 * u_gather)) * (0.9 * u_gather + 0.9 * u_flash + 0.25 * lv * u_speak);
         // Fresnel rim and bright outline
         float fres = pow(1.0 - z, 2.4);
         e += cBlue * fres * 0.75 + cViol * pow(1.0 - z, 5.0) * (0.5 + 0.5 * sin(ph * 0.5 + 3.0 * sp.x)) * 0.8;
@@ -992,8 +1013,42 @@ void main() {
         alpha = max(alpha, edge);
     }
 
+    // ================= surroundings: soft glowing rings, waves, sparks (all in the shader) =================
+    vec3 fx = vec3(0.0);
+    float fxa = 0.0;
+    // answer burst: a bright shock ring (plane + sphere) and radial sparks
+    float fl = u_flash;
+    float eq = length(vec2(spo.x, spo.y / 0.22));
+    float xs = (eq - (1.1 + 0.9 * (1.0 - fl))) / 0.05;
+    float ps = (xs > 0.0) ? exp(-xs * xs * 9.0) : exp(xs * 0.7);
+    fx += vec3(1.0, 0.96, 0.9) * ps * fl * 0.9;
+    float xr = (rso - (1.1 + 0.9 * (1.0 - fl))) / 0.05;
+    float pr = (xr > 0.0) ? exp(-xr * xr * 9.0) : exp(xr * 0.7);
+    fx += vec3(0.85, 0.93, 1.0) * pr * fl * 0.7;
+    if (u_age >= 0.0) {
+        float aang = atan(spo.y, spo.x);
+        float cells = 64.0;
+        float cf = (aang + 3.14159265) / 6.2831853 * cells;
+        float cid = floor(cf);
+        float rnd = hash31(vec3(cid, 3.0, 7.0));
+        float spd = 0.8 + 0.9 * hash31(vec3(cid, 11.0, 5.0));
+        float dcur = 0.2 + spd * 1.4 * (1.0 - exp(-2.5 * u_age));
+        float inside = smoothstep(dcur * 0.86, dcur * 0.97, rso) * smoothstep(dcur * 1.03, dcur * 0.97, rso);
+        float side = abs(fract(cf) - 0.5) * 6.2831853 / cells * rso;
+        float spark = inside * smoothstep(0.008, 0.0, side) * step(0.45, rnd) * max(0.0, 1.0 - u_age / 1.8);
+        fx += vec3(0.9, 0.96, 1.0) * spark * 1.6;
+    }
+    // keep every effect inside the widget so it never paints over neighbouring UI
+    float cm = smoothstep(u_clip.x, u_clip.x + 0.15, spo.x) * smoothstep(u_clip.y, u_clip.y - 0.15, spo.x)
+             * smoothstep(u_clip.z, u_clip.z + 0.15, spo.y) * smoothstep(u_clip.w, u_clip.w - 0.15, spo.y);
+    fx *= cm;
+    col += fx;
+    alpha = max(alpha, clamp(max(max(fx.r, fx.g), fx.b) * 1.6, 0.0, 1.0));
+
     col = clamp(col, 0.0, 1.0);
-    gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0)) * frag_color;
+    float cmAll = smoothstep(u_clip.x, u_clip.x + 0.15, spo.x) * smoothstep(u_clip.y, u_clip.y - 0.15, spo.x)
+                * smoothstep(u_clip.z, u_clip.z + 0.15, spo.y) * smoothstep(u_clip.w, u_clip.w - 0.15, spo.y);
+    gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0) * cmAll) * frag_color;
 }
 """
 
@@ -1362,7 +1417,8 @@ class AuraShaderView(Widget):
         super().__init__(**kwargs)
         self.ok = False
         try:
-            self.canvas.shader.fs = frag or AURA_FRAG
+            self.src = frag or AURA_FRAG
+            self.canvas.shader.fs = self.src
             self.ok = bool(getattr(self.canvas.shader, "success", True))
         except Exception:
             self.ok = False
@@ -1380,7 +1436,9 @@ class AuraShaderView(Widget):
         self.canvas["u_phase"] = float(phase)
         self.canvas["u_level"] = float(level)
         for key, value in extra.items():
-            self.canvas[key] = float(value)
+            # only set uniforms the shader really declares (the compiler drops unused ones)
+            if ("uniform float " + key + ";") in getattr(self, "src", ""):
+                self.canvas[key] = float(value)
 
 
 class AnimatedCore(Widget):
@@ -1398,6 +1456,12 @@ class AnimatedCore(Widget):
                 rr = math.sqrt(1 - y * y)
                 t = k * 2.39996
                 self.fib.append((math.cos(t) * rr, y, math.sin(t) * rr))
+            # per-particle constants for the "answer ready" sequence: stagger, burst speed, swirl side, angle
+            seq_rnd = random.Random(5)
+            self.pd = [seq_rnd.random() for _ in range(n)]
+            self.pk = [seq_rnd.uniform(1.3, 2.7) for _ in range(n)]
+            self.psgn = [1.0 if seq_rnd.random() < 0.5 else -1.0 for _ in range(n)]
+            self.pa = [seq_rnd.uniform(0.0, math.pi * 2) for _ in range(n)]
             # orbiting dust on three tilted rings: (ring, start angle, speed, size)
             orb_rnd = random.Random(21)
             self.orbit = []
@@ -1576,23 +1640,58 @@ class AnimatedCore(Widget):
             z2 = Y * ts + z1 * tc
             return cx + x1 * R, cy + y1 * R, z2
 
-        Color(*accent, 0.14 + 0.12 * lv + 0.3 * flash)
-        for k in range(1, 13):
-            y = -1 + 2 * k / 13.0
-            r0 = math.sqrt(1 - y * y)
-            pts = []
-            for n in range(37):
-                t = n / 36.0 * math.pi * 2
-                px, py, _z = shell(math.cos(t) * r0, y, math.sin(t) * r0)
-                pts.extend((px, py))
-            Line(points=pts, width=dp(0.5))
+        rt = getattr(self, "ready_t", None)
+        seq = rt is not None
+        line_k = 1.0
+        if seq:                              # the wire grid dissolves while the particles gather, then returns
+            line_k = (1.0 - rt / 2.0) if rt < 2.0 else (0.0 if rt < 3.0 else min(1.0, (rt - 3.0) / 0.95))
+        if line_k > 0.02:
+            Color(*accent, (0.14 + 0.12 * lv + 0.3 * flash) * line_k)
+            for k in range(1, 13):
+                y = -1 + 2 * k / 13.0
+                r0 = math.sqrt(1 - y * y)
+                pts = []
+                for n in range(37):
+                    t = n / 36.0 * math.pi * 2
+                    px, py, _z = shell(math.cos(t) * r0, y, math.sin(t) * r0)
+                    pts.extend((px, py))
+                Line(points=pts, width=dp(0.5))
         proj = []
         near, mid, far, hot = [], [], [], []
         scan = math.sin(p * (0.6 if state == "idle" else 1.6))
-        for x, y, z in self.fib:
+        for idx, (x, y, z) in enumerate(self.fib):
             px, py, z2 = shell(x, y, z)
+            if seq:
+                d, kk, sg = self.pd[idx], self.pk[idx], self.psgn[idx]
+                vx, vy = px - cx, py - cy
+                if rt < 2.0:
+                    # 1) every particle spirals into the centre, each with its own small delay
+                    u = min(1.0, max(0.0, (rt - 0.5 * d) / 1.5))
+                    f = 1.0 - 0.97 * u * u
+                    ang = u * u * 2.4 * sg
+                    ca, sa = math.cos(ang), math.sin(ang)
+                    px, py = cx + (vx * ca - vy * sa) * f, cy + (vx * sa + vy * ca) * f
+                else:
+                    vlen = math.hypot(vx, vy)
+                    if vlen < 0.08 * R:
+                        dx, dy = math.cos(self.pa[idx]), math.sin(self.pa[idx])
+                    else:
+                        dx, dy = vx / vlen, vy / vlen
+                    if rt < 2.35:
+                        # 2) burst: each particle flies out along its own direction
+                        ub = (rt - 2.0) / 0.35
+                        dist = R * (0.03 + kk * (1.0 - (1.0 - ub) ** 3))
+                        px, py = cx + dx * dist, cy + dy * dist
+                    else:
+                        # 3) each particle curves back to its own place; the last one lands exactly at 4.0 s
+                        ur = min(1.0, max(0.0, (rt - 2.35 - 0.4 * d) / 1.2))
+                        sm = ur * ur * (3 - 2 * ur)
+                        ex, ey = cx + dx * R * (0.03 + kk), cy + dy * R * (0.03 + kk)
+                        bend = R * 0.30 * sg * math.sin(math.pi * sm)
+                        px = ex + (px - ex) * sm - dy * bend
+                        py = ey + (py - ey) * sm + dx * bend
             proj.append((px, py, z2))
-            if abs(y - scan) < 0.045:
+            if not seq and abs(y - scan) < 0.045:
                 if z2 > -0.2:
                     hot.extend((px, py))
             if z2 > 0.35:
@@ -1602,9 +1701,11 @@ class AnimatedCore(Widget):
             else:
                 far.extend((px, py))
         # web of links between neighbouring points on the near side
-        Color(*accent, 0.10 + 0.10 * lv + 0.25 * flash)
+        Color(*accent, (0.10 + 0.10 * lv + 0.25 * flash) * line_k)
         n_pts = len(proj)
         for i in range(0, n_pts, 5):
+            if line_k <= 0.02:
+                break
             a = proj[i]
             b = proj[(i + 34) % n_pts]
             if a[2] > 0.25 and b[2] > 0.25:
@@ -1650,11 +1751,18 @@ class AnimatedCore(Widget):
         radii = (1.28, 1.46, 1.64)
         front, back = [], []
         ca_y, sa_y = math.cos(rot * 0.5), math.sin(rot * 0.5)
+        if rt is None:
+            dust_scatter = 0.0
+        elif rt < 2.3:
+            dust_scatter = 1.0
+        else:
+            _u = min(1.0, (rt - 2.3) / 1.6)
+            dust_scatter = 1.0 - _u * _u * (3 - 2 * _u)   # fades to 0, so nothing jumps when the sequence ends
         for ring, a0, sp, sz in self.orbit:
             # thinking: every dot wobbles, so each ring twists like a rope
             a = a0 + orb_ang * sp * (1.0 + 0.35 * ring) + tw * 0.9 * math.sin(a0 * 3 + p * 2.6)
             tilt = tilts[ring] + tw * 0.55 * math.sin(p * 1.4 + ring * 2.0 + a0)
-            f = ofac * ((0.75 + 0.5 * sz) if burst else 1.0)
+            f = ofac * (1.0 + ((0.75 + 0.5 * sz) - 1.0) * dust_scatter)
             if rt is not None and rt < 2.0:
                 a += gather * 4.0 * sp          # spiral inward while gathering
             rad = radii[ring] * f * (1 + 0.10 * tw * math.sin(a0 * 5 + p * 3.1))
@@ -1744,7 +1852,8 @@ class AnimatedCore(Widget):
             rt = getattr(self, "ready_t", None)
             age = (rt - 2.0) if (rt is not None and 2.0 <= rt < 3.8) else -1.0
             clip = (-(cx - self.x) / R, (self.right - cx) / R, -(cy - self.y) / R, (self.top - cy) / R)
-            view.canvas["u_clip"] = tuple(float(v) for v in clip)
+            if "uniform vec4 u_clip;" in getattr(view, "src", ""):
+                view.canvas["u_clip"] = tuple(float(v) for v in clip)
             view.update(self.clock_t, self.phase, min(1.0, lv + 0.08 * getattr(self, "pulse", 0.0)),
                         u_think=getattr(self, "think_w", 0.0), u_gather=gather, u_ofac=ofac,
                         u_flash=getattr(self, "flash", 0.0), u_listen=self._listen_w,
@@ -2045,6 +2154,29 @@ class AnimatedCore(Widget):
         Rectangle(texture=tex, pos=(cx - side / 2, cy - side / 2), size=(side, side))
         PopMatrix()
 
+    def shader_extras(self, view, cx, cy, R):
+        """Per-frame uniforms shared by the state-aware shader orbs (think/listen/speak/ready)."""
+        state = getattr(self, "state_now", "idle")
+        ofac, gather, _burst = self.ready_factor()
+        lv = self.level
+        self._listen_w = getattr(self, "_listen_w", 0.0)
+        self._listen_w += ((1.0 if state == "listening" else 0.0) - self._listen_w) * 0.15
+        self._speak_w = getattr(self, "_speak_w", 0.0)
+        self._speak_w += ((1.0 if state == "speaking" else 0.0) - self._speak_w) * 0.15
+        if state == "listening":
+            ofac *= 1.0 - 0.06 * getattr(self, "pulse", 0.0) * (0.4 + lv)
+        rt = getattr(self, "ready_t", None)
+        age = (rt - 2.0) if (rt is not None and 2.0 <= rt < 3.8) else -1.0
+        clip = (-(cx - self.x) / R, (self.right - cx) / R, -(cy - self.y) / R, (self.top - cy) / R)
+        if "uniform vec4 u_clip;" in getattr(view, "src", ""):
+            view.canvas["u_clip"] = tuple(float(v) for v in clip)
+        self._ofac_now = ofac
+        view.update(self.clock_t, self.phase, min(1.0, lv + 0.10 * getattr(self, "pulse", 0.0)),
+                    u_think=getattr(self, "think_w", 0.0), u_gather=gather, u_ofac=ofac,
+                    u_flash=getattr(self, "flash", 0.0), u_listen=self._listen_w,
+                    u_speak=self._speak_w, u_cycles=getattr(self, "pulse_cycles", 0.0),
+                    u_orbit=getattr(self, "orbit_ang", 0.0), u_age=age)
+
     def update_aura_shader(self, size):
         """Run the GPU Aura orb. Returns False (once and for all) if the shader is unavailable."""
         if getattr(self, "_shader_failed", False):
@@ -2052,15 +2184,16 @@ class AnimatedCore(Widget):
         try:
             view = getattr(self, "_shader_view", None)
             if view is None:
-                view = AuraShaderView(frag=PARTICLE_FRAG if self.theme_index == 1 else AURA_FRAG)
+                view = AuraShaderView(frag=AURA_FRAG)
                 if not view.ok:
                     self._shader_failed = True
                     return False
                 self._shader_view = view
                 self.add_widget(view)
             cx, cy = self.center
-            view.place(cx, cy, size * 1.34)
-            view.update(self.clock_t, self.phase, min(1.0, self.level + 0.10 * getattr(self, "pulse", 0.0)))
+            R = size * 1.34 * 0.58 / 2.0      # sphere radius in pixels
+            view.place(cx, cy, R * 8.0)        # sphere = 0.25 of the half quad; rings need room
+            self.shader_extras(view, cx, cy, R)
             return True
         except Exception:
             self._shader_failed = True
@@ -2084,7 +2217,7 @@ class AnimatedCore(Widget):
         with self.canvas.after:
             for name, speed, ph, scale, alpha in spec * 2:  # drawn twice: PNG ribbons glow brighter than the shader veins
                 angle = p * speed + 6 * math.sin(t * 0.5 + ph)
-                s2 = side * (scale + 0.03 * math.sin(t * 1.3 + ph) + 0.06 * lv * math.sin(t * 5 + ph))
+                s2 = side * (scale + 0.03 * math.sin(t * 1.3 + ph) + 0.06 * lv * math.sin(t * 5 + ph)) * max(getattr(self, "_ofac_now", 1.0), 0.05)
                 Color(1, 1, 1, min(1.0, alpha * (0.75 + 0.2 * math.sin(t * 1.1 + ph) + 0.3 * lv)))
                 PushMatrix()
                 Rotate(angle=angle, origin=(cx, cy))
