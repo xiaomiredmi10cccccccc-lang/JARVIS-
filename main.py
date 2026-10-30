@@ -692,6 +692,8 @@ GLASS_ERRORS = []
 # Animation state shared by all orbs: when the screen is rebuilt (language, theme,
 # settings) the new orb continues from the same moment instead of starting from zero.
 ANIM = {"phase": 0.0, "clock_t": 0.0, "level": 0.0}
+# Orb pulse period per state, in milliseconds (ready = slow, listening = fast).
+PULSE_PERIOD_MS = {"idle": 3000, "thinking": 1500, "speaking": 800, "listening": 300}
 
 def _move_glass(w, *_):
     x, y = round(w.x), round(w.y)
@@ -996,16 +998,371 @@ void main() {
 """
 
 
+PARTICLE_FRAG = r"""
+$HEADER$
+uniform float u_time;
+uniform float u_phase;
+uniform float u_level;
+
+float hash31(vec3 p) {
+    p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float vnoise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash31(i);
+    float b = hash31(i + vec3(1.0, 0.0, 0.0));
+    float c = hash31(i + vec3(0.0, 1.0, 0.0));
+    float d = hash31(i + vec3(1.0, 1.0, 0.0));
+    float e = hash31(i + vec3(0.0, 0.0, 1.0));
+    float g = hash31(i + vec3(1.0, 0.0, 1.0));
+    float h = hash31(i + vec3(0.0, 1.0, 1.0));
+    float k = hash31(i + vec3(1.0, 1.0, 1.0));
+    return mix(mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+               mix(mix(e, g, f.x), mix(h, k, f.x), f.y), f.z);
+}
+float fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 3; i++) {
+        v += a * vnoise(p);
+        p = p * 2.03 + vec3(1.7, 9.2, 3.1);
+        a *= 0.5;
+    }
+    return v;
+}
+vec3 rotY(vec3 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
+}
+vec3 rotX(vec3 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z);
+}
+
+// one hemisphere of the dotted sphere
+vec3 hemi(vec2 sp, float z, float side, float ph, float lv) {
+    vec3 n = vec3(sp, side * z);
+    vec3 q = rotX(rotY(n, ph * 0.20), 0.45);
+    float turb = fbm(q * 1.9 + vec3(0.0, ph * 0.10, 0.0));
+    float scale = 24.0;
+    vec3 g = q * scale;
+    vec3 cell = floor(g);
+    vec3 fr = fract(g) - 0.5;
+    float rnd = hash31(cell);
+    vec3 jit = vec3(hash31(cell + 3.1), hash31(cell + 7.7), hash31(cell + 11.3)) - 0.5;
+    float dist = length(fr - jit * 0.35);
+    float size = 0.20 + 0.30 * turb + 0.10 * lv;
+    float dotv = smoothstep(size, size * 0.25, dist) * step(0.18, rnd);
+    float depth = 0.5 + 0.5 * side * z;
+    float I = (0.35 + 1.4 * pow(depth, 1.4)) * (0.55 + 1.5 * turb) * (0.9 + 0.5 * lv);
+    vec3 teal = vec3(0.38, 0.9, 1.0);
+    vec3 deep = vec3(0.08, 0.50, 0.70);
+    vec3 c = mix(deep, teal, depth) * dotv * I;
+    // soft glow between dots, strongest on dense (turbulent) regions
+    c += deep * 0.10 * turb * (0.5 + 0.5 * depth);
+    return c;
+}
+
+void main() {
+    vec2 p = (tex_coord0 - 0.5) * 2.0;
+    float r = length(p);
+    float R = 0.56;
+    float lv = clamp(u_level, 0.0, 1.0);
+    float ph = u_phase;
+    vec3 col = vec3(0.0);
+    float alpha = 0.0;
+
+    // faint teal atmosphere
+    float hr = max(r - R, 0.0);
+    float halo = exp(-hr * (5.5 - 1.5 * lv)) * (0.30 + 0.40 * lv);
+    col += vec3(0.08, 0.55, 0.70) * halo;
+    alpha = max(alpha, halo * 0.7);
+
+    // drifting dust that streams slowly outward
+    float ang = atan(p.y, p.x);
+    float u = fract(r * 5.0 - ph * 0.06);
+    float cellA = floor((ang + 3.14159) * 22.0 / 6.2831853 * 3.0);
+    float rid = floor(r * 5.0 - ph * 0.06);
+    float rnd = hash21(vec2(cellA, rid));
+    float fa = fract((ang + 3.14159) * 22.0 / 6.2831853 * 3.0) - 0.5;
+    float dd = length(vec2(fa * r * 0.9, u - 0.5) * vec2(1.0, 0.6));
+    float dust = smoothstep(0.10, 0.0, dd) * step(0.88, rnd) * smoothstep(R * 1.05, R * 1.4, r) * smoothstep(1.0, 0.7, r);
+    dust *= 0.5 + 0.5 * sin(u_time * 2.0 + rnd * 40.0);
+    col += vec3(0.4, 0.85, 1.0) * dust * (0.5 + 0.8 * lv);
+    alpha = max(alpha, dust);
+
+    if (r < R) {
+        vec2 sp = p / R;
+        float z = sqrt(max(1.0 - dot(sp, sp), 0.0));
+        vec3 c = hemi(sp, z, 1.0, ph, lv) + 0.55 * hemi(sp, z, -1.0, ph, lv);
+        c += vec3(0.05, 0.45, 0.60) * pow(1.0 - z, 3.0) * 0.45;
+        float edge = smoothstep(R, R - 0.01, r);
+        c = 1.0 - exp(-c * 2.3);
+        col = mix(col, c, edge);
+        alpha = max(alpha, edge * clamp(max(max(c.r, c.g), c.b) * 2.2 + 0.05, 0.0, 1.0));
+    }
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), clamp(alpha, 0.0, 1.0)) * frag_color;
+}
+"""
+
+
+GLASS_FRAG = r"""
+$HEADER$
+uniform float u_time;
+uniform float u_phase;
+uniform float u_level;
+uniform float u_think;
+uniform float u_gather;
+uniform float u_ofac;
+uniform float u_flash;
+uniform float u_listen;
+uniform float u_speak;
+uniform float u_cycles;
+uniform float u_orbit;
+uniform float u_age;
+uniform vec4 u_clip;
+
+
+float hash31(vec3 p) {
+    p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float vnoise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash31(i);
+    float b = hash31(i + vec3(1.0, 0.0, 0.0));
+    float c = hash31(i + vec3(0.0, 1.0, 0.0));
+    float d = hash31(i + vec3(1.0, 1.0, 0.0));
+    float e = hash31(i + vec3(0.0, 0.0, 1.0));
+    float g = hash31(i + vec3(1.0, 0.0, 1.0));
+    float h = hash31(i + vec3(0.0, 1.0, 1.0));
+    float k = hash31(i + vec3(1.0, 1.0, 1.0));
+    return mix(mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+               mix(mix(e, g, f.x), mix(h, k, f.x), f.y), f.z);
+}
+float fbm2(vec3 p) {
+    return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.07 + vec3(1.7, 9.2, 3.1));
+}
+vec3 rotY(vec3 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
+}
+vec3 rotX(vec3 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z);
+}
+
+// studio environment seen in the glass: soft light pillars and a horizon glow
+vec3 env(vec3 d, float ph) {
+    float az = atan(d.x, d.z) + ph * 0.05;
+    float st = pow(max(0.0, cos(az * 3.0 + 1.0)), 24.0) * 0.9 + pow(max(0.0, cos(az * 5.0 - 0.6)), 50.0) * 0.6;
+    st *= 0.4 + 0.6 * smoothstep(-0.3, 0.7, d.y);
+    float hor = exp(-pow(d.y / 0.22, 2.0)) * 0.16;
+    return vec3(0.25, 0.75, 1.0) * st + vec3(0.08, 0.30, 0.50) * hor + vec3(0.01, 0.03, 0.06);
+}
+
+void main() {
+    vec2 uv = (tex_coord0 - 0.5) * 2.0;
+    float Rs = 0.25;
+    vec2 sp = uv / Rs;
+    float r = length(sp);
+    float lv = clamp(u_level, 0.0, 1.0);
+    float ph = u_phase;
+    float ofac = max(u_ofac, 0.04);
+    vec3 col = vec3(0.0);
+    float alpha = 0.0;
+
+    float streak = exp(-pow(sp.y / 0.020, 2.0)) * exp(-abs(sp.x) * 1.2) * (0.08 + 0.35 * lv + 0.9 * u_flash);
+    col += vec3(0.75, 0.88, 1.0) * streak;
+    alpha = max(alpha, streak);
+    float hr = max(r - 1.0, 0.0);
+    float halo = exp(-hr * 3.4) * (0.18 + 0.22 * lv + 0.35 * u_flash) * smoothstep(0.0, 0.3, r);
+    col += vec3(0.20, 0.38, 0.60) * halo;
+    alpha = max(alpha, halo * 0.9);
+
+    if (r < 1.0) {
+        float z0 = sqrt(max(1.0 - r * r, 0.0));
+        vec3 n = vec3(sp, z0);
+        vec3 I = vec3(0.0, 0.0, -1.0);
+        vec3 rf = refract(I, n, 0.72 + 0.02 * sin(ph * 0.5));
+        float tmax = max(-2.0 * dot(n, rf), 0.0);
+
+        // ---- volumetric energy inside the glass (6 samples along the refracted ray)
+        vec3 acc = vec3(0.0);
+        float flow = ph * 0.10;
+        for (int i = 0; i < 6; i++) {
+            float t = (float(i) + 0.5) / 6.0 * tmax;
+            vec3 pos = (n + rf * t) / ofac;
+            float rr = length(pos);
+            if (rr < 1.0) {
+                float tw = u_think * 1.4 * sin(ph * 0.8) + 0.5 * sin(ph * 0.2);
+                vec3 q = rotY(pos, tw * pos.y + ph * 0.12);
+                q = rotX(q, 0.35);
+                // listening pulls the flow inward, otherwise it rises slowly
+                vec3 fl = vec3(0.0, flow, 0.0) - u_listen * q * ph * 0.05;
+                float d1 = fbm2(q * 2.3 + fl);
+                float d2 = fbm2(q * 4.0 - fl * 1.6 + 5.0);
+                float neb = smoothstep(0.38, 0.85, d1);
+                float fil = exp(-pow((d1 - 0.52) / (0.035 + 0.02 * lv), 2.0));
+                float fil2 = exp(-pow((d2 - 0.50) / 0.03, 2.0));
+                float core = exp(-rr * rr * (14.0 - 9.0 * u_gather));
+                // spiral arms turning around the core (faster while thinking)
+                float sang = atan(q.z, q.x);
+                float spiral = pow(0.5 + 0.5 * sin(3.0 * sang + 7.0 * log(rr + 0.05) - ph * (0.8 + u_think * 2.4)), 6.0)
+                               * smoothstep(0.9, 0.12, rr) * smoothstep(0.03, 0.18, rr);
+                // radial energy bolts from the core to the glass
+                vec3 bdir = pos / max(rr, 0.001);
+                float bn = vnoise(bdir * 4.5 + vec3(0.0, 0.0, u_time * 1.6));
+                float bolt = pow(smoothstep(0.66, 0.92, bn), 2.0) * smoothstep(0.95, 0.25, rr) * smoothstep(0.05, 0.25, rr);
+                float fade = smoothstep(1.0, 0.75, rr);
+                vec3 c = vec3(0.02, 0.10, 0.20) * neb * neb * 0.8;
+                c += mix(vec3(0.80, 0.93, 1.0), vec3(0.40, 0.60, 1.0), smoothstep(0.2, 0.9, rr)) * fil * (0.9 + 1.1 * lv + 1.2 * u_think);
+                c += vec3(0.85, 0.92, 1.0) * fil2 * 0.30 * (0.4 + lv + u_think);
+                c += mix(vec3(0.88, 0.94, 1.0), vec3(0.45, 0.65, 1.0), rr) * spiral * (0.20 + 0.65 * u_think + 0.35 * lv);
+                c += vec3(0.85, 0.92, 1.0) * bolt * (0.15 + 1.2 * lv + 0.9 * u_think + 0.7 * u_flash);
+                c *= fade;
+                c += vec3(1.0, 0.92, 0.80) * core * (0.55 + 1.1 * lv + 1.6 * u_gather + 1.4 * u_flash);
+                // floating motes
+                vec3 mq = pos * 9.0 + vec3(0.0, ph * 0.3, 0.0);
+                float mh = hash31(floor(mq));
+                float mote = step(0.982, mh) * smoothstep(0.42, 0.0, length(fract(mq) - 0.5)) * fade;
+                c += vec3(0.7, 0.95, 1.0) * mote * (0.6 + 0.5 * sin(u_time * 2.5 + mh * 60.0));
+                acc += c;
+            }
+        }
+        acc *= (tmax * 0.55 + 0.05) * 0.26;
+
+        // ---- glass surface: reflections, rim, dispersion, highlights
+        vec3 Rv = reflect(I, n);
+        float F = 0.06 + 0.94 * pow(1.0 - z0, 4.0);
+        vec3 refl = env(Rv, ph) * vec3(0.8, 0.9, 1.0) * (0.6 + 1.3 * F);
+        float rim = pow(1.0 - z0, 2.6);
+        vec3 disp = mix(vec3(0.25, 0.55, 0.9), vec3(1.0, 0.72, 0.45), smoothstep(0.82, 1.0, r));
+        vec3 c = acc + refl * (0.35 + F * 1.2) + disp * rim * 0.55;
+        c += vec3(0.75, 0.88, 1.0) * exp(-pow((r - 0.985) / 0.008, 2.0)) * 0.9;
+        // softbox highlights
+        vec2 h1 = (sp - vec2(-0.42, 0.50)) * vec2(1.0, 2.2);
+        c += vec3(0.85, 0.95, 1.0) * exp(-dot(h1, h1) / 0.045) * 0.55;
+        vec2 h2 = (sp - vec2(0.50, -0.45)) * vec2(2.4, 1.0);
+        c += vec3(0.5, 0.8, 1.0) * exp(-dot(h2, h2) / 0.03) * 0.25;
+        float ang = atan(sp.y, sp.x);
+        float arcW = exp(-pow((r - 0.90) / 0.014, 2.0));
+        float a1 = smoothstep(0.0, 0.08, ang - 2.05) * smoothstep(0.0, 0.08, 2.55 - ang);
+        float a2 = smoothstep(0.0, 0.08, ang + 1.05) * smoothstep(0.0, 0.08, -0.55 - ang);
+        c += vec3(1.0) * arcW * (a1 + a2) * 0.7;
+        // shock-wave when the answer bursts out
+        float sw = exp(-pow((r - (0.25 + 0.95 * (1.0 - u_flash))) / 0.05, 2.0)) * u_flash;
+        c += vec3(0.8, 0.95, 1.0) * sw * 1.3;
+        c = 1.0 - exp(-c * 1.35);
+        // tiny colour grade: deeper teal shadows
+        c = pow(c, vec3(0.95, 0.92, 0.88));
+        float edge = smoothstep(1.0, 0.99, r);
+        col = mix(col, c, edge);
+        alpha = max(alpha, edge);
+    }
+
+    // ================= surroundings: soft glowing rings, waves, sparks (all in the shader) =================
+    vec3 fx = vec3(0.0);
+    float fxa = 0.0;
+    // gyroscope rings (3D rings seen in perspective; the far half is hidden behind the glass)
+    for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        float ga = u_orbit * 0.3 * (fi + 1.0) * (mod(fi, 2.0) < 0.5 ? 1.0 : -1.0) + fi * 1.1;
+        float gt = 1.0 + 0.5 * fi + 0.4 * sin(ph * 0.5 + fi * 1.7);
+        float A = (1.42 + 0.12 * fi) * ofac;
+        float B = A * abs(cos(gt)) + 0.015;
+        float cg = cos(ga); float sg = sin(ga);
+        vec2 p2 = vec2(cg * sp.x + sg * sp.y, -sg * sp.x + cg * sp.y);
+        float e = length(vec2(p2.x / A, p2.y / B));
+        float dd = (e - 1.0) * min(A, B);
+        float line = exp(-pow(dd / 0.012, 2.0)) + 0.22 * exp(-pow(dd / 0.05, 2.0));
+        float tl = atan(p2.y / B, p2.x / A);
+        float front = step(0.0, -sin(tl));            // near half passes in front of the glass
+        float vis = (r > 1.0) ? (0.45 + 0.55 * front) : front;
+        float tn = u_orbit * (1.3 + 0.5 * fi) + fi * 2.0;
+        float da = abs(mod(tl - tn + 3.14159265, 6.2831853) - 3.14159265);
+        float tail = exp(-pow(da / (0.25 + 0.6 * u_think), 2.0));
+        float node = exp(-pow(length(p2 - vec2(cos(tn) * A, sin(tn) * B)) / 0.035, 2.0));
+        float amp = 0.10 + 0.16 * lv + 0.20 * u_think;
+        fx += vec3(0.75, 0.88, 1.0) * (line * (amp + 0.35 * tail * (0.3 + u_think)) + node * 0.9) * vis * smoothstep(0.0, 0.3, ofac);
+    }
+    // outgoing waves in the equator plane while reading aloud (sharp front, soft trailing glow)
+    float eq = length(vec2(sp.x, sp.y / 0.22));
+    for (int k = 0; k < 3; k++) {
+        float u = fract(u_cycles * 0.5 + float(k) / 3.0);
+        float x = (eq - (1.1 + 0.8 * u)) / 0.06;
+        float prof = (x > 0.0) ? exp(-x * x * 9.0) : exp(x * 0.9) * (0.75 + 0.25 * sin(x * 7.0));
+        fx += vec3(0.6, 0.82, 1.0) * prof * (1.0 - u) * (0.10 + 0.55 * lv) * u_speak;
+    }
+    // listening: soft rings drawn in towards the sphere
+    float rc = r;
+    for (int k = 0; k < 3; k++) {
+        float u = fract(u_cycles * 0.25 + float(k) / 3.0);
+        float x = (rc - (2.0 - 0.7 * u)) / 0.05;
+        float prof = (x < 0.0) ? exp(-x * x * 9.0) : exp(-x * 0.9) * (0.75 + 0.25 * sin(x * 7.0));
+        fx += vec3(0.8, 0.95, 0.9) * prof * u * (0.10 + 0.45 * lv) * u_listen;
+    }
+    // answer burst: a bright shock ring (plane + sphere) and radial sparks
+    float fl = u_flash;
+    float xs = (eq - (1.1 + 0.9 * (1.0 - fl))) / 0.05;
+    float ps = (xs > 0.0) ? exp(-xs * xs * 9.0) : exp(xs * 0.7);
+    fx += vec3(1.0, 0.96, 0.9) * ps * fl * 0.9;
+    float xr = (r - (1.1 + 0.9 * (1.0 - fl))) / 0.05;
+    float pr = (xr > 0.0) ? exp(-xr * xr * 9.0) : exp(xr * 0.7);
+    fx += vec3(0.85, 0.93, 1.0) * pr * fl * 0.7;
+    if (u_age >= 0.0) {
+        float aang = atan(sp.y, sp.x);
+        float cells = 64.0;
+        float cf = (aang + 3.14159265) / 6.2831853 * cells;
+        float cid = floor(cf);
+        float rnd = hash31(vec3(cid, 3.0, 7.0));
+        float spd = 0.8 + 0.9 * hash31(vec3(cid, 11.0, 5.0));
+        float dcur = 0.2 + spd * 1.4 * (1.0 - exp(-2.5 * u_age));
+        float inside = smoothstep(dcur * 0.86, dcur * 0.97, r) * smoothstep(dcur * 1.03, dcur * 0.97, r);
+        float side = abs(fract(cf) - 0.5) * 6.2831853 / cells * r;
+        float spark = inside * smoothstep(0.008, 0.0, side) * step(0.45, rnd) * max(0.0, 1.0 - u_age / 1.8);
+        fx += vec3(0.9, 0.96, 1.0) * spark * 1.6;
+    }
+    // ripples on the floor under the sphere
+    float fe = length(vec2(sp.x, (sp.y + 1.02) / 0.16));
+    float energy = max(fl, lv * max(u_speak, u_listen));
+    for (int k = 0; k < 3; k++) {
+        float u = fract(u_cycles * 0.4 + float(k) / 3.0);
+        float x = (fe - (0.7 + 2.4 * u)) / 0.10;
+        float prof = (x > 0.0) ? exp(-x * x * 6.0) : exp(x * 0.7);
+        fx += vec3(0.55, 0.8, 1.0) * prof * (1.0 - u) * 0.22 * min(1.0, energy * 1.6) * smoothstep(-1.02, -1.4, -abs(sp.y + 0.2));
+    }
+    // keep every effect inside the widget so it never paints over neighbouring UI
+    float cm = smoothstep(u_clip.x, u_clip.x + 0.15, sp.x) * smoothstep(u_clip.y, u_clip.y - 0.15, sp.x)
+             * smoothstep(u_clip.z, u_clip.z + 0.15, sp.y) * smoothstep(u_clip.w, u_clip.w - 0.15, sp.y);
+    fx *= cm;
+    col += fx;
+    alpha = max(alpha, clamp(max(max(fx.r, fx.g), fx.b) * 1.6, 0.0, 1.0));
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), clamp(alpha, 0.0, 1.0)) * frag_color;
+}
+"""
+
+
 class AuraShaderView(Widget):
     """A quad drawn with AURA_FRAG; `ok` is False when the shader failed to compile."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, frag=None, **kwargs):
         self.canvas = RenderContext(use_parent_projection=True, use_parent_modelview=True,
                                     use_parent_frag_modelview=True)
         super().__init__(**kwargs)
         self.ok = False
         try:
-            self.canvas.shader.fs = AURA_FRAG
+            self.canvas.shader.fs = frag or AURA_FRAG
             self.ok = bool(getattr(self.canvas.shader, "success", True))
         except Exception:
             self.ok = False
@@ -1018,10 +1375,12 @@ class AuraShaderView(Widget):
         self.quad.pos = (cx - side / 2, cy - side / 2)
         self.quad.size = (side, side)
 
-    def update(self, t, phase, level):
+    def update(self, t, phase, level, **extra):
         self.canvas["u_time"] = float(t % 1000.0)
         self.canvas["u_phase"] = float(phase)
         self.canvas["u_level"] = float(level)
+        for key, value in extra.items():
+            self.canvas[key] = float(value)
 
 
 class AnimatedCore(Widget):
@@ -1033,15 +1392,22 @@ class AnimatedCore(Widget):
         self.clock_t = ANIM["clock_t"]
         self.fib, self.dashes, self.reds = [], [], []
         if theme_index == 1:
-            n = 420
+            n = 800
             for k in range(n):
                 y = 1 - 2 * (k + 0.5) / n
                 rr = math.sqrt(1 - y * y)
                 t = k * 2.39996
                 self.fib.append((math.cos(t) * rr, y, math.sin(t) * rr))
+            # orbiting dust on three tilted rings: (ring, start angle, speed, size)
+            orb_rnd = random.Random(21)
+            self.orbit = []
+            for ring in range(3):
+                for _ in range(70):
+                    self.orbit.append((ring, orb_rnd.uniform(0, math.pi * 2),
+                                       orb_rnd.uniform(0.85, 1.15), orb_rnd.uniform(0.5, 1.0)))
         if theme_index == 2:
             rnd = random.Random(7)
-            self.dashes = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.5, 1.5)) for _ in range(170)]
+            self.dashes = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.5, 1.5)) for _ in range(300)]
             self.reds = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.2, 1.2)) for _ in range(6)]
         self.bind(pos=self.redraw, size=self.redraw)
         self._event = Clock.schedule_interval(self.animate, 1 / 20 if theme_index == 1 else 1 / 24)
@@ -1069,6 +1435,34 @@ class AnimatedCore(Widget):
         else:
             target, boost = 0.0, 1.0
         self.level += (target - self.level) * min(1.0, dt * 8.0)
+        # Pulse period by state (ms): ready 3000, answering 800, listening 300.
+        period = PULSE_PERIOD_MS.get(state, 1500) / 1000.0
+        self.pulse_cycles = getattr(self, "pulse_cycles", 0.0) + dt / period
+        self.pulse = 0.5 + 0.5 * math.sin(self.pulse_cycles * 2 * math.pi)
+        # Particle orb: smooth rotation speed per state and a one-shot "answer ready" flash
+        rk_target = {"idle": 0.5, "thinking": 2.4, "speaking": 1.3, "listening": 1.0}.get(state, 0.8)
+        self.rotk = getattr(self, "rotk", 0.5)
+        self.rotk += (rk_target - self.rotk) * min(1.0, dt * 3.0)
+        self.rot = getattr(self, "rot", 0.0) + dt * 0.4 * self.rotk
+        osp = {"idle": 0.5, "thinking": 2.2, "speaking": 1.2, "listening": -1.4}.get(state, 0.8)
+        self.orbit_ang = getattr(self, "orbit_ang", 0.0) + dt * 0.5 * osp
+        # "Answer ready" sequence (thinking -> speaking): the orbiting dust runs to the centre for 2 s,
+        # bursts outward fast, then flows back to its working orbit over ~1.6 s.
+        if getattr(self, "state_now", "idle") == "thinking" and state == "speaking":
+            self.ready_t = 0.0
+            self.ready_burst = False
+        rt = getattr(self, "ready_t", None)
+        if rt is not None:
+            rt += dt
+            if rt >= 2.0 and not getattr(self, "ready_burst", False):
+                self.ready_burst = True
+                self.flash = 1.0
+            self.ready_t = rt if rt < 4.0 else None
+        self.flash = max(0.0, getattr(self, "flash", 0.0) - dt / 0.9)
+        tw_target = 1.0 if state == "thinking" else 0.0
+        self.think_w = getattr(self, "think_w", 0.0)
+        self.think_w += (tw_target - self.think_w) * min(1.0, dt * 4.0)
+        self.state_now = state
         self.phase += dt * 0.8 * boost
         ANIM["phase"], ANIM["clock_t"], ANIM["level"] = self.phase, self.clock_t, self.level
         self.redraw()
@@ -1132,27 +1526,49 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R, start, start + 100), width=dp(2.6) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
+        """Dotted particle sphere: 800 fine points, a web of links, surface waves, a scan band and
+        orbiting dust. Calm when ready, twisting while thinking, a flash when the answer is ready,
+        outward waves while reading aloud, inward ripples while the microphone listens."""
         lv = self.level
-        R = R * (1 + 0.10 * lv)
+        state = getattr(self, "state_now", "idle")
+        pulse = getattr(self, "pulse", 0.0)
+        flash = getattr(self, "flash", 0.0)
+        cycles = getattr(self, "pulse_cycles", 0.0)
+        rot = getattr(self, "rot", 0.0)
+        R = R * (1 + 0.10 * lv + 0.02 * pulse + 0.04 * flash)
         disc = radial_texture("p_disc", ((0, (11, 26, 32, 255)), (1, (4, 8, 11, 255))))
         Color(1, 1, 1, 1)
         Rectangle(texture=disc, pos=(cx - R * 1.3, cy - R * 1.3), size=(R * 2.6, R * 2.6))
-        Color(*accent, 0.2 + 0.3 * lv)
+        Color(*accent, 0.2 + 0.3 * lv + 0.5 * flash)
         Line(circle=(cx, cy, R * 1.3), width=dp(1))
         glow = radial_texture("p_glow", ((0, (40, 200, 255, 0)), (0.55, (40, 200, 255, 0)),
                                          (0.8, (40, 200, 255, 40)), (1, (40, 200, 255, 0))))
-        gs = min(R * 3 * (1 + 0.3 * lv), min(self.width, self.height))
-        Color(1, 1, 1, 1)
+        gs = min(R * 3 * (1 + 0.3 * lv + 0.25 * flash), min(self.width, self.height))
+        Color(1, 1, 1, min(1.0, 0.8 + 0.5 * flash))
         Rectangle(texture=glow, pos=(cx - gs / 2, cy - gs / 2), size=(gs, gs))
         p = self.phase
-        cs, sn = math.cos(p * 0.5), math.sin(p * 0.5)
+        cs, sn = math.cos(rot), math.sin(rot)
         tc, ts = 0.9004, 0.4350
-        amp = 0.13 * (1 + 2.4 * lv)
+        base = {"idle": 0.06, "thinking": 0.11, "speaking": 0.13, "listening": 0.10}.get(state, 0.08)
+        amp = base * (1 + (0.6 * pulse if state == "thinking" else 2.4 * lv)) * (1 + 0.8 * flash)
+        squeeze = (1.0 - 0.05 * pulse * (0.4 + lv)) if state == "listening" else 1.0
+        # twist (spiral) of the whole shell and a travelling surface wave
+        twist = {"idle": 0.15 * math.sin(p * 0.3), "thinking": 1.1 * math.sin(p * 0.9),
+                 "speaking": 0.35 * lv * math.sin(p * 1.3),
+                 "listening": -0.25 * math.sin(p * 1.1)}.get(state, 0.0)
+        wave_k = {"idle": 0.12, "thinking": 0.30, "speaking": 0.25 + 0.6 * lv,
+                  "listening": 0.22 + 0.4 * lv}.get(state, 0.12)
+        wave_dir = 3.0 if state != "listening" else -4.0
+        tw_c, tw_s = {}, {}
 
         def shell(x, y, z):
+            ta = twist * y
+            tcx, tsx = math.cos(ta), math.sin(ta)
+            x, z = x * tcx + z * tsx, -x * tsx + z * tcx
             n = (math.sin(x * 2.3 + p * 1.2) * math.sin(y * 2.9 - p * 0.9)
-                 + 0.6 * math.sin(z * 3.3 + p * 1.5) + 0.4 * math.sin((x + y + z) * 5 + p * 2))
-            rr = 1 + amp * n
+                 + 0.6 * math.sin(z * 3.3 + p * 1.5) + 0.4 * math.sin((x + y + z) * 5 + p * 2)
+                 + wave_k * math.sin(7.0 * y - p * wave_dir))
+            rr = (1 + amp * n) * squeeze
             X, Y, Z = x * rr, y * rr, z * rr
             x1 = X * cs + Z * sn
             z1 = -X * sn + Z * cs
@@ -1160,7 +1576,7 @@ class AnimatedCore(Widget):
             z2 = Y * ts + z1 * tc
             return cx + x1 * R, cy + y1 * R, z2
 
-        Color(*accent, 0.20 + 0.15 * lv)
+        Color(*accent, 0.14 + 0.12 * lv + 0.3 * flash)
         for k in range(1, 13):
             y = -1 + 2 * k / 13.0
             r0 = math.sqrt(1 - y * y)
@@ -1169,29 +1585,186 @@ class AnimatedCore(Widget):
                 t = n / 36.0 * math.pi * 2
                 px, py, _z = shell(math.cos(t) * r0, y, math.sin(t) * r0)
                 pts.extend((px, py))
-            Line(points=pts, width=dp(0.6))
-        near, mid, far = [], [], []
+            Line(points=pts, width=dp(0.5))
+        proj = []
+        near, mid, far, hot = [], [], [], []
+        scan = math.sin(p * (0.6 if state == "idle" else 1.6))
         for x, y, z in self.fib:
             px, py, z2 = shell(x, y, z)
+            proj.append((px, py, z2))
+            if abs(y - scan) < 0.045:
+                if z2 > -0.2:
+                    hot.extend((px, py))
             if z2 > 0.35:
                 near.extend((px, py))
             elif z2 > -0.3:
                 mid.extend((px, py))
             else:
                 far.extend((px, py))
+        # web of links between neighbouring points on the near side
+        Color(*accent, 0.10 + 0.10 * lv + 0.25 * flash)
+        n_pts = len(proj)
+        for i in range(0, n_pts, 5):
+            a = proj[i]
+            b = proj[(i + 34) % n_pts]
+            if a[2] > 0.25 and b[2] > 0.25:
+                Line(points=[a[0], a[1], b[0], b[1]], width=dp(0.4))
+        mid_col = (*accent2, 0.85) if state == "thinking" else (0.38, 0.90, 1, 0.8)
         if far:
-            Color(0.10, 0.56, 0.69, 0.55)
-            Point(points=far, pointsize=dp(0.6))
+            Color(0.10, 0.56, 0.69, 0.50)
+            Point(points=far, pointsize=dp(0.42))
         if mid:
-            Color(0.38, 0.90, 1, 0.8)
-            Point(points=mid, pointsize=dp(0.8))
+            Color(*mid_col)
+            Point(points=mid, pointsize=dp(0.55))
         if near:
             Color(0.85, 0.98, 1, 1)
-            Point(points=near, pointsize=dp(1.0))
+            Point(points=near, pointsize=dp(0.70 + 0.3 * flash))
+        if hot:
+            Color(1, 1, 1, 0.9 if state != "idle" else 0.55)
+            Point(points=hot, pointsize=dp(1.1))
+        # orbiting dust on three tilted rings (dimmer behind the sphere)
+        speed_k = {"idle": 0.5, "thinking": 2.2, "speaking": 1.2, "listening": -1.4}.get(state, 0.8)
+        orb_ang = getattr(self, "orbit_ang", 0.0)
+        tw = getattr(self, "think_w", 0.0)
+        rt = getattr(self, "ready_t", None)
+        gather = 0.0
+        if rt is None:
+            ofac, burst = 1.0, False
+        elif rt < 2.0:                      # 1) run to the centre (ease-in)
+            u = rt / 2.0
+            ofac, burst, gather = 1.0 - 0.97 * u * u, False, u
+        elif rt < 2.3:                      # 2) fast burst outward
+            u = (rt - 2.0) / 0.3
+            ofac, burst = 0.03 + 2.2 * (1 - (1 - u) ** 3), True
+        else:                               # 3) flow back to the working orbit
+            u = min(1.0, (rt - 2.3) / 1.6)
+            sm = u * u * (3 - 2 * u)
+            ofac, burst = 2.23 + (1.0 - 2.23) * sm, True
+        if gather > 0:                      # the centre glows while the dust gathers
+            core = radial_texture("p_core", ((0, (200, 250, 255, 255)), (0.4, (60, 200, 255, 120)),
+                                             (1, (40, 200, 255, 0))))
+            cr = R * (0.15 + 0.55 * gather)
+            Color(1, 1, 1, min(1.0, 0.25 + 0.75 * gather))
+            Rectangle(texture=core, pos=(cx - cr, cy - cr), size=(2 * cr, 2 * cr))
+        tilts = (0.55, -0.95, 1.35)
+        radii = (1.28, 1.46, 1.64)
+        front, back = [], []
+        ca_y, sa_y = math.cos(rot * 0.5), math.sin(rot * 0.5)
+        for ring, a0, sp, sz in self.orbit:
+            # thinking: every dot wobbles, so each ring twists like a rope
+            a = a0 + orb_ang * sp * (1.0 + 0.35 * ring) + tw * 0.9 * math.sin(a0 * 3 + p * 2.6)
+            tilt = tilts[ring] + tw * 0.55 * math.sin(p * 1.4 + ring * 2.0 + a0)
+            f = ofac * ((0.75 + 0.5 * sz) if burst else 1.0)
+            if rt is not None and rt < 2.0:
+                a += gather * 4.0 * sp          # spiral inward while gathering
+            rad = radii[ring] * f * (1 + 0.10 * tw * math.sin(a0 * 5 + p * 3.1))
+            rx, rz = math.cos(a) * rad, math.sin(a) * rad
+            ct, st = math.cos(tilt), math.sin(tilt)
+            y1, z1 = -rz * st, rz * ct
+            x2, z2 = rx * ca_y + z1 * sa_y, -rx * sa_y + z1 * ca_y
+            pt = (cx + x2 * R, cy + y1 * R)
+            if z2 > 0 or rad < 0.5:
+                front.extend(pt)
+            else:
+                back.extend(pt)
+        if back:
+            Color(0.15, 0.6, 0.75, 0.35)
+            Point(points=back, pointsize=dp(0.55))
+        if front:
+            Color(0.6, 0.95, 1, 0.8 if not burst else 1.0)
+            Point(points=front, pointsize=dp(0.75 if not burst else 1.0))
+        # ---- state effects around the sphere
+        if state == "thinking":
+            a0 = rot * 57.3 * 1.6
+            Color(*accent2, 0.85)
+            Line(circle=(cx, cy, R * 1.42, a0, a0 + 75), width=dp(1.4), cap="round")
+            Color(*accent, 0.6)
+            Line(circle=(cx, cy, R * 1.52, a0 + 180, a0 + 225), width=dp(1.0), cap="round")
+        elif state == "speaking":
+            for k in range(3):
+                u = (cycles * 0.5 + k / 3.0) % 1.0
+                Color(*accent, (1 - u) * (0.15 + 0.6 * lv))
+                Line(circle=(cx, cy, R * (1.3 + 0.7 * u)), width=dp(1.0))
+        elif state == "listening":
+            for k in range(3):
+                u = (cycles * 0.25 + k / 3.0) % 1.0
+                Color(0.7, 1, 0.9, u * (0.20 + 0.55 * lv))
+                Line(circle=(cx, cy, R * (2.0 - 0.7 * u)), width=dp(1.0))
+        if flash > 0:
+            u = 1.0 - flash
+            Color(1, 1, 1, flash * 0.85)
+            Line(circle=(cx, cy, R * (1.25 + 0.9 * u)), width=dp(1.8))
 
-    def draw_glass(self, cx, cy, R, accent, accent2):
-        p = self.phase
+    def ready_factor(self):
+        """(radius factor, gather 0..1, burst?) of the "answer ready" sequence: gather, burst, return."""
+        rt = getattr(self, "ready_t", None)
+        if rt is None:
+            return 1.0, 0.0, False
+        if rt < 2.0:
+            u = rt / 2.0
+            return 1.0 - 0.97 * u * u, u, False
+        if rt < 2.3:
+            u = (rt - 2.0) / 0.3
+            return 0.03 + 1.6 * (1 - (1 - u) ** 3), 0.0, True
+        u = min(1.0, (rt - 2.3) / 1.6)
+        return 1.63 + (1.0 - 1.63) * (u * u * (3 - 2 * u)), 0.0, True
+
+    def glass_geometry(self):
+        size = min(self.width, self.height)
+        return self.center_x, self.y + self.height * 0.56, size * 0.34
+
+    def update_glass_shader(self):
+        """GPU glass sphere (shader child) + drawn floor/pillars (canvas.before). False if unavailable."""
+        if getattr(self, "_shader_failed", False):
+            return False
+        try:
+            view = getattr(self, "_shader_view", None)
+            if view is None:
+                view = AuraShaderView(frag=GLASS_FRAG)
+                if not view.ok:
+                    self._shader_failed = True
+                    self.canvas.before.clear()
+                    return False
+                self._shader_view = view
+                self.add_widget(view)
+            cx, cy, R = self.glass_geometry()
+            self.canvas.before.clear()
+            with self.canvas.before:
+                self.draw_glass_scene(cx, cy, R)
+            view.place(cx, cy, R * 8.0)  # the shader sphere has radius 0.25 of the half quad; rings need room
+            ofac, gather, _burst = self.ready_factor()
+            state = getattr(self, "state_now", "idle")
+            lv = self.level
+            self._listen_w = getattr(self, "_listen_w", 0.0)
+            self._listen_w += ((1.0 if state == "listening" else 0.0) - self._listen_w) * 0.15
+            if state == "listening":
+                ofac *= 1.0 - 0.06 * getattr(self, "pulse", 0.0) * (0.4 + lv)
+            self._speak_w = getattr(self, "_speak_w", 0.0)
+            self._speak_w += ((1.0 if state == "speaking" else 0.0) - self._speak_w) * 0.15
+            rt = getattr(self, "ready_t", None)
+            age = (rt - 2.0) if (rt is not None and 2.0 <= rt < 3.8) else -1.0
+            clip = (-(cx - self.x) / R, (self.right - cx) / R, -(cy - self.y) / R, (self.top - cy) / R)
+            view.canvas["u_clip"] = tuple(float(v) for v in clip)
+            view.update(self.clock_t, self.phase, min(1.0, lv + 0.08 * getattr(self, "pulse", 0.0)),
+                        u_think=getattr(self, "think_w", 0.0), u_gather=gather, u_ofac=ofac,
+                        u_flash=getattr(self, "flash", 0.0), u_listen=self._listen_w,
+                        u_speak=self._speak_w, u_cycles=getattr(self, "pulse_cycles", 0.0),
+                        u_orbit=getattr(self, "orbit_ang", 0.0), u_age=age)
+            return True
+        except Exception:
+            self._shader_failed = True
+            try:
+                self.canvas.before.clear()
+                if getattr(self, "_shader_view", None) is not None:
+                    self.remove_widget(self._shader_view)
+            except Exception:
+                pass
+            return False
+
+    def draw_glass_scene(self, cx, cy, R):
+        """Floor, light pillars and reflection behind the glass sphere."""
         lv = self.level
+        flash = getattr(self, "flash", 0.0)
         fy = cy - R * 1.02
         w = self.width
         floor = linear_texture("g_floor", ((0, (0, 0, 0, 0)), (1, (10, 40, 70, 140))))
@@ -1202,11 +1775,121 @@ class AnimatedCore(Widget):
         refl = radial_texture("g_refl", ((0, (70, 190, 255, 130)), (1, (70, 190, 255, 0))))
         for fx, a in ((0.10, 0.5), (0.90, 0.5), (0.03, 0.25), (0.97, 0.25)):
             x = self.x + w * fx
-            Color(1, 1, 1, min(1.0, a * (1 + 0.6 * lv)))
+            Color(1, 1, 1, min(1.0, a * (1 + 0.6 * lv + 0.8 * flash)))
             Rectangle(texture=pillar, pos=(x - dp(2.5), fy), size=(dp(5), max(self.top - fy - dp(6), 1)))
             rw = w * 0.32
             Rectangle(texture=refl, pos=(x - rw / 2, fy - rw * 0.125), size=(rw, rw * 0.25))
-        Color(1, 1, 1, min(1.0, 0.8 + 0.5 * lv))
+        Color(1, 1, 1, min(1.0, 0.8 + 0.5 * lv + 0.4 * flash))
+        Rectangle(texture=refl, pos=(cx - R * 1.1, fy - R * 0.22), size=(R * 2.2, R * 0.44))
+
+    def draw_glass_overlay(self):
+        """Scanning rings, orbiting comets and state rings drawn above the shader sphere."""
+        cx, cy, R = self.glass_geometry()
+        p, lv = self.phase, self.level
+        state = getattr(self, "state_now", "idle")
+        tw = getattr(self, "think_w", 0.0)
+        flash = getattr(self, "flash", 0.0)
+        cycles = getattr(self, "pulse_cycles", 0.0)
+        accent = hex_color(THEMES[self.theme_index]["accent"])[:3]
+        accent2 = hex_color(THEMES[self.theme_index]["accent2"])[:3]
+        ofac, _g, _b = self.ready_factor()
+        rt = getattr(self, "ready_t", None)
+        with self.canvas.after:
+            if tw > 0.02:
+                for i in range(2):
+                    tilt = 0.30 + 0.28 * math.sin(p * 1.1 + i * 2.4)
+                    pts = []
+                    for n in range(49):
+                        t = n / 48.0 * math.pi * 2 + p * (1.3 if i == 0 else -1.0)
+                        pts.extend((cx + math.cos(t) * R * 1.04, cy + math.sin(t) * R * 1.04 * tilt))
+                    Color(*(accent if i == 0 else accent2), 0.7 * tw)
+                    Line(points=pts, width=dp(1.1))
+            oa = getattr(self, "orbit_ang", 0.0)
+            for ring in range(2):
+                tilt = 0.32 + 0.22 * ring + tw * 0.2 * math.sin(p * 1.6 + ring)
+                rad = R * (1.22 + 0.2 * ring) * (ofac if rt is not None else 1.0)
+                head = oa * (1.0 + 0.4 * ring) * (1 if ring == 0 else -1) + ring * 2.0
+                for k in range(14):
+                    t = head - k * 0.09
+                    px = cx + math.cos(t) * rad
+                    py = cy + math.sin(t) * rad * tilt
+                    Color(0.6, 0.95, 1, (1 - k / 14.0) * (0.55 + 0.4 * lv) * (1.0 if math.sin(t) < 0 else 0.5))
+                    Point(points=[px, py], pointsize=dp(1.0 - 0.04 * k))
+            # three thin gyroscope rings that tumble slowly around the sphere, each with a bright node
+            for i in range(3):
+                ga = oa * 0.3 * (i + 1) * (1 if i % 2 == 0 else -1) + i * 1.1
+                gt = 1.0 + 0.5 * i + 0.4 * math.sin(p * 0.5 + i * 1.7)
+                semi_a = R * (1.42 + 0.12 * i) * (ofac if rt is not None else 1.0)
+                semi_b = semi_a * abs(math.cos(gt)) + dp(1.5)
+                cg, sg = math.cos(ga), math.sin(ga)
+                pts = []
+                for n in range(49):
+                    t = n / 48.0 * math.pi * 2
+                    ex, ey = math.cos(t) * semi_a, math.sin(t) * semi_b
+                    pts.extend((cx + ex * cg - ey * sg, cy + ex * sg + ey * cg))
+                Color(0.75, 0.88, 1.0, 0.12 + 0.18 * lv + 0.25 * tw)
+                Line(points=pts, width=dp(0.7))
+                tn = oa * (1.3 + 0.5 * i) + i * 2.0
+                ex, ey = math.cos(tn) * semi_a, math.sin(tn) * semi_b
+                Color(1, 1, 1, 0.8)
+                Point(points=[cx + ex * cg - ey * sg, cy + ex * sg + ey * cg], pointsize=dp(1.5))
+            # sparks fly out of the centre when the answer bursts
+            if rt is not None and 2.0 <= rt < 3.8:
+                age = rt - 2.0
+                fade = max(0.0, 1.0 - age / 1.8)
+                for i in range(48):
+                    ang = i * 2.39996
+                    spd = 0.8 + 0.9 * ((i * 0.618) % 1.0)
+                    d = R * (0.2 + spd * 1.4 * (1 - math.exp(-2.5 * age)))
+                    ca, sa = math.cos(ang), math.sin(ang)
+                    Color(0.85, 0.95, 1.0, fade)
+                    Line(points=[cx + ca * d * 0.82, cy + sa * d * 0.82, cx + ca * d, cy + sa * d], width=dp(0.8))
+            if state == "speaking":
+                for k in range(3):
+                    u = (cycles * 0.5 + k / 3.0) % 1.0
+                    rr = R * (1.1 + 0.7 * u)
+                    Color(*accent, (1 - u) * (0.15 + 0.6 * lv))
+                    Line(ellipse=(cx - rr, cy - rr * 0.22, rr * 2, rr * 0.44, 0, 360, 60), width=dp(1.0))
+            elif state == "listening":
+                for k in range(3):
+                    u = (cycles * 0.25 + k / 3.0) % 1.0
+                    Color(0.7, 1, 0.9, u * (0.20 + 0.55 * lv))
+                    Line(circle=(cx, cy, R * (2.0 - 0.7 * u)), width=dp(1.0))
+            if flash > 0:
+                u = 1.0 - flash
+                rr = R * (1.1 + 0.9 * u)
+                Color(1, 1, 1, flash * 0.85)
+                Line(ellipse=(cx - rr, cy - rr * 0.22, rr * 2, rr * 0.44, 0, 360, 60), width=dp(1.8))
+                Line(circle=(cx, cy, rr), width=dp(1.4))
+
+    def draw_glass(self, cx, cy, R, accent, accent2):
+        """Glass orb. Calm when ready, twisting meridians and scanning rings while thinking, dust that
+        gathers, bursts and returns when the answer is ready, waves while reading aloud, ripples
+        converging while the microphone listens."""
+        p = self.phase
+        lv = self.level
+        state = getattr(self, "state_now", "idle")
+        pulse = getattr(self, "pulse", 0.0)
+        flash = getattr(self, "flash", 0.0)
+        cycles = getattr(self, "pulse_cycles", 0.0)
+        rot = getattr(self, "rot", 0.0)
+        tw = getattr(self, "think_w", 0.0)
+        rt = getattr(self, "ready_t", None)
+        fy = cy - R * 1.02
+        w = self.width
+        floor = linear_texture("g_floor", ((0, (0, 0, 0, 0)), (1, (10, 40, 70, 140))))
+        Color(1, 1, 1, 1)
+        Rectangle(texture=floor, pos=(self.x, self.y), size=(w, max(fy - self.y, 1)))
+        pillar = linear_texture("g_pillar", ((0, (60, 180, 255, 255)), (0.4, (50, 170, 255, 255)),
+                                             (1, (40, 160, 255, 0))))
+        refl = radial_texture("g_refl", ((0, (70, 190, 255, 130)), (1, (70, 190, 255, 0))))
+        for fx, a in ((0.10, 0.5), (0.90, 0.5), (0.03, 0.25), (0.97, 0.25)):
+            x = self.x + w * fx
+            Color(1, 1, 1, min(1.0, a * (1 + 0.6 * lv + 0.8 * flash)))
+            Rectangle(texture=pillar, pos=(x - dp(2.5), fy), size=(dp(5), max(self.top - fy - dp(6), 1)))
+            rw = w * 0.32
+            Rectangle(texture=refl, pos=(x - rw / 2, fy - rw * 0.125), size=(rw, rw * 0.25))
+        Color(1, 1, 1, min(1.0, 0.8 + 0.5 * lv + 0.4 * flash))
         Rectangle(texture=refl, pos=(cx - R * 1.1, fy - R * 0.22), size=(R * 2.2, R * 0.44))
         Color(0.22, 0.78, 1, 0.2)
         for k in range(-6, 7):
@@ -1216,36 +1899,56 @@ class AnimatedCore(Widget):
                                          (1, (11, 42, 60, 255))))
         Color(1, 1, 1, 1)
         Rectangle(texture=body, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
+        spin = rot * 1.4
         for k in range(14):
-            a = k / 14.0 * math.pi + p * 0.35
+            a = k / 14.0 * math.pi + spin + tw * 0.6 * math.sin(p * 1.2 + k * 0.7)
             rx = max(R * abs(math.cos(a)), dp(0.4))
-            Color(0.22, 0.78, 1, 0.07 + 0.2 * abs(math.sin(a)))
+            Color(0.22, 0.78, 1, 0.07 + 0.2 * abs(math.sin(a)) + 0.25 * flash)
             Line(ellipse=(cx - rx, cy - R * 0.995, 2 * rx, 2 * R * 0.995, 0, 360, 40), width=dp(0.6))
+        # ---- "answer ready" sequence for the surface dust: gather 2 s, burst, flow back
+        gather = 0.0
+        burst = False
+        if rt is None:
+            ofac = 1.0
+        elif rt < 2.0:
+            u = rt / 2.0
+            ofac, gather = 1.0 - 0.97 * u * u, u
+        elif rt < 2.3:
+            u = (rt - 2.0) / 0.3
+            ofac, burst = 0.03 + 1.6 * (1 - (1 - u) ** 3), True
+        else:
+            u = min(1.0, (rt - 2.3) / 1.6)
+            ofac, burst = 1.63 + (1.0 - 1.63) * (u * u * (3 - 2 * u)), True
         front, back, red = [], [], []
+        pull = 0.06 * pulse * (0.4 + lv) if state == "listening" else 0.0
         for lon, lat in self.dashes:
-            lo = lon + p * 0.35
+            lo = lon + spin + tw * 0.8 * math.sin(lat * 3 + p * 1.5)
+            if gather > 0:
+                lo += gather * 3.0
             x = math.cos(lat) * math.sin(lo)
             z = math.cos(lat) * math.cos(lo)
             y = math.sin(lat)
-            (front if z > 0.1 else back).extend((cx + x * R * 0.97, cy + y * R * 0.97))
+            f = 0.97 * ofac * (1 - pull) * ((0.8 + 0.4 * ((lon * 7) % 1.0)) if burst else 1.0)
+            (front if z > 0.1 or ofac < 0.6 else back).extend((cx + x * R * f, cy + y * R * f))
         for lon, lat in self.reds:
-            lo = lon + p * 0.35
+            lo = lon + spin
             if math.cos(lat) * math.cos(lo) > 0:
-                red.extend((cx + math.cos(lat) * math.sin(lo) * R * 0.97, cy + math.sin(lat) * R * 0.97))
+                red.extend((cx + math.cos(lat) * math.sin(lo) * R * 0.97 * ofac,
+                            cy + math.sin(lat) * R * 0.97 * ofac))
         if back:
             Color(0.37, 0.85, 1, 0.35)
-            Point(points=back, pointsize=dp(0.7))
+            Point(points=back, pointsize=dp(0.5))
         if front:
             Color(0.45, 0.90, 1, 0.9)
-            Point(points=front, pointsize=dp(0.9))
+            Point(points=front, pointsize=dp(0.65 if not burst else 0.9))
         if red:
             Color(1, 0.35, 0.29, 0.9)
-            Point(points=red, pointsize=dp(1.1))
+            Point(points=red, pointsize=dp(0.9))
         inner = radial_texture("g_inner", ((0, (40, 160, 230, 0)), (0.7, (40, 160, 230, 0)),
                                            (1, (40, 170, 240, 70))))
         Color(1, 1, 1, 1)
         Rectangle(texture=inner, pos=(cx - R, cy - R), size=(2 * R, 2 * R))
-        pl = min(1.0, 0.7 + 0.3 * math.sin(p * 2) + 0.5 * lv)
+        pl = min(1.0, 0.7 + 0.3 * math.sin(p * 2) + 0.5 * lv + 0.3 * pulse * (0.0 if state == "idle" else 1.0))
 
         def equator(span):
             pts = []
@@ -1262,14 +1965,55 @@ class AnimatedCore(Widget):
         Color(0.91, 0.98, 1, 0.8 * pl)
         Line(points=[cx, cy - R * 0.18, cx, cy + R * 0.18], width=dp(1))
         flare = radial_texture("g_flare", ((0, (220, 250, 255, 240)), (1, (56, 200, 255, 0))))
-        fs = R * 0.22 * (1 + 0.8 * lv)
-        Color(1, 1, 1, pl)
+        fs = R * 0.22 * (1 + 0.8 * lv + 2.4 * gather + 1.5 * flash)
+        Color(1, 1, 1, min(1.0, pl + gather))
         Rectangle(texture=flare, pos=(cx - fs, cy - fs), size=(fs * 2, fs * 2))
+        # thinking: two scanning rings sweep over the sphere (tilt oscillates)
+        if tw > 0.02:
+            for i in range(2):
+                tilt = 0.30 + 0.28 * math.sin(p * 1.1 + i * 2.4)
+                pts = []
+                for n in range(49):
+                    t = n / 48.0 * math.pi * 2 + p * (1.3 if i == 0 else -1.0)
+                    pts.extend((cx + math.cos(t) * R * 1.04, cy + math.sin(t) * R * 1.04 * tilt))
+                Color(*(accent if i == 0 else accent2), 0.7 * tw)
+                Line(points=pts, width=dp(1.1))
         Color(0.35, 0.82, 1, 0.85)
         Line(circle=(cx, cy, R), width=dp(1.3))
         Color(1, 1, 1, 0.92)
         Line(circle=(cx, cy, R * 0.9, 303, 327), width=R * 0.035, cap="round")
         Line(circle=(cx, cy, R * 0.9, 33, 57), width=R * 0.035, cap="round")
+        # orbiting comets on two tilted rings; they follow the same gather/burst/return sequence
+        osp = {"idle": 0.5, "thinking": 2.2, "speaking": 1.2, "listening": -1.4}.get(state, 0.8)
+        oa = getattr(self, "orbit_ang", 0.0)
+        for ring in range(2):
+            tilt = 0.32 + 0.22 * ring + tw * 0.2 * math.sin(p * 1.6 + ring)
+            rad = R * (1.22 + 0.2 * ring) * (ofac if rt is not None else 1.0)
+            head = oa * (1.0 + 0.4 * ring) * (1 if ring == 0 else -1) + ring * 2.0
+            for k in range(14):
+                t = head - k * 0.09
+                px = cx + math.cos(t) * rad
+                py = cy + math.sin(t) * rad * tilt
+                Color(0.6, 0.95, 1, (1 - k / 14.0) * (0.55 + 0.4 * lv) * (1.0 if math.sin(t) < 0 else 0.5))
+                Point(points=[px, py], pointsize=dp(1.0 - 0.04 * k))
+        # state rings
+        if state == "speaking":
+            for k in range(3):
+                u = (cycles * 0.5 + k / 3.0) % 1.0
+                rr = R * (1.1 + 0.7 * u)
+                Color(*accent, (1 - u) * (0.15 + 0.6 * lv))
+                Line(ellipse=(cx - rr, cy - rr * 0.22, rr * 2, rr * 0.44, 0, 360, 60), width=dp(1.0))
+        elif state == "listening":
+            for k in range(3):
+                u = (cycles * 0.25 + k / 3.0) % 1.0
+                Color(0.7, 1, 0.9, u * (0.20 + 0.55 * lv))
+                Line(circle=(cx, cy, R * (2.0 - 0.7 * u)), width=dp(1.0))
+        if flash > 0:
+            u = 1.0 - flash
+            rr = R * (1.1 + 0.9 * u)
+            Color(1, 1, 1, flash * 0.85)
+            Line(ellipse=(cx - rr, cy - rr * 0.22, rr * 2, rr * 0.44, 0, 360, 60), width=dp(1.8))
+            Line(circle=(cx, cy, rr), width=dp(1.4))
 
     def _note_missing_orb(self):
         """PNG orb images are optional; the procedural orb is the normal fallback."""
@@ -1308,7 +2052,7 @@ class AnimatedCore(Widget):
         try:
             view = getattr(self, "_shader_view", None)
             if view is None:
-                view = AuraShaderView()
+                view = AuraShaderView(frag=PARTICLE_FRAG if self.theme_index == 1 else AURA_FRAG)
                 if not view.ok:
                     self._shader_failed = True
                     return False
@@ -1316,8 +2060,7 @@ class AnimatedCore(Widget):
                 self.add_widget(view)
             cx, cy = self.center
             view.place(cx, cy, size * 1.34)
-            view.update(self.clock_t, self.phase, self.level)
-            self.draw_ribbon_overlay(cx, cy, size)
+            view.update(self.clock_t, self.phase, min(1.0, self.level + 0.10 * getattr(self, "pulse", 0.0)))
             return True
         except Exception:
             self._shader_failed = True
@@ -1330,7 +2073,6 @@ class AnimatedCore(Widget):
 
     def draw_ribbon_overlay(self, cx, cy, size):
         """PNG ribbons spinning over the shader orb (drawn in canvas.after, i.e. above the child)."""
-        self.canvas.after.clear()
         layers = aura_layers()
         if layers is None:
             return
@@ -1382,9 +2124,19 @@ class AnimatedCore(Widget):
         Color(1, 1, 1, 0.75 + 0.25 * math.sin(t * 1.6))
         Rectangle(texture=layers["aura_glare"], pos=(cx - side / 2 + gx, cy - side / 2 + gy), size=(side, side))
 
+    def draw_overlay(self):
+        self.canvas.after.clear()
+        if self.width <= 0 or self.height <= 0:
+            return
+        if self.theme_index == 0 and getattr(self, "_shader_view", None) is not None \
+                and not getattr(self, "_shader_failed", False):
+            cx, cy = self.center
+            self.draw_ribbon_overlay(cx, cy, min(self.width, self.height))
+
     def redraw(self, *_):
         try:
             self._redraw_impl()
+            self.draw_overlay()
         except Exception:
             if getattr(self, "_event", None):
                 self._event.cancel()
@@ -1404,6 +2156,8 @@ class AnimatedCore(Widget):
         # The shader orb is a child widget: do not clear the canvas (that would drop it).
         if self.theme_index == 0 and self.update_aura_shader(min(self.width, self.height)):
             return
+        if self.theme_index == 2 and self.update_glass_shader():
+            return
         self.canvas.clear()
         theme = THEMES[self.theme_index]
         accent = hex_color(theme["accent"])[:3]
@@ -1416,7 +2170,7 @@ class AnimatedCore(Widget):
                 if layers is not None:
                     self.draw_aura_layers(layers, size)
                     return
-            photo = orb_texture(self.theme_index)
+            photo = orb_texture(self.theme_index) if self.theme_index == 0 else None
             if photo is not None:
                 self.draw_photo(photo, size)
                 return
