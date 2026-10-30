@@ -28,6 +28,7 @@ from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
                            RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate,
                            RenderContext)
 from kivy.graphics.texture import Texture
+from kivy.core.text import LabelBase
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
@@ -691,6 +692,38 @@ GLASS_ERRORS = []
 
 # Animation state shared by all orbs: when the screen is rebuilt (language, theme,
 # settings) the new orb continues from the same moment instead of starting from zero.
+
+def register_app_fonts():
+    """Use JarvisSans (Roboto + monochrome Noto Emoji merged) as the app's default font, so emoji
+    and symbols are drawn instead of empty boxes. Falls back silently to the built-in Roboto if the
+    font files are not found (put JarvisSans-Regular.ttf / JarvisSans-Bold.ttf in assets/)."""
+    folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd(),
+               "/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
+
+    def find(name):
+        for folder in folders:
+            for path in (os.path.join(folder, "assets", name), os.path.join(folder, name)):
+                try:
+                    if os.path.isfile(path):
+                        return path
+                except Exception:
+                    pass
+        return None
+
+    regular = find("JarvisSans-Regular.ttf")
+    bold = find("JarvisSans-Bold.ttf") or regular
+    if not regular:
+        return False
+    try:
+        LabelBase.register(name="Roboto", fn_regular=regular, fn_bold=bold,
+                           fn_italic=regular, fn_bolditalic=bold)
+        return True
+    except Exception:
+        return False
+
+
+FONT_OK = register_app_fonts()
+
 ANIM = {"phase": 0.0, "clock_t": 0.0, "level": 0.0}
 # Orb pulse period per state, in milliseconds (ready = slow, listening = fast).
 PULSE_PERIOD_MS = {"idle": 3000, "thinking": 1500, "speaking": 800, "listening": 300}
@@ -2883,7 +2916,7 @@ class JarvisApp(App):
                                 size_hint_y=None, height=dp(52))
         glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
         self.command_input = TextInput(
-            hint_text=self.t("input"), multiline=False, size_hint_x=1,
+            hint_text=self.t("input"), multiline=True, size_hint_x=1,
             font_size=dp(15), foreground_color=hex_color(theme["text"]),
             hint_text_color=(*hex_color(theme["accent"])[:3], 0.52),
             cursor_color=hex_color(theme["accent"]),
@@ -2891,8 +2924,18 @@ class JarvisApp(App):
             background_color=(0, 0, 0, 0),
             padding=[dp(22), dp(15), dp(10), dp(10)],
         )
-        self.command_input.bind(on_text_validate=self.send_command)
+        # Enter starts a new paragraph (multiline); a message is sent only with the send button.
         self.command_input.bind(text=self.on_text_change)
+
+        def fit_input_height(*_):
+            # the input row grows with the text (up to ~5 lines) and shrinks back after sending
+            try:
+                need = self.command_input.minimum_height + dp(6)
+                command_row.height = max(dp(52), min(dp(140), need))
+            except Exception:
+                pass
+
+        self.command_input.bind(minimum_height=fit_input_height)
         self.attach_btn = Button(text="+", font_size=dp(28), size_hint_x=None, width=dp(42),
                                  background_normal="", background_color=(0, 0, 0, 0),
                                  color=hex_color(theme["accent"]))
