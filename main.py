@@ -3089,6 +3089,13 @@ class JarvisApp(App):
             self.show_response("Интихоби файл дар ин дастгоҳ кушода нашуд.")
 
     def on_activity_result(self, request_code, result_code, data):
+        """Move Android activity-result handling onto Kivy's main thread."""
+        Clock.schedule_once(
+            lambda dt: self._process_activity_result(request_code, result_code, data),
+            0,
+        )
+
+    def _process_activity_result(self, request_code, result_code, data):
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
             return
         self._attachment_pending = False
