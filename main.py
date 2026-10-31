@@ -444,6 +444,21 @@ TEXTS = {
         "lang_changed": "Забон иваз шуд: {}",
         "theme_changed": "Интерфейс: {}",
         "cmd_error": "Хатогӣ рух дод.",
+        "you": "Шумо",
+        "file_picker_failed": "Интихоби файл дар ин дастгоҳ кушода нашуд.",
+        "file_not_selected": "Файл интихоб нашуд.",
+        "file_too_big": "Файл аз 20 МБ калон аст.",
+        "file_empty": "Файл холӣ аст.",
+        "file_default_prompt": "Лутфан ин файлро таҳлил кун.",
+        "file_prompt_server": "Таҳлил кун ва натиҷаро фаҳмо шарҳ деҳ.",
+        "file_read_failed": "Файл хонда нашуд: {}",
+        "file_send_failed": "Фиристодани файл ноком шуд: {}",
+        "file_no_answer": "Ҷавоби таҳлил гирифта нашуд.",
+        "server_http_error": "Хатои сервер: HTTP {}",
+        "reply_format": "формати ҷавоб: {}",
+        "tts_failed_all": "Овози сервер дастрас нест ва овози маҳаллӣ низ кор накард. Танзимоти Text-to-Speech-ро санҷед.",
+        "copy_failed": "Нусхабардорӣ кор накард.",
+        "edge_unavailable": "Овози Edge дастрас нест ({}). Овози телефон истифода мешавад.",
         "error_hint": "Барномаро аз нав кушоед.",
         "listen_prompt": "Фармонро бигӯед",
         "stt_unavailable": "Шинохти овоз дастрас нест.",
@@ -519,6 +534,21 @@ TEXTS = {
         "lang_changed": "Язык изменён: {}",
         "theme_changed": "Интерфейс: {}",
         "cmd_error": "Произошла ошибка.",
+        "you": "Вы",
+        "file_picker_failed": "Не удалось открыть выбор файла на этом устройстве.",
+        "file_not_selected": "Файл не выбран.",
+        "file_too_big": "Файл больше 20 МБ.",
+        "file_empty": "Файл пуст.",
+        "file_default_prompt": "Пожалуйста, проанализируй этот файл.",
+        "file_prompt_server": "Проанализируй и понятно объясни результат.",
+        "file_read_failed": "Не удалось прочитать файл: {}",
+        "file_send_failed": "Не удалось отправить файл: {}",
+        "file_no_answer": "Результат анализа не получен.",
+        "server_http_error": "Ошибка сервера: HTTP {}",
+        "reply_format": "формат ответа: {}",
+        "tts_failed_all": "Голос сервера недоступен, и локальный голос тоже не сработал. Проверьте настройки Text-to-Speech.",
+        "copy_failed": "Не удалось скопировать.",
+        "edge_unavailable": "Голос Edge недоступен ({}). Используется голос телефона.",
         "error_hint": "Перезапустите приложение.",
         "listen_prompt": "Скажите команду",
         "stt_unavailable": "Распознавание речи недоступно.",
@@ -594,6 +624,21 @@ TEXTS = {
         "lang_changed": "Language: {}",
         "theme_changed": "Theme: {}",
         "cmd_error": "Error.",
+        "you": "You",
+        "file_picker_failed": "The file picker could not be opened on this device.",
+        "file_not_selected": "No file selected.",
+        "file_too_big": "The file is larger than 20 MB.",
+        "file_empty": "The file is empty.",
+        "file_default_prompt": "Please analyze this file.",
+        "file_prompt_server": "Analyze it and explain the result clearly.",
+        "file_read_failed": "Could not read the file: {}",
+        "file_send_failed": "Sending the file failed: {}",
+        "file_no_answer": "No analysis result was received.",
+        "server_http_error": "Server error: HTTP {}",
+        "reply_format": "reply format: {}",
+        "tts_failed_all": "The server voice is unavailable and the local voice failed too. Check the Text-to-Speech settings.",
+        "copy_failed": "Copy failed.",
+        "edge_unavailable": "The Edge voice is unavailable ({}). The phone voice is used instead.",
         "error_hint": "Restart.",
         "listen_prompt": "Say command",
         "stt_unavailable": "STT unavailable.",
@@ -2822,9 +2867,9 @@ class ChatStore(object):
 
 COMMANDS = []
 
-def command(name, *keywords, priority=10):
+def command(name, *keywords, priority=10, targets=()):
     def register(fn):
-        COMMANDS.append((priority, name, tuple(k.lower() for k in keywords), fn))
+        COMMANDS.append((priority, name, tuple(k.lower() for k in keywords), fn, tuple(targets)))
         COMMANDS.sort(key=lambda c: -c[0])
         return fn
     return register
@@ -2833,10 +2878,43 @@ def keyword_match(text, keyword):
     pattern = r"(?<!\w)" + re.escape(keyword) + (r"(?!\w)" if len(keyword) <= 3 else "")
     return re.search(pattern, text) is not None
 
+# Polite / connecting words that may surround an offline command without changing its meaning.
+COMMAND_FILLER = frozenset((
+    "лутфан", "пожалуйста", "please", "ба", "кун", "кунед", "бикун", "иваз", "шав", "нишон", "деҳ", "деҳед",
+    "бидеҳ", "кушо", "кушоед", "бикушо", "ман", "ту", "мне", "покажи", "открой", "смени", "сменить",
+    "измени", "поставь", "на", "в", "show", "open", "change", "switch", "set", "to", "the", "my", "me",
+    "ҳоло", "ҳозир", "сейчас", "now",
+))
+
+
+def command_matches(text, keywords, targets=()):
+    """An offline command runs only when the WHOLE message is that command (ignoring punctuation and
+    polite filler words). A message that merely contains a similar word goes to the AI instead.
+    Commands with `targets` (language, theme) may also carry one or two target words, e.g. "забон русӣ"."""
+    rest = [w for w in re.findall(r"\w+", text.lower()) if w not in COMMAND_FILLER]
+    if not rest:
+        return False
+    for k in keywords:
+        kw = [w for w in re.findall(r"\w+", k) if w not in COMMAND_FILLER]
+        if not kw:
+            continue
+        if rest == kw:
+            return True
+        if targets and len(rest) > len(kw):
+            extra = None
+            if rest[:len(kw)] == kw:
+                extra = rest[len(kw):]
+            elif rest[-len(kw):] == kw:
+                extra = rest[:-len(kw)]
+            if extra and len(extra) <= 2 and all(any(e.startswith(t) for t in targets) for e in extra):
+                return True
+    return False
+
+
 def run_command(app, text):
     low = text.lower().strip()
-    for priority, name, keywords, fn in COMMANDS:
-        if any(keyword_match(low, k) for k in keywords):
+    for priority, name, keywords, fn, targets in COMMANDS:
+        if command_matches(low, keywords, targets):
             try:
                 return fn(app, low)
             except Exception:
@@ -2855,7 +2933,8 @@ def cmd_chats(app, text):
     Clock.schedule_once(lambda dt: app.show_chats(), 0.4)
     return app.t("chats_opened")
 
-@command("language", "забон", "язык", "language", priority=70)
+@command("language", "забон", "забонро", "забони барнома", "язык", "язык приложения", "language",
+         priority=70, targets=("тоҷик", "таджик", "tajik", "tg", "рус", "russian", "ru", "англис", "англий", "english", "en"))
 def cmd_language(app, text):
     # Mentioning a language as the target of a translation is not a UI-language command.
     if any(phrase in text for phrase in ("тарҷума", "переведи", "перевести", "translate", "translation")):
@@ -2874,8 +2953,8 @@ def cmd_settings(app, text):
     Clock.schedule_once(lambda dt: app.show_settings(), 0.4)
     return app.t("settings_opened")
 
-@command("theme", "мавзӯъ", "мавзуъ", "тема", "theme", "design", "интерфейс",
-         "aura", "particle", "glass", priority=50)
+@command("theme", "мавзӯъ", "мавзуъ", "мавзӯъро", "тема", "тему", "theme", "design", "интерфейс",
+         "aura", "particle", "glass", priority=50, targets=("aura", "particle", "glass"))
 def cmd_theme(app, text):
     for i, item in enumerate(THEMES):
         if keyword_match(text, item["name"].lower().split()[0]):
@@ -2894,11 +2973,13 @@ def cmd_about(app, text):
 def cmd_voice(app, text):
     return app.t("voice_how") + "\n" + app.t("voice_hint")
 
-@command("time", "соат", "время", "time", "clock", priority=10)
+@command("time", "соат", "соат чанд аст", "вақт чанд аст", "время", "который час", "сколько времени",
+         "time", "what time is it", "clock", priority=10)
 def cmd_time(app, text):
     return app.t("time") + ": " + datetime.now().strftime("%H:%M:%S")
 
-@command("date", "сана", "дата", "date", "today", priority=10)
+@command("date", "сана", "санаи имрӯз", "имрӯз кадом сана аст", "дата", "какое сегодня число",
+         "date", "what is the date", "what date is it", "today", priority=10)
 def cmd_date(app, text):
     return app.t("date") + ": " + datetime.now().strftime("%d.%m.%Y")
 
@@ -2906,7 +2987,7 @@ def cmd_date(app, text):
 def cmd_status(app, text):
     return app.t("system") + "\n\n" + THEMES[app.theme_index]["name"]
 
-@command("help", "кӯмак", "кумак", "помощь", "help", "команд", priority=10)
+@command("help", "кӯмак", "кумак", "фармонҳо", "помощь", "команды", "help", "commands", priority=10)
 def cmd_help(app, text):
     return app.t("help") + "\n" + app.t("commands")
 
@@ -3281,7 +3362,7 @@ class JarvisApp(App):
         user = role == "user"
         accent = hex_color(theme["accent"])[:3]
         if user:
-            tint, fill, who = accent, 0.20, "Шумо"
+            tint, fill, who = accent, 0.20, self.t("you")
             who_color = (accent[0], accent[1], accent[2], 1)
         else:
             tint, fill, who = (0.05, 0.07, 0.14), 0.55, "JARVIS"
@@ -3443,7 +3524,7 @@ class JarvisApp(App):
             PythonActivity.mActivity.startActivityForResult(intent, 7412)
         except Exception as exc:
             save_crash("Attachment picker failed: " + str(exc))
-            self.show_response("Интихоби файл дар ин дастгоҳ кушода нашуд.")
+            self.show_response(self.t("file_picker_failed"))
 
     def on_activity_result(self, request_code, result_code, data):
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
@@ -3456,7 +3537,7 @@ class JarvisApp(App):
                 return
             uri = data.getData()
             if uri is None:
-                self.show_response("Файл интихоб нашуд.")
+                self.show_response(self.t("file_not_selected"))
                 return
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             resolver = PythonActivity.mActivity.getContentResolver()
@@ -3475,23 +3556,23 @@ class JarvisApp(App):
                     break
                 total += count
                 if total > 20 * 1024 * 1024:
-                    raise RuntimeError("Файл аз 20 МБ калон аст.")
+                    raise RuntimeError(self.t("file_too_big"))
                 output.write(buf, 0, count)
             stream.close()
             raw = bytes(output.toByteArray())
             if not raw:
-                raise RuntimeError("Файл холӣ аст.")
+                raise RuntimeError(self.t("file_empty"))
             name = str(uri.getLastPathSegment() or "attachment")
             prompt = self.command_input.text.strip() if hasattr(self, "command_input") else ""
             if hasattr(self, "command_input"):
                 self.command_input.text = ""
             chat_id = self.chats.current_id
-            display = "📎 " + name + ("\n" + prompt if prompt else "\nЛутфан ин файлро таҳлил кун.")
+            display = "📎 " + name + ("\n" + prompt if prompt else "\n" + self.t("file_default_prompt"))
             self.add_chat_message(chat_id, "user", display)
             threading.Thread(target=self._upload_attachment, args=(chat_id, name, mime, raw, prompt), daemon=True).start()
         except Exception as exc:
             save_crash("Attachment read failed:\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt, message=str(exc): self.show_response("Файл хонда нашуд: " + message), 0)
+            Clock.schedule_once(lambda dt, message=str(exc): self.show_response(self.t("file_read_failed").format(message)), 0)
 
     def _upload_attachment(self, chat_id, filename, mime, raw, prompt):
         import ssl
@@ -3499,7 +3580,7 @@ class JarvisApp(App):
         def field(name, value):
             return ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n").encode("utf-8")
         safe_name = os.path.basename(filename).replace('"', "_")
-        body = field("prompt", prompt or "Таҳлил кун ва натиҷаро фаҳмо шарҳ деҳ.")
+        body = field("prompt", prompt or self.t("file_prompt_server"))
         body += field("language", self.language if self.language in ("tg", "ru", "en") else "tg")
         body += ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + safe_name + "\"\r\nContent-Type: " + mime + "\r\n\r\n").encode("utf-8") + raw + ("\r\n--" + boundary + "--\r\n").encode("utf-8")
         try:
@@ -3512,17 +3593,17 @@ class JarvisApp(App):
             req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/analyze", data=body, method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary, "X-Jarvis-Token": self.server_token})
             with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
                 result = json.loads(response.read().decode("utf-8"))
-            answer = str(result.get("answer", "Ҷавоби таҳлил гирифта нашуд."))
+            answer = str(result.get("answer", self.t("file_no_answer")))
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, answer), 0)
         except urllib.error.HTTPError as exc:
-            detail = "Хатои сервер: HTTP " + str(exc.code)
+            detail = self.t("server_http_error").format(exc.code)
             try:
                 payload = json.loads(exc.read().decode("utf-8")); detail = str(payload.get("detail", detail))
             except Exception:
                 pass
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, detail), 0)
         except Exception as exc:
-            Clock.schedule_once(lambda dt, message=str(exc): self._attachment_answer(chat_id, "Фиристодани файл ноком шуд: " + message), 0)
+            Clock.schedule_once(lambda dt, message=str(exc): self._attachment_answer(chat_id, self.t("file_send_failed").format(message)), 0)
 
     def _attachment_answer(self, chat_id, answer):
         self.deliver_answer(chat_id, answer)
@@ -3597,7 +3678,7 @@ class JarvisApp(App):
                 answer = extract(data)
                 if not answer:
                     keys = ",".join(list(data.keys())[:6]) if isinstance(data, dict) else type(data).__name__
-                    last = "формати ҷавоб: " + keys
+                    last = self.t("reply_format").format(keys)
                 break
             except urllib.error.HTTPError as exc:
                 detail = ""
@@ -3676,7 +3757,7 @@ class JarvisApp(App):
                     save_crash("Local speech fallback failed: " + str(exc))
                     if not self.tts_error_noted:
                         self.tts_error_noted = True
-                        self.show_response("Овози сервер дастрас нест ва овози маҳаллӣ низ кор накард. Танзимоти Text-to-Speech-ро санҷед.")
+                        self.show_response(self.t("tts_failed_all"))
             Clock.schedule_once(attempt, 0.15)
         except Exception:
             save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
@@ -3791,7 +3872,7 @@ class JarvisApp(App):
             Clipboard.copy(str(text))
         except Exception:
             save_crash("Copy failed:\n" + traceback.format_exc())
-            self.show_response("Нусхабардорӣ кор накард.")
+            self.show_response(self.t("copy_failed"))
             return
         if button is not None:
             button.set_kind("check")
@@ -3876,7 +3957,7 @@ class JarvisApp(App):
             return
         self.server_speech_error_noted = True
         try:
-            self.show_response("Овози Edge дастрас нест (%s). Овози телефон истифода мешавад." % detail)
+            self.show_response(self.t("edge_unavailable").format(detail))
         except Exception:
             pass
 
