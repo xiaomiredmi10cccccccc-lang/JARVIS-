@@ -258,6 +258,72 @@ class SpeechRecognizer(object):
             except Exception:
                 pass
 
+class SpeechSynthesizer(object):
+    def __init__(self):
+        self._tts = None
+
+    def is_supported(self):
+        return android_available()
+
+    def _engine(self):
+        if self._tts is None:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+            self._tts = TextToSpeech(PythonActivity.mActivity, None)
+        return self._tts
+
+    def warm_up(self):
+        if android_available():
+            try:
+                self._engine()
+            except Exception:
+                pass
+
+    def speak(self, text, lang="ru", pitch=1.0):
+        if not android_available():
+            raise VoiceUnavailable("Speech synthesis works only on Android.")
+        try:
+            from jnius import autoclass
+            Locale = autoclass("java.util.Locale")
+            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+            tts = self._engine()
+            result = "ok"
+            try:
+                tts.setPitch(float(pitch))
+            except Exception:
+                pass
+            code = tts.setLanguage(Locale(lang))
+            if code < 0 and lang == "tg":
+                code = tts.setLanguage(Locale("ru"))
+                result = "fallback"
+            if code < 0:
+                raise VoiceUnavailable("No voice for this language is installed.")
+            speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis")
+            if speak_code != 0:
+                return "starting"
+            return result
+        except VoiceUnavailable:
+            raise
+        except Exception as exc:
+            raise VoiceUnavailable(str(exc))
+
+    def stop(self):
+        try:
+            if self._tts is not None:
+                self._tts.stop()
+        except Exception:
+            pass
+
+    def shutdown(self):
+        try:
+            if self._tts is not None:
+                self._tts.stop()
+                self._tts.shutdown()
+        except Exception:
+            pass
+        self._tts = None
+
 class LocalAccountService(object):
     def is_configured(self):
         return False
@@ -335,6 +401,7 @@ VOICES = ("JARVIS Classic", "Aura")
 VOICE_LABELS = {"JARVIS Classic": "Мардона / Мужской / Male", "Aura": "Занона / Женский / Female"}
 # Server voice profile and Android TTS pitch (only used if the server voice fails).
 VOICE_PROFILE_IDS = {"JARVIS Classic": "classic", "Aura": "aura"}
+VOICE_LOCAL_PITCH = {"JARVIS Classic": 0.8, "Aura": 1.1}
 
 TEXTS = {
     "tg": {
@@ -656,6 +723,14 @@ def register_app_fonts():
 
 
 FONT_OK = register_app_fonts()
+
+# Emoji picker (works without the phone keyboard): (tab label, emoji characters)
+EMOJI_GROUPS = (
+    ('😀', '😀😃😄😁😆😅😂🤣😊😇🙂😉😌😍🥰😘😋😛😜🤪😎🤩🥳😏😒😞😔😟😕🙁😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫😶😐😑😬🙄😯😴🤤😪😵🤐🤢🤮🤧😷🤒🤕🤠🥸🤓🧐'),
+    ('👍', '👍👎👌✌🤞🤟🤘🤙👈👉👆👇☝✋🤚🖐🖖👋🤝👏🙌👐🤲🙏✍💪🦾👀👂👃👄👅🧠'),
+    ('❤', '❤🧡💛💚💙💜🖤🤍🤎💔💕💞💓💗💖💘💝💯💢💥💫💦💨🔥✨⭐🌟⚡🎉🎊🎁🏆🥇🎯'),
+    ('🎉', '🤖👻💀👽🙈🙉🙊🐶🐱🐭🐹🐰🦊🐻🐼🦁🐯🐸🐵🐔🐧🐦🦋🐝🌸🌹🌻🌳🌍🌙☀🌈☁❄🍎🍌🍉🍕🍔🍟🍩🍰☕🍺⚽🏀🎵🎶🎮📱💻📷💡📚✏📌📎🔑🔒🔔📞✉🚗✈🚀🏠💰💳📈✅❌⚠❓❗➕➖➡⬅⬆⬇▶⏸⭕'),
+)
 
 ANIM = {"phase": 0.0, "clock_t": 0.0, "level": 0.0}
 # Orb pulse period per state, in milliseconds (ready = slow, listening = fast).
@@ -1416,7 +1491,7 @@ class AnimatedCore(Widget):
         self.clock_t = ANIM["clock_t"]
         self.fib, self.dashes, self.reds = [], [], []
         if theme_index == 1:
-            n = 800
+            n = 1300
             for k in range(n):
                 y = 1 - 2 * (k + 0.5) / n
                 rr = math.sqrt(1 - y * y)
@@ -1556,7 +1631,7 @@ class AnimatedCore(Widget):
         Line(circle=(cx, cy, R, start, start + 100), width=dp(2.6) * (1 + lv), cap="round")
 
     def draw_particles(self, cx, cy, R, accent, accent2):
-        """Dotted particle sphere: 800 fine points, a web of links, surface waves, a scan band and
+        """Dotted particle sphere: 1300 fine points, bright wave crests over a cyan glow, faint links, surface waves, a scan band and
         orbiting dust. Calm when ready, twisting while thinking, a flash when the answer is ready,
         outward waves while reading aloud, inward ripples while the microphone listens."""
         lv = self.level
@@ -1566,11 +1641,14 @@ class AnimatedCore(Widget):
         cycles = getattr(self, "pulse_cycles", 0.0)
         rot = getattr(self, "rot", 0.0)
         R = R * (1 + 0.10 * lv + 0.02 * pulse + 0.04 * flash)
-        disc = radial_texture("p_disc", ((0, (11, 26, 32, 255)), (1, (4, 8, 11, 255))))
-        Color(1, 1, 1, 1)
-        Rectangle(texture=disc, pos=(cx - R * 1.3, cy - R * 1.3), size=(R * 2.6, R * 2.6))
-        Color(*accent, 0.2 + 0.3 * lv + 0.5 * flash)
-        Line(circle=(cx, cy, R * 1.3), width=dp(1))
+        # no backing disc / outline ring: the particles float free
+        # cyan light filling the whole orb, brighter towards a soft rim, then fading into the dark
+        fill = radial_texture("p_fill", ((0, (30, 150, 220, 70)), (0.55, (40, 185, 245, 95)),
+                                         (0.82, (70, 215, 255, 140)), (0.93, (110, 232, 255, 110)),
+                                         (1, (40, 200, 255, 0))))
+        fs = R * 2.5 * (1 + 0.05 * lv + 0.04 * flash)
+        Color(1, 1, 1, min(1.0, 0.85 + 0.3 * lv + 0.4 * flash))
+        Rectangle(texture=fill, pos=(cx - fs / 2, cy - fs / 2), size=(fs, fs))
         glow = radial_texture("p_glow", ((0, (40, 200, 255, 0)), (0.55, (40, 200, 255, 0)),
                                          (0.8, (40, 200, 255, 40)), (1, (40, 200, 255, 0))))
         gs = min(R * 3 * (1 + 0.3 * lv + 0.25 * flash), min(self.width, self.height))
@@ -1579,7 +1657,7 @@ class AnimatedCore(Widget):
         p = self.phase
         cs, sn = math.cos(rot), math.sin(rot)
         tc, ts = 0.9004, 0.4350
-        base = {"idle": 0.06, "thinking": 0.11, "speaking": 0.13, "listening": 0.10}.get(state, 0.08)
+        base = {"idle": 0.085, "thinking": 0.13, "speaking": 0.15, "listening": 0.12}.get(state, 0.09)
         amp = base * (1 + (0.6 * pulse if state == "thinking" else 2.4 * lv)) * (1 + 0.8 * flash)
         squeeze = (1.0 - 0.05 * pulse * (0.4 + lv)) if state == "listening" else 1.0
         # twist (spiral) of the whole shell and a travelling surface wave
@@ -1597,14 +1675,15 @@ class AnimatedCore(Widget):
             x, z = x * tcx + z * tsx, -x * tsx + z * tcx
             n = (math.sin(x * 2.3 + p * 1.2) * math.sin(y * 2.9 - p * 0.9)
                  + 0.6 * math.sin(z * 3.3 + p * 1.5) + 0.4 * math.sin((x + y + z) * 5 + p * 2)
-                 + wave_k * math.sin(7.0 * y - p * wave_dir))
+                 + wave_k * math.sin(7.0 * y - p * wave_dir)
+                 + 0.7 * math.sin(x * 6.0 + z * 4.0 + p * 1.1) * math.sin(y * 5.0 - p * 0.7))
             rr = (1 + amp * n) * squeeze
             X, Y, Z = x * rr, y * rr, z * rr
             x1 = X * cs + Z * sn
             z1 = -X * sn + Z * cs
             y1 = Y * tc - z1 * ts
             z2 = Y * ts + z1 * tc
-            return cx + x1 * R, cy + y1 * R, z2
+            return cx + x1 * R, cy + y1 * R, z2, n
 
         rt = getattr(self, "ready_t", None)
         seq = rt is not None
@@ -1612,21 +1691,21 @@ class AnimatedCore(Widget):
         if seq:                              # the wire grid dissolves while the particles gather, then returns
             line_k = (1.0 - rt / 2.0) if rt < 2.0 else (0.0 if rt < 3.0 else min(1.0, (rt - 3.0) / 0.95))
         if line_k > 0.02:
-            Color(*accent, (0.14 + 0.12 * lv + 0.3 * flash) * line_k)
+            Color(*accent, (0.06 + 0.08 * lv + 0.25 * flash) * line_k)
             for k in range(1, 13):
                 y = -1 + 2 * k / 13.0
                 r0 = math.sqrt(1 - y * y)
                 pts = []
                 for n in range(37):
                     t = n / 36.0 * math.pi * 2
-                    px, py, _z = shell(math.cos(t) * r0, y, math.sin(t) * r0)
+                    px, py, _z, _n = shell(math.cos(t) * r0, y, math.sin(t) * r0)
                     pts.extend((px, py))
                 Line(points=pts, width=dp(0.5))
         proj = []
-        near, mid, far, hot = [], [], [], []
+        near, mid, far, hot, crest = [], [], [], [], []
         scan = math.sin(p * (0.6 if state == "idle" else 1.6))
         for idx, (x, y, z) in enumerate(self.fib):
-            px, py, z2 = shell(x, y, z)
+            px, py, z2, wn = shell(x, y, z)
             if seq:
                 d, kk, sg = self.pd[idx], self.pk[idx], self.psgn[idx]
                 vx, vy = px - cx, py - cy
@@ -1660,14 +1739,16 @@ class AnimatedCore(Widget):
             if not seq and abs(y - scan) < 0.045:
                 if z2 > -0.2:
                     hot.extend((px, py))
-            if z2 > 0.35:
+            if z2 > -0.1 and wn > 0.9:
+                crest.extend((px, py))      # wave crests catch the light
+            elif z2 > 0.35:
                 near.extend((px, py))
             elif z2 > -0.3:
                 mid.extend((px, py))
             else:
                 far.extend((px, py))
         # web of links between neighbouring points on the near side
-        Color(*accent, (0.10 + 0.10 * lv + 0.25 * flash) * line_k)
+        Color(*accent, (0.05 + 0.08 * lv + 0.22 * flash) * line_k)
         n_pts = len(proj)
         for i in range(0, n_pts, 5):
             if line_k <= 0.02:
@@ -1686,6 +1767,9 @@ class AnimatedCore(Widget):
         if near:
             Color(0.85, 0.98, 1, 1)
             Point(points=near, pointsize=dp(0.70 + 0.3 * flash))
+        if crest:
+            Color(1, 1, 1, 0.95)
+            Point(points=crest, pointsize=dp(0.95 + 0.3 * flash))
         if hot:
             Color(1, 1, 1, 0.9 if state != "idle" else 0.55)
             Point(points=hot, pointsize=dp(1.1))
@@ -2673,12 +2757,15 @@ class JarvisApp(App):
         self.load_settings()
         self.account_service = get_service(self.user_data_dir)
         self.speech = SpeechRecognizer(self)
+        self.tts = SpeechSynthesizer()
         try:
             from android import activity
             activity.bind(on_activity_result=self.on_activity_result)
         except Exception:
             pass
         self._attachment_pending = False
+        self.tts_fallback_noted = False
+        self.tts_error_noted = False
         self.open_popups = set()
         self.app_paused = False
         self._mic_timeout = None
@@ -2852,7 +2939,8 @@ class JarvisApp(App):
             cursor_color=hex_color(theme["accent"]),
             background_normal="", background_active="",
             background_color=(0, 0, 0, 0),
-            padding=[dp(22), dp(15), dp(10), dp(10)],
+            padding=[dp(8), dp(15), dp(4), dp(10)],
+            input_type="text", keyboard_suggestions=True,
         )
         # Enter starts a new paragraph (multiline); a message is sent only with the send button.
         self.command_input.bind(text=self.on_text_change)
@@ -2866,14 +2954,18 @@ class JarvisApp(App):
                 pass
 
         self.command_input.bind(minimum_height=fit_input_height)
-        self.attach_btn = Button(text="+", font_size=dp(28), size_hint_x=None, width=dp(42),
+        self.attach_btn = Button(text="+", font_size=dp(28), size_hint_x=None, width=dp(36),
                                  background_normal="", background_color=(0, 0, 0, 0),
                                  color=hex_color(theme["accent"]))
         self.attach_btn.bind(on_release=self.pick_attachment)
-        self.stop_speech_btn = Button(text="\u00d7", font_size=dp(30), size_hint_x=None, width=dp(38),
+        self.stop_speech_btn = Button(text="\u00d7", font_size=dp(30), size_hint_x=None, width=dp(32),
                                       background_normal="", background_color=(0, 0, 0, 0),
                                       color=hex_color(theme["text"]))
         self.stop_speech_btn.bind(on_release=self.stop_speaking)
+        self.emoji_btn = Button(text="\u263a" if FONT_OK else ":)", font_size=dp(24), size_hint_x=None,
+                                width=dp(34), background_normal="", background_color=(0, 0, 0, 0),
+                                color=hex_color(theme["accent"]))
+        self.emoji_btn.bind(on_release=self.open_emoji_panel)
         self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
                                        size_hint_x=None, width=dp(52))
         self.action_btn.bind(on_release=self.on_action)
@@ -3089,13 +3181,6 @@ class JarvisApp(App):
             self.show_response("Интихоби файл дар ин дастгоҳ кушода нашуд.")
 
     def on_activity_result(self, request_code, result_code, data):
-        """Move Android activity-result handling onto Kivy's main thread."""
-        Clock.schedule_once(
-            lambda dt: self._process_activity_result(request_code, result_code, data),
-            0,
-        )
-
-    def _process_activity_result(self, request_code, result_code, data):
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
             return
         self._attachment_pending = False
@@ -3116,9 +3201,8 @@ class JarvisApp(App):
             buffer = autoclass("byte[]") if False else None
             # Read in bounded chunks without needing filesystem permission.
             chunk = autoclass("byte[]") if False else None
-            # PyJNIus converts Python bytearray to Java byte[] automatically.
-            # This avoids incompatible Java reflection/cast conversions.
-            buf = bytearray(8192)
+            from jnius import cast, jarray, jbyte
+            buf = jarray(jbyte)(8192)
             total = 0
             while True:
                 count = stream.read(buf)
@@ -3296,13 +3380,41 @@ class JarvisApp(App):
         popup.open()
 
     def speak_answer(self, answer):
-        """Use server-generated speech only; keep the written answer available otherwise."""
-        if not self.speak_enabled or not answer or not self.server_token.strip():
+        """Prefer server-generated speech; fall back to Android TTS if the server is unavailable."""
+        if not self.speak_enabled or not answer:
             return
         text = str(answer).strip()[:4000]
-        if text:
+        if not text:
+            return
+        # Server speech/network work must run off the Kivy UI thread.
+        if self.server_token.strip():
             threading.Thread(target=self._request_server_speech,
                              args=(text,), daemon=True).start()
+        else:
+            self._speak_local_fallback(text)
+
+    def _speak_local_fallback(self, answer, force=False):
+        """Use the Android TTS engine selected in system settings if server speech fails."""
+        if (not self.speak_enabled and not force) or not answer:
+            return
+        try:
+            self.tts.stop()
+            def attempt(_dt=None, tries=0):
+                if not self.speak_enabled and not force:
+                    return
+                try:
+                    result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language),
+                                           pitch=VOICE_LOCAL_PITCH.get(self.voice_profile, 1.0))
+                    if result == "starting" and tries < 8:
+                        Clock.schedule_once(lambda dt: attempt(dt, tries + 1), 0.5)
+                except Exception as exc:
+                    save_crash("Local speech fallback failed: " + str(exc))
+                    if not self.tts_error_noted:
+                        self.tts_error_noted = True
+                        self.show_response("Овози сервер дастрас нест ва овози маҳаллӣ низ кор накард. Танзимоти Text-to-Speech-ро санҷед.")
+            Clock.schedule_once(attempt, 0.15)
+        except Exception:
+            save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
 
     def deliver_answer(self, chat_id, answer):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
@@ -3355,6 +3467,7 @@ class JarvisApp(App):
             def fallback(dt):
                 self.add_chat_message(chat_id, "jarvis", answer)
                 self._note_server_speech_error(detail)
+                self._speak_local_fallback(text)
             Clock.schedule_once(fallback, 0)
 
     def _start_synced_answer(self, chat_id, answer, text, path, words):
@@ -3436,9 +3549,13 @@ class JarvisApp(App):
             self.set_orb_state("speaking", min(4.0, 0.8 + len(text) * 0.02))
             threading.Thread(target=self._request_server_speech, args=(text, True), daemon=True).start()
         else:
-            self._note_server_speech_error("server token missing")
+            self._speak_local_fallback(text, force=True)
 
     def stop_speaking(self, *_):
+        try:
+            self.tts.stop()
+        except Exception:
+            pass
         player = getattr(self, "_server_speech_player", None)
         if player is not None:
             try:
@@ -3482,17 +3599,19 @@ class JarvisApp(App):
                 pass
             save_crash("Server speech error: " + detail)
             Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
         except Exception:
             save_crash("Server speech failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt: self._note_server_speech_error("network"), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
 
     def _note_server_speech_error(self, detail):
-        """Tell the user (once per launch) when server-generated speech is unavailable."""
+        """Tell the user (once per launch) why the Edge voice was replaced by the phone voice."""
         if getattr(self, "server_speech_error_noted", False):
             return
         self.server_speech_error_noted = True
         try:
-            self.show_response("Овози сервер дастрас нест (%s). Ҷавоб ҳамчун матн нишон дода мешавад." % detail)
+            self.show_response("Овози Edge дастрас нест (%s). Овози телефон истифода мешавад." % detail)
         except Exception:
             pass
 
@@ -3526,6 +3645,7 @@ class JarvisApp(App):
 
     def toggle_speak(self, *_):
         self.speak_enabled = not self.speak_enabled
+        self.tts_error_noted = False
         self.save_settings()
         self.open_section("voice")
 
@@ -3541,6 +3661,51 @@ class JarvisApp(App):
             self.send_command()
         else:
             self.toggle_listening()
+
+    def open_emoji_panel(self, *_):
+        """Emoji picker drawn by the app itself: taps insert the emoji into the command field."""
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
+        tabs = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(44))
+        scroll = ScrollView(do_scroll_x=False)
+        grid = GridLayout(cols=7, spacing=dp(4), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        scroll.add_widget(grid)
+        popup = self.make_popup(box, size_hint=(1, 0.5), pos_hint={"x": 0, "y": 0})
+
+        def put(ch, *_):
+            try:
+                self.command_input.insert_text(ch)
+            except Exception:
+                self.command_input.text += ch
+
+        def fill(index, *_):
+            grid.clear_widgets()
+            for ch in EMOJI_GROUPS[index][1]:
+                b = GlassButton(text=ch, tint=tint, active=False, radius=10, size_hint_y=None,
+                                height=dp(44), font_size=dp(24), color=hex_color(theme["text"]))
+                b.bind(on_release=lambda inst, c=ch: put(c))
+                grid.add_widget(b)
+            scroll.scroll_y = 1
+
+        for i, (label, _chars) in enumerate(EMOJI_GROUPS):
+            t = GlassButton(text=label, tint=tint, active=True, radius=12, font_size=dp(22),
+                            color=hex_color(theme["text"]))
+            t.bind(on_release=lambda inst, k=i: fill(k))
+            tabs.add_widget(t)
+        back = GlassButton(text="\u232b", tint=tint, active=False, radius=12, font_size=dp(22),
+                           color=hex_color(theme["text"]), size_hint_x=None, width=dp(52))
+        back.bind(on_release=lambda *_: self.command_input.do_backspace())
+        close = GlassButton(text="\u00d7", tint=tint, active=False, radius=12, font_size=dp(26),
+                            color=hex_color(theme["text"]), size_hint_x=None, width=dp(52))
+        close.bind(on_release=lambda *_: popup.dismiss())
+        tabs.add_widget(back)
+        tabs.add_widget(close)
+        box.add_widget(tabs)
+        box.add_widget(scroll)
+        fill(0)
+        popup.open()
 
     def toggle_listening(self):
         if self.orb_state == "listening":
@@ -3883,6 +4048,7 @@ class JarvisApp(App):
 
     def on_stop(self):
         self.save_settings()
+        self.tts.shutdown()
 
 if __name__ == "__main__":
     JarvisApp().run()
