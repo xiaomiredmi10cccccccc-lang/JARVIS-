@@ -1209,6 +1209,142 @@ void main() {
 """
 
 
+WATER_FRAG = r"""
+$HEADER$
+uniform float u_time;
+uniform float u_phase;
+uniform float u_level;
+uniform float u_think;
+uniform float u_flash;
+uniform float u_speak;
+uniform float u_ring;
+uniform vec4 u_geo;
+
+float h21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float vn(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x),
+               mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+vec2 wv(vec2 w, vec2 dir, float k, float sp, float amp, float t) {
+    return dir * (k * amp * cos(dot(w, dir) * k + t * sp));
+}
+// drifting luminous motes (one candidate per cell)
+float motes(vec2 q, float t) {
+    vec2 pq = q * 2.4;
+    vec2 id = floor(pq);
+    vec2 f = fract(pq);
+    float rn = h21(id);
+    float y = fract(rn * 3.7 + t * 0.035 * (0.6 + rn));
+    vec2 p0 = vec2(0.5 + 0.3 * sin(t * 0.6 + rn * 40.0), y);
+    float d = length(f - p0);
+    float tw = 0.5 + 0.5 * sin(t * (0.9 + rn * 1.6) + rn * 60.0);
+    return smoothstep(0.075, 0.0, d) * tw * step(0.6, rn) * sin(3.14159 * y);
+}
+vec3 skyc(vec3 r, vec3 L, float orbA, float lv) {
+    float elev = max(r.y, 0.0);
+    float ang = acos(clamp(dot(r, L), -1.0, 1.0));
+    vec3 c = mix(vec3(0.05, 0.20, 0.36), vec3(0.0, 0.02, 0.06), smoothstep(0.0, 0.45, elev)) * 0.55;
+    c += vec3(0.10, 0.45, 0.75) * exp(-elev * 14.0) * 0.55;
+    float s2 = orbA * 2.6;
+    c += vec3(0.20, 0.70, 0.95) * exp(-ang * ang / (2.0 * s2 * s2)) * (0.20 + 0.3 * lv);
+    return c;
+}
+void main(void) {
+    vec2 uv = tex_coord0;
+    vec2 q = (uv - u_geo.xy) * u_geo.zw;          // units of sphere radius, origin = ring centre on the water
+    float t = u_phase;
+    float lv = u_level;
+    const float S = 0.35;
+    const float H0 = 0.80;                         // horizon behind the sphere: we look at the water from the front, with distance
+    const float hc = 0.60;                         // camera height above the water
+    float zc = hc / (H0 * S);                      // distance to the contact point (screen origin)
+    float Rw = S * zc;                             // world radius of the sphere
+    vec3 C = vec3(0.0, -hc + Rw, zc);              // centre of the sphere
+    vec3 L = normalize(C);
+    float orbA = atan(Rw / zc);
+    vec3 d = normalize(vec3(q.x * S, (q.y - H0) * S, 1.0));
+    vec3 col = vec3(0.0);
+    float alpha = 0.0;
+    if (q.y > H0) {
+        // ---- sky: haze at the horizon, soft light of the sphere
+        vec3 c = skyc(d, L, orbA, lv);
+        float ha = exp(-(q.y - H0) * 3.2) * 0.45 + exp(-pow((q.y - H0) / 0.02, 2.0)) * 0.5;
+        col = c;
+        alpha = clamp(ha * (1.0 + 0.6 * lv + u_flash) + length(c) * 0.25, 0.0, 0.9);
+    } else {
+        // ---- water in perspective
+        float tt = hc / max(-d.y, 0.002);
+        vec3 w3 = d * tt;
+        vec2 w = vec2(w3.x, w3.z);
+        float att = 1.0 / (1.0 + tt * 0.07);
+        float boost = 1.0 + 1.4 * lv + 0.8 * u_speak;
+        vec2 g = vec2(0.0);
+        g += wv(w, vec2(0.30, 1.00), 1.7, 0.8, 0.018, t);
+        g += wv(w, vec2(-0.50, 1.00), 2.9, -1.1, 0.014, t);
+        g += wv(w, vec2(0.90, 0.40), 4.1, 0.9, 0.012, t);
+        g += wv(w, vec2(-0.20, 1.00), 7.0, 1.6, 0.010, t);
+        g += wv(w, vec2(0.77, -0.40), 11.3, -2.3, 0.007, t);
+        g *= att * boost * 0.8;
+        // rings spreading from the point under the sphere (spiral while thinking, inward while listening)
+        vec2 rc = vec2(0.0, zc);
+        vec2 rv = w - rc;
+        float r = length(rv) + 0.001;
+        float th = atan(rv.x, rv.y);
+        float ph = r * 7.0 - u_ring * 6.28318 + u_think * 2.0 * th;
+        float env = exp(-r * 0.6) * (0.45 + 0.9 * lv + 0.4 * u_speak) * smoothstep(Rw * 0.8, Rw * 1.25, r);
+        g += rv / r * (7.0 * cos(ph) * 0.022 * env);
+        float crest = pow(max(sin(ph), 0.0), 5.0) * env;
+        float fr = Rw + 8.0 * (1.0 - u_flash);
+        float fk = exp(-pow((r - fr) / 0.30, 2.0)) * u_flash;
+        g += rv / r * (fk * 0.6);
+        vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
+        float cosv = clamp(dot(n, -d), 0.0, 1.0);
+        float F = 0.22 + 0.78 * pow(1.0 - cosv, 3.0);
+        vec3 rf = reflect(d, n);
+        vec3 refl = skyc(rf, L, orbA, lv);
+        // the sphere itself, mirrored and shattered by every wave facet
+        vec3 oc = C - w3;
+        float tca = dot(oc, rf);
+        float d2 = dot(oc, oc) - tca * tca;
+        float fw = step(0.0, tca);
+        float hitm = smoothstep(Rw * Rw, Rw * Rw * 0.6, d2) * fw;
+        float kk = sqrt(max(1.0 - d2 / (Rw * Rw), 0.0));
+        vec3 orbc = mix(vec3(0.80, 0.97, 1.0), vec3(0.25, 0.75, 1.0), kk);
+        refl += orbc * hitm * 2.2 * (0.8 + 0.6 * lv);
+        refl += vec3(0.20, 0.70, 0.95) * exp(-d2 / (Rw * Rw * 3.0)) * 0.30 * fw;
+        // body of the water, lit from the sphere with a drifting caustic net
+        float gl = exp(-r * r / (4.5 * Rw * Rw));
+        float cau = pow(1.0 - abs(vn(w * 3.0 + vec2(t * 0.35, -t * 0.25)) * 2.0 - 1.0), 7.0)
+                  + 0.7 * pow(1.0 - abs(vn(w * 5.3 - vec2(t * 0.3, t * 0.2)) * 2.0 - 1.0), 8.0);
+        vec3 body = vec3(0.0, 0.035, 0.075) + vec3(0.02, 0.16, 0.24) * exp(-tt * 0.06);
+        body += vec3(0.08, 0.50, 0.75) * gl * (0.08 + 0.55 * cau * cau) * (0.55 + 0.5 * lv);
+        col = mix(body, refl, F);
+        col += vec3(0.22, 0.88, 1.0) * crest * (0.40 + 0.9 * lv) * (0.5 + 0.5 * att);
+        col += vec3(0.8, 0.97, 1.0) * fk * 0.9;
+        // reflected motes
+        col += vec3(0.3, 0.9, 1.0) * motes(vec2(q.x + g.x * 2.0, -q.y), t) * 0.35 * F * 1.5;
+        // sheen along the horizon line
+        col += vec3(0.5, 0.9, 1.0) * exp(-pow((q.y - H0) / 0.012, 2.0)) * 0.45 * (0.85 + 0.15 * sin(u_time * 0.9 + q.x * 3.0));
+        alpha = 0.95;
+    }
+    // motes in the air around the sphere
+    float orbd = length(q - vec2(0.0, 1.0));
+    col += vec3(0.4, 0.95, 1.0) * motes(q, t) * exp(-orbd * 0.30) * 1.3;
+    alpha = max(alpha, motes(q, t) * exp(-orbd * 0.30));
+    col = 1.0 - exp(-col * 1.35);
+    // soft edges: the water fades out before the borders of the widget, so no box is visible
+    alpha *= smoothstep(0.0, 0.16, uv.x) * smoothstep(1.0, 0.84, uv.x) * smoothstep(0.0, 0.22, uv.y) * smoothstep(1.0, 0.70, uv.y);
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), clamp(alpha, 0.0, 1.0)) * frag_color;
+}
+"""
+
 GLASS_FRAG = r"""
 $HEADER$
 uniform float u_time;
@@ -1471,6 +1607,17 @@ class AuraShaderView(Widget):
     def place(self, cx, cy, side):
         self.quad.pos = (cx - side / 2, cy - side / 2)
         self.quad.size = (side, side)
+
+    def use_mesh(self):
+        """Replace the Rectangle by a Mesh with explicit texture coordinates: v = 0 at the bottom edge and
+        1 at the top edge on every device (a Rectangle's default coordinates can come out upside down)."""
+        self.canvas.remove(self.quad)
+        with self.canvas:
+            self.mesh = Mesh(vertices=[0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
+                             indices=[0, 1, 2, 0, 2, 3], mode="triangles")
+
+    def place_rect(self, x, y, w, h):
+        self.mesh.vertices = [x, y, 0.0, 0.0, x + w, y, 1.0, 0.0, x + w, y + h, 1.0, 1.0, x, y + h, 0.0, 1.0]
 
     def update(self, t, phase, level, **extra):
         self.canvas["u_time"] = float(t % 1000.0)
@@ -1895,6 +2042,16 @@ class AnimatedCore(Widget):
         if getattr(self, "_shader_failed", False):
             return False
         try:
+            wview = getattr(self, "_water_view", None)
+            if wview is None and not getattr(self, "_water_failed", False):
+                wview = AuraShaderView(frag=WATER_FRAG)
+                if wview.ok:
+                    wview.use_mesh()
+                    self._water_view = wview
+                    self.add_widget(wview)        # added first, so it is drawn behind the glass sphere
+                else:
+                    self._water_failed = True
+                    wview = None
             view = getattr(self, "_shader_view", None)
             if view is None:
                 view = AuraShaderView(frag=GLASS_FRAG)
@@ -1906,8 +2063,23 @@ class AnimatedCore(Widget):
                 self.add_widget(view)
             cx, cy, R = self.glass_geometry()
             self.canvas.before.clear()
-            with self.canvas.before:
-                self.draw_glass_scene(cx, cy, R)
+            if wview is not None:
+                state_w = getattr(self, "state_now", "idle")
+                rs = {"idle": 0.10, "thinking": 0.25, "speaking": 0.40 + 0.3 * self.level,
+                      "listening": -0.22}.get(state_w, 0.12)
+                self._ring_t = getattr(self, "_ring_t", 0.0) + 0.016 * rs
+                size_w = min(self.width, self.height)
+                Rw = size_w * 0.34
+                wl = self.y + self.height * 0.56 - Rw * 1.02   # fixed waterline: the sphere bobs above it
+                wview.place_rect(self.x, self.y, self.width, self.height)
+                wview.canvas["u_geo"] = ((cx - self.x) / max(self.width, 1.0), (wl - self.y) / max(self.height, 1.0),
+                                         self.width / Rw, self.height / Rw)
+                wview.update(self.clock_t, self.phase, min(1.0, self.level),
+                             u_think=getattr(self, "think_w", 0.0), u_flash=getattr(self, "flash", 0.0),
+                             u_speak=getattr(self, "_speak_w", 0.0), u_ring=self._ring_t)
+            else:
+                with self.canvas.before:
+                    self.draw_glass_scene(cx, cy, R)
             view.place(cx, cy, R * 8.0)  # the shader sphere has radius 0.25 of the half quad; rings need room
             ofac, gather, _burst = self.ready_factor()
             state = getattr(self, "state_now", "idle")
@@ -1935,6 +2107,10 @@ class AnimatedCore(Widget):
                 self.canvas.before.clear()
                 if getattr(self, "_shader_view", None) is not None:
                     self.remove_widget(self._shader_view)
+                if getattr(self, "_water_view", None) is not None:
+                    self.remove_widget(self._water_view)
+                    self._water_view = None
+                    self._water_failed = True
             except Exception:
                 pass
             return False
