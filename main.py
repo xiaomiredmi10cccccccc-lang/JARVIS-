@@ -26,7 +26,7 @@ from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
                            RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate,
-                           RenderContext)
+                           RenderContext, Mesh)
 from kivy.graphics.texture import Texture
 from kivy.core.text import LabelBase
 from kivy.uix.boxlayout import BoxLayout
@@ -1507,9 +1507,11 @@ class AnimatedCore(Widget):
             orb_rnd = random.Random(21)
             self.orbit = []
             for ring in range(3):
-                for _ in range(70):
+                for _ in range(150):
+                    # belt-like cloud: angle, speed, size, plus radial and vertical scatter (thickness of the belt)
                     self.orbit.append((ring, orb_rnd.uniform(0, math.pi * 2),
-                                       orb_rnd.uniform(0.85, 1.15), orb_rnd.uniform(0.5, 1.0)))
+                                       orb_rnd.uniform(0.85, 1.15), orb_rnd.uniform(0.3, 1.0),
+                                       orb_rnd.gauss(0, 0.07), orb_rnd.gauss(0, 0.06)))
         if theme_index == 2:
             rnd = random.Random(7)
             self.dashes = [(rnd.uniform(0, math.pi * 2), rnd.uniform(-1.5, 1.5)) for _ in range(300)]
@@ -1799,7 +1801,9 @@ class AnimatedCore(Widget):
             Rectangle(texture=core, pos=(cx - cr, cy - cr), size=(2 * cr, 2 * cr))
         tilts = (0.55, -0.95, 1.35)
         radii = (1.28, 1.46, 1.64)
-        front, back = [], []
+        fr = ([], [], [])
+        bk = ([], [], [])
+        haze = []
         ca_y, sa_y = math.cos(rot * 0.5), math.sin(rot * 0.5)
         if rt is None:
             dust_scatter = 0.0
@@ -1808,29 +1812,43 @@ class AnimatedCore(Widget):
         else:
             _u = min(1.0, (rt - 2.3) / 1.6)
             dust_scatter = 1.0 - _u * _u * (3 - 2 * _u)   # fades to 0, so nothing jumps when the sequence ends
-        for ring, a0, sp, sz in self.orbit:
+        for oi, (ring, a0, sp, sz, rj, hz) in enumerate(self.orbit):
             # thinking: every dot wobbles, so each ring twists like a rope
             a = a0 + orb_ang * sp * (1.0 + 0.35 * ring) + tw * 0.9 * math.sin(a0 * 3 + p * 2.6)
             tilt = tilts[ring] + tw * 0.55 * math.sin(p * 1.4 + ring * 2.0 + a0)
             f = ofac * (1.0 + ((0.75 + 0.5 * sz) - 1.0) * dust_scatter)
             if rt is not None and rt < 2.0:
                 a += gather * 4.0 * sp          # spiral inward while gathering
-            rad = radii[ring] * f * (1 + 0.10 * tw * math.sin(a0 * 5 + p * 3.1))
+            # slow breathing drift of each grain so the belt looks like drifting dust, not a rigid ring
+            drift = 0.03 * math.sin(a0 * 7 + p * 0.5)
+            rad = (radii[ring] + rj + drift) * f * (1 + 0.10 * tw * math.sin(a0 * 5 + p * 3.1))
             rx, rz = math.cos(a) * rad, math.sin(a) * rad
             ct, st = math.cos(tilt), math.sin(tilt)
-            y1, z1 = -rz * st, rz * ct
+            y1, z1 = -rz * st + hz * f, rz * ct
             x2, z2 = rx * ca_y + z1 * sa_y, -rx * sa_y + z1 * ca_y
             pt = (cx + x2 * R, cy + y1 * R)
+            cls = 0 if sz < 0.55 else (1 if sz < 0.8 else 2)
             if z2 > 0 or rad < 0.5:
-                front.extend(pt)
+                fr[cls].extend(pt)
             else:
-                back.extend(pt)
-        if back:
-            Color(0.15, 0.6, 0.75, 0.35)
-            Point(points=back, pointsize=dp(0.55))
-        if front:
-            Color(0.6, 0.95, 1, 0.8 if not burst else 1.0)
-            Point(points=front, pointsize=dp(0.75 if not burst else 1.0))
+                bk[cls].extend(pt)
+            if oi % 5 == 0:
+                haze.append((pt[0], pt[1], z2 > 0 or rad < 0.5, sz))
+        # soft translucent puffs first (the "cloud" body), then the grains on top
+        hz_tex = radial_texture("p_haze", ((0, (150, 230, 255, 70)), (0.5, (80, 200, 255, 30)),
+                                           (1, (40, 170, 255, 0))))
+        for hx, hy, hfront, hsz in haze:
+            hs = R * (0.10 + 0.16 * hsz) * (0.6 + 0.4 * ofac)
+            Color(1, 1, 1, (0.55 if hfront else 0.22) * (1.0 if not burst else 1.3))
+            Rectangle(texture=hz_tex, pos=(hx - hs, hy - hs), size=(2 * hs, 2 * hs))
+        for cls, (psz, alpha) in enumerate(((0.45, 0.30), (0.65, 0.40), (0.95, 0.50))):
+            if bk[cls]:
+                Color(0.15, 0.6, 0.75, alpha)
+                Point(points=bk[cls], pointsize=dp(psz * 0.8))
+        for cls, (psz, alpha) in enumerate(((0.55, 0.55), (0.85, 0.80), (1.25, 0.95))):
+            if fr[cls]:
+                Color(0.6, 0.95, 1, 1.0 if burst else alpha)
+                Point(points=fr[cls], pointsize=dp(psz * (1.25 if burst else 1.0)))
         # ---- state effects around the sphere
         if state == "thinking":
             a0 = rot * 57.3 * 1.6
@@ -1869,7 +1887,8 @@ class AnimatedCore(Widget):
 
     def glass_geometry(self):
         size = min(self.width, self.height)
-        return self.center_x, self.y + self.height * 0.56, size * 0.34
+        # the sphere bobs gently on the water
+        return self.center_x, self.y + self.height * 0.56 + size * 0.34 * 0.03 * math.sin(self.phase * 0.8), size * 0.34
 
     def update_glass_shader(self):
         """GPU glass sphere (shader child) + drawn floor/pillars (canvas.before). False if unavailable."""
@@ -1921,25 +1940,95 @@ class AnimatedCore(Widget):
             return False
 
     def draw_glass_scene(self, cx, cy, R):
-        """Floor, light pillars and reflection behind the glass sphere."""
+        """The sphere floats on top of dark water: a waterline with haze, wavy perspective ripples, rings
+        spreading from where the sphere touches the surface, a broken reflection column, glints and
+        splash drops when the answer bursts."""
         lv = self.level
         flash = getattr(self, "flash", 0.0)
-        fy = cy - R * 1.02
-        w = self.width
-        floor = linear_texture("g_floor", ((0, (0, 0, 0, 0)), (1, (10, 40, 70, 140))))
+        state = getattr(self, "state_now", "idle")
+        p = self.phase
+        cycles = getattr(self, "pulse_cycles", 0.0)
+        w, x0, y0 = self.width, self.x, self.y
+        wl = self.y + self.height * 0.56 - R * 1.02     # fixed waterline (the sphere bobs a little above it)
+        wh = max(wl - y0, 1)
+        boost = min(1.8, 1 + 0.5 * lv + 0.8 * flash)
+        # --- water body: glossy dark teal at the horizon, black in the foreground
+        body = linear_texture("s_body", ((0, (0, 4, 12, 220)), (0.55, (3, 22, 40, 190)), (1, (14, 70, 100, 190))))
         Color(1, 1, 1, 1)
-        Rectangle(texture=floor, pos=(self.x, self.y), size=(w, max(fy - self.y, 1)))
-        pillar = linear_texture("g_pillar", ((0, (60, 180, 255, 255)), (0.4, (50, 170, 255, 255)),
-                                             (1, (40, 160, 255, 0))))
-        refl = radial_texture("g_refl", ((0, (70, 190, 255, 130)), (1, (70, 190, 255, 0))))
-        for fx, a in ((0.10, 0.5), (0.90, 0.5), (0.03, 0.25), (0.97, 0.25)):
-            x = self.x + w * fx
-            Color(1, 1, 1, min(1.0, a * (1 + 0.6 * lv + 0.8 * flash)))
-            Rectangle(texture=pillar, pos=(x - dp(2.5), fy), size=(dp(5), max(self.top - fy - dp(6), 1)))
-            rw = w * 0.32
-            Rectangle(texture=refl, pos=(x - rw / 2, fy - rw * 0.125), size=(rw, rw * 0.25))
-        Color(1, 1, 1, min(1.0, 0.8 + 0.5 * lv + 0.4 * flash))
-        Rectangle(texture=refl, pos=(cx - R * 1.1, fy - R * 0.22), size=(R * 2.2, R * 0.44))
+        Rectangle(texture=body, pos=(x0, y0), size=(w, wh))
+        # --- haze hanging just above the horizon, and a bright waterline
+        haze = linear_texture("s_haze", ((0, (60, 170, 230, 70)), (1, (30, 120, 200, 0))))
+        Color(1, 1, 1, min(1.0, 0.8 * boost))
+        Rectangle(texture=haze, pos=(x0, wl), size=(w, R * 0.7))
+        glowl = radial_texture("s_line", ((0, (120, 220, 255, 150)), (1, (60, 170, 255, 0))))
+        Color(1, 1, 1, min(1.0, 0.55 * boost))
+        Rectangle(texture=glowl, pos=(x0 - w * 0.1, wl - dp(7)), size=(w * 1.2, dp(14)))
+        # --- slow mist banks drifting along the horizon
+        for k in range(3):
+            mx = x0 + w * ((0.2 + 0.3 * k + p * 0.01 * (1 + k)) % 1.2 - 0.1)
+            Color(1, 1, 1, 0.16)
+            Rectangle(texture=glowl, pos=(mx - w * 0.3, wl - dp(4)), size=(w * 0.6, R * 0.5))
+        # --- wavy ripple lines in perspective, gliding towards the viewer
+        for k in range(10):
+            t = (k / 10.0 + p * 0.02) % 1.0
+            y = wl - wh * t ** 1.7
+            amp = dp(1.0 + 3.0 * t) * (1 + 0.8 * lv)
+            pts = []
+            for n in range(21):
+                u = n / 20.0
+                pts.extend((x0 + w * u, y + amp * math.sin(u * 15 + p * 1.2 + k * 1.7)))
+            Color(0.45, 0.85, 1, (0.04 + 0.13 * t) * (1 - 0.3 * t) * min(1.6, boost))
+            Line(points=pts, width=dp(0.7 + 0.5 * t))
+        # --- reflection column under the sphere, broken into streaks by the ripples
+        nstreak = 16
+        for k in range(nstreak):
+            d = k / float(nstreak)
+            y = wl - R * (0.03 + 0.09 * k ** 1.08) * 0.9
+            if y < y0:
+                break
+            half = R * 0.95 * (1.0 - d) ** 0.6
+            off = R * 0.07 * d * math.sin(p * 2.0 + k * 0.9) * (1 + 1.5 * lv)
+            Color(0.5, 0.92, 1, min(1.0, (0.42 * (1 - d) + 0.04) * boost))
+            Line(points=[cx - half + off, y, cx + half + off, y], width=dp(2.4 - 1.2 * d))
+        refl = radial_texture("g_refl", ((0, (70, 190, 255, 140)), (1, (70, 190, 255, 0))))
+        Color(1, 1, 1, min(1.0, 0.8 * boost))
+        Rectangle(texture=refl, pos=(cx - R * 1.9, wl - R * 0.38), size=(R * 3.8, R * 0.76))
+        Color(1, 1, 1, min(1.0, 0.35 * boost))
+        Rectangle(texture=refl, pos=(cx - R * 0.9, wl - R * 1.5), size=(R * 1.8, R * 1.5))
+        # --- rings spreading from the contact point: slow when calm, faster while talking
+        speed = {"idle": 0.12, "thinking": 0.30, "speaking": 0.45 + 0.3 * lv, "listening": 0.22}.get(state, 0.15)
+        self._ring_t = getattr(self, "_ring_t", 0.0) + 0.016 * speed
+        for k in range(4):
+            u = (self._ring_t + k * 0.25) % 1.0
+            rr = R * (0.8 + 2.6 * u)
+            Color(0.55, 0.92, 1, (1 - u) ** 1.6 * (0.35 + 0.35 * lv) * min(1.5, boost))
+            Line(ellipse=(cx - rr, wl - rr * 0.17, rr * 2, rr * 0.34), width=dp(1.1), segments=48)
+        if flash > 0:
+            u = 1.0 - flash
+            rr = R * (0.9 + 3.2 * u)
+            Color(1, 1, 1, flash * 0.8)
+            Line(ellipse=(cx - rr, wl - rr * 0.17, rr * 2, rr * 0.34), width=dp(2), segments=48)
+            # splash drops thrown up from the contact point
+            for i in range(14):
+                f = (i - 6.5) / 6.5
+                hgt = R * (1.5 * u - 2.2 * u * u) * (0.5 + (i % 3) / 3.0)
+                if hgt > 0:
+                    Color(0.8, 0.97, 1, flash * 0.9)
+                    Point(points=[cx + f * R * 1.3 * (0.3 + u), wl + hgt], pointsize=dp(1.8))
+        # --- glints on the waves, strongest in the light column under the sphere
+        if not hasattr(self, "_glints"):
+            rnd = random.Random(52)
+            self._glints = [(rnd.random(), rnd.random(), rnd.uniform(0, 6.3), rnd.uniform(1.0, 2.2)) for _ in range(70)]
+        for rx, rt, ph, spd in self._glints:
+            t = 0.04 + 0.96 * rt
+            y = wl - wh * t ** 1.7
+            x = x0 + w * rx
+            near = math.exp(-((x - cx) / (R * 1.4)) ** 2)
+            tw_ = max(0.0, math.sin(p * spd + ph)) ** 6
+            a = tw_ * (0.25 + 0.75 * near) * (0.4 + 0.6 * t) * boost
+            if a > 0.03:
+                Color(0.85, 0.98, 1, min(1.0, a))
+                Point(points=[x, y], pointsize=dp(0.8 + 1.6 * t))
 
     def draw_glass_overlay(self):
         """Scanning rings, orbiting comets and state rings drawn above the shader sphere."""
