@@ -22,6 +22,12 @@ from pwdlib import PasswordHash
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+
+try:
+    import tajik_tts
+except Exception as _exc:  # onnxruntime/numpy missing: Tajik voice simply stays off
+    print("Tajik voice module not loaded:", type(_exc).__name__)
+    tajik_tts = None
 from openai import OpenAI
 
 try:
@@ -440,6 +446,21 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
         raise HTTPException(status_code=400, detail="Text is empty")
     language = request.language or detect_speech_language(text)
     profile = request.voice_profile or "aura"
+    if language == "tg" and tajik_tts is not None and tajik_tts.available():
+        try:
+            wav = await asyncio.wait_for(asyncio.to_thread(tajik_tts.synthesize, text), timeout=120)
+        except tajik_tts.TajikVoiceNotReady as exc:
+            print("Tajik voice not ready:", exc)
+            raise HTTPException(status_code=503, detail="Tajik voice is still loading, try again in a minute")
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Tajik voice timed out")
+        except Exception as exc:
+            print("Tajik voice failed:", type(exc).__name__, str(exc)[:200])
+            raise HTTPException(status_code=502, detail="Tajik voice failed: " + type(exc).__name__)
+        if request.timings:
+            return {"audio_base64": base64.b64encode(wav).decode("ascii"), "words": [], "format": "wav",
+                    "voice": "mms-tts-tgk", "language": "tg", "profile": profile}
+        return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "no-store", "X-TTS-Voice": "mms-tts-tgk", "X-TTS-Language": "tg", "X-TTS-Profile": profile})
     if language == "tg":
         voice = await find_tajik_voice()
         if not voice:
@@ -455,8 +476,8 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
         print("Edge TTS timed out")
         raise HTTPException(status_code=504, detail="The speech generation service timed out")
     except Exception as exc:
-        print("Edge TTS failed:", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="The speech generation service could not complete the request")
+        print("Edge TTS failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The speech generation service could not complete the request (" + type(exc).__name__ + ")")
     if not audio:
         raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
     if request.timings:
