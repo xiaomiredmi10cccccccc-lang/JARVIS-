@@ -466,6 +466,22 @@ TEXTS = {
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
         "tajik_url_hint": "Овози тоҷикӣ",
         "tajik_voice_failed": "Овози тоҷикӣ намоёнда нашуд, ба овози телефон мегузарем.",
+        "media_image": "Акс месозам, 20–60 сония интизор шавед…",
+        "media_edit": "Таҳрир мекунам…",
+        "media_search": "Аксҳоро меҷӯям…",
+        "media_file": "Файл месозам…",
+        "image_failed": "Акс сохта нашуд: {}",
+        "edit_failed": "Таҳрир нашуд: {}",
+        "search_none": "Аксе ёфт нашуд.",
+        "search_title": "Аксҳо аз Wikimedia Commons (литсензияи озод):",
+        "need_prompt": "Нависед, ки чӣ гуна. Масалан: «акс бисоз: шаби кӯҳсор».",
+        "image_ready": "Акс тайёр аст.",
+        "edit_ready": "Таҳрир шуд: {}",
+        "file_created": "Файл сохта шуд: {}",
+        "file_edited": "Файл таҳрир шуд: {}",
+        "save_btn": "Захира",
+        "saved_to": "Захира шуд: {}",
+        "save_failed": "Захира нашуд: {}",
         "server_save": "Сабт кардан",
         "server_saved": "Токен сабт шуд. Паёмро санҷед.",
         "server_missing": "Аввал дар Танзимот → Ҳисоб токени серверро ворид кунед.",
@@ -583,6 +599,22 @@ TEXTS = {
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
         "tajik_url_hint": "Адрес таджикского голоса (https://…hf.space)",
         "tajik_voice_failed": "Таджикский голос недоступен, используется голос телефона.",
+        "media_image": "Рисую, подождите 20–60 секунд…",
+        "media_edit": "Редактирую…",
+        "media_search": "Ищу картинки…",
+        "media_file": "Создаю файл…",
+        "image_failed": "Не удалось создать изображение: {}",
+        "edit_failed": "Не удалось отредактировать: {}",
+        "search_none": "Картинки не найдены.",
+        "search_title": "Картинки с Wikimedia Commons (свободные лицензии):",
+        "need_prompt": "Напишите, что именно. Например: «нарисуй: ночные горы».",
+        "image_ready": "Изображение готово.",
+        "edit_ready": "Отредактировано: {}",
+        "file_created": "Файл создан: {}",
+        "file_edited": "Файл отредактирован: {}",
+        "save_btn": "Сохранить",
+        "saved_to": "Сохранено: {}",
+        "save_failed": "Не удалось сохранить: {}",
         "server_save": "Сохранить",
         "server_saved": "Токен сохранён. Проверьте отправку сообщения.",
         "server_missing": "Сначала в Настройки → Аккаунт введите токен сервера.",
@@ -700,6 +732,22 @@ TEXTS = {
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
         "tajik_url_hint": "Tajik voice address (https://…hf.space)",
         "tajik_voice_failed": "The Tajik voice is unavailable; the phone voice is used.",
+        "media_image": "Drawing, please wait 20–60 seconds…",
+        "media_edit": "Editing…",
+        "media_search": "Searching pictures…",
+        "media_file": "Creating the file…",
+        "image_failed": "Could not create the image: {}",
+        "edit_failed": "Could not edit: {}",
+        "search_none": "No pictures found.",
+        "search_title": "Pictures from Wikimedia Commons (free licences):",
+        "need_prompt": "Say what exactly. For example: \"draw: mountains at night\".",
+        "image_ready": "The image is ready.",
+        "edit_ready": "Edited: {}",
+        "file_created": "File created: {}",
+        "file_edited": "File edited: {}",
+        "save_btn": "Save",
+        "saved_to": "Saved: {}",
+        "save_failed": "Could not save: {}",
         "server_save": "Save",
         "server_saved": "Token saved. Try sending a message.",
         "server_missing": "First enter the server token in Settings → Account.",
@@ -3315,6 +3363,67 @@ def find_info_command(text):
     return None
 
 
+
+SERVER_BASE = "https://jarvis-ai-server-3vuo.onrender.com"
+MEDIA_RE = re.compile(r"\[\[(img|file):([^\]]+)\]\]")
+TEXT_FILE_EXTS = (".txt", ".md", ".csv", ".json", ".log", ".py", ".html", ".css", ".js", ".xml", ".yaml", ".yml", ".ini", ".kv")
+
+MEDIA_PREFIXES = (
+    # (kind, prefixes) – the message must START with one of them; the rest is the request
+    ("image", ("акс бисоз", "акс созед", "акс кашед", "акс бикаш", "акс сохта деҳ", "тасвир бисоз", "тасвир созед", "тасвир бикаш",
+               "нарисуй картинку", "нарисуй", "создай картинку", "создай изображение", "сгенерируй картинку", "сгенерируй изображение",
+               "generate an image of", "generate image of", "generate an image", "generate image", "create an image of", "create image of",
+               "create a picture of", "draw me", "draw")),
+    ("search", ("аксҳоро ёб", "аксҳо ёб", "акс ёб", "аксҳо нишон деҳ", "акс нишон деҳ", "найди фотографии", "найди фото", "найди картинки",
+                "найди картинку", "покажи фотографии", "покажи фото", "покажи картинки", "find photos of", "find pictures of", "find images of",
+                "show me photos of", "show me pictures of", "show photos of", "show pictures of", "find photos", "find pictures", "find images")),
+    ("file", ("файли нав бисоз", "файл бисоз", "файл созед", "файл эҷод кун", "файл эҷод кунед", "создай текстовый файл", "создай файл", "сделай файл",
+              "create a file", "create file", "make a file", "make file", "write a file")),
+)
+
+
+def parse_media_intent(text):
+    """('image'|'search'|'file', request) when the message starts with a media command, else None."""
+    low = " ".join(str(text).lower().split())
+    for kind, prefixes in MEDIA_PREFIXES:
+        for prefix in sorted(prefixes, key=len, reverse=True):
+            if low.startswith(prefix) and (len(low) == len(prefix) or not low[len(prefix)].isalnum()):
+                rest = " ".join(str(text).split())[len(prefix):].lstrip(" :,;-–—")
+                return kind, rest.strip()
+    return None
+
+
+_EDIT_PREFIXES = ("таҳрир", "тағйир", "edit", "измени", "отредактируй", "исправь", "ислоҳ кун")
+_QUESTION_STARTS = ("чӣ", "чи ", "ин чист", "киро", "оё", "тавсиф", "шарҳ", "опиши", "что", "кто", "объясни", "describe", "what", "explain", "who")
+_TEXT_VERBS = ("таҳрир", "тағйир", "ислоҳ", "иваз", "илова", "тарҷума", "кӯтоҳ кун", "дароз кун", "ҳазф", "нест кун", "пок кун", "тоза кун",
+               "нависед", "бо тартиб", "edit", "fix", "change", "replace", "add ", "translate", "rewrite", "shorten", "remove", "delete", "format",
+               "исправ", "измени", "замени", "добав", "перевед", "сократи", "перепиши", "удали", "убери")
+_IMAGE_VERBS = ("бурр", "чарх", "давр", "сиёҳ", "сафед", "равшан", "торик", "хира", "андоза", "калон кун", "хурд кун", "кӯчак", "инъикос",
+                "мирор", "ранг", "фильтр", "сепия", "контраст", "тағйир", "таҳрир", "тез кун", "edit", "crop", "rotate", "flip", "mirror", "blur",
+                "bright", "dark", "grayscale", "black", "sepia", "resize", "smaller", "bigger", "обрез", "поверн", "отзеркал", "чёрно", "чорно",
+                "ярче", "темнее", "размыт", "размер", "измени", "отредакт", "цвет")
+
+
+def looks_like_edit(prompt, kind):
+    """Decide if an attachment request asks to CHANGE the file (True) or to analyze it (False)."""
+    low = " ".join(str(prompt).lower().split())
+    if not low:
+        return False
+    if low.startswith(_EDIT_PREFIXES):
+        return True
+    if low.startswith(_QUESTION_STARTS) or low.endswith("?"):
+        return False
+    return any(v in low for v in (_IMAGE_VERBS if kind == "image" else _TEXT_VERBS))
+
+
+def is_text_file(name, mime):
+    return str(mime).startswith("text/") or str(name).lower().endswith(TEXT_FILE_EXTS)
+
+
+def strip_media(text):
+    return MEDIA_RE.sub("", str(text)).strip()
+
+
 def http_json(url, timeout=12):
     import ssl
     try:
@@ -3789,11 +3898,26 @@ class JarvisApp(App):
         label = EmojiLabel(text="", font_size=dp(15),
                            color=(1, 1, 1, 1) if user else hex_color(theme["text"]),
                            halign="right" if user else "left", valign="top", size_hint_y=None)
-        label.set_plain(text)
+        media_items = MEDIA_RE.findall(str(text))
+        label.set_plain(strip_media(text) if media_items else text)
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
         bubble.add_widget(label)
-        message = str(full_text if full_text is not None else text)
+        for kind_m, path_m in media_items:
+            path_m = path_m.strip()
+            if not os.path.isfile(path_m):
+                continue
+            try:
+                if kind_m == "img":
+                    from kivy.uix.image import Image as KivyImage
+                    bubble.add_widget(KivyImage(source=path_m, size_hint_y=None, height=dp(230), fit_mode="contain", nocache=True))
+                save_btn = GlassButton(text=self.t("save_btn"), tint=accent, active=False, radius=10, size_hint_y=None,
+                                       height=dp(38), font_size=dp(13), color=hex_color(theme["text"]))
+                save_btn.bind(on_release=lambda btn, pth=path_m: self.save_media(pth))
+                bubble.add_widget(save_btn)
+            except Exception:
+                save_crash("Media bubble failed:\n" + traceback.format_exc())
+        message = strip_media(full_text if full_text is not None else text)
         if not user and message.strip():
             icon_color = (*hex_color(theme["text"])[:3], 0.8)
             actions = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36), spacing=dp(4))
@@ -3968,13 +4092,32 @@ class JarvisApp(App):
             if not raw:
                 raise RuntimeError(self.t("file_empty"))
             name = str(uri.getLastPathSegment() or "attachment")
+            try:
+                cursor = resolver.query(uri, None, None, None, None)
+                if cursor is not None:
+                    if cursor.moveToFirst():
+                        idx = cursor.getColumnIndex("_display_name")
+                        if idx >= 0 and cursor.getString(idx):
+                            name = str(cursor.getString(idx))
+                    cursor.close()
+            except Exception:
+                pass
             prompt = self.command_input.text.strip() if hasattr(self, "command_input") else ""
             if hasattr(self, "command_input"):
                 self.command_input.text = ""
             chat_id = self.chats.current_id
             display = "📎 " + name + ("\n" + prompt if prompt else "\n" + self.t("file_default_prompt"))
             self.add_chat_message(chat_id, "user", display)
-            threading.Thread(target=self._upload_attachment, args=(chat_id, name, mime, raw, prompt), daemon=True).start()
+            mode = "analyze"
+            if mime.startswith("image/") and looks_like_edit(prompt, "image"):
+                mode = "image_edit"
+            elif is_text_file(name, mime) and looks_like_edit(prompt, "text"):
+                mode = "text_edit"
+            if mode == "analyze":
+                threading.Thread(target=self._upload_attachment, args=(chat_id, name, mime, raw, prompt), daemon=True).start()
+            else:
+                self._set_busy(self.t("media_edit"))
+                threading.Thread(target=self._attachment_edit_job, args=(chat_id, name, mime, raw, prompt, mode), daemon=True).start()
         except Exception as exc:
             save_crash("Attachment read failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt, message=str(exc): self.show_response(self.t("file_read_failed").format(message)), 0)
@@ -4013,6 +4156,232 @@ class JarvisApp(App):
     def _attachment_answer(self, chat_id, answer):
         self.deliver_answer(chat_id, answer)
 
+    # ------------------------------------------------------------------ media: pictures and files
+    def media_dir(self):
+        path = os.path.join(self.user_data_dir, "media")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _set_busy(self, message):
+        self.set_orb_state("thinking")
+        if hasattr(self, "status_label"):
+            self.status_label.text = message
+
+    def _multipart(self, fields, file_part=None):
+        boundary = "----JARVIS" + uuid.uuid4().hex
+        body = b""
+        for key, value in fields.items():
+            body += ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + key + "\"\r\n\r\n" + str(value) + "\r\n").encode("utf-8")
+        if file_part:
+            fname, mime, raw = file_part
+            fname = os.path.basename(fname).replace('"', "_")
+            body += ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + fname + "\"\r\nContent-Type: " + mime + "\r\n\r\n").encode("utf-8") + raw + b"\r\n"
+        body += ("--" + boundary + "--\r\n").encode("utf-8")
+        return body, "multipart/form-data; boundary=" + boundary
+
+    def _server_call(self, path, body, content_type, timeout=120):
+        """POST to the JARVIS server. Returns (lower-case headers, bytes). Raises RuntimeError with a readable reason."""
+        import ssl
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            ctx = None
+        last = ""
+        for attempt in (1, 2):   # the second try covers a sleeping Render server
+            try:
+                req = urllib.request.Request(SERVER_BASE + path, data=body, method="POST",
+                                             headers={"Content-Type": content_type, "X-Jarvis-Token": self.server_token})
+                with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
+                    headers = {k.lower(): v for k, v in response.headers.items()}
+                    return headers, response.read(30 * 1024 * 1024)
+            except urllib.error.HTTPError as exc:
+                detail = self.t("server_http_error").format(exc.code)
+                try:
+                    detail = str(json.loads(exc.read().decode("utf-8")).get("detail", detail))[:200]
+                except Exception:
+                    pass
+                if exc.code in (401, 403):
+                    raise RuntimeError(self.t("server_missing") + " (%d)" % exc.code)
+                if exc.code in (502, 503, 504) and attempt == 1:
+                    time.sleep(4)
+                    last = detail
+                    continue
+                raise RuntimeError(detail)
+            except Exception as exc:
+                last = "%s: %s" % (type(exc).__name__, str(exc)[:100])
+        raise RuntimeError(last or "network")
+
+    def _save_private(self, data, name):
+        path = os.path.join(self.media_dir(), uuid.uuid4().hex[:8] + "__" + name)
+        with open(path, "wb") as out:
+            out.write(data)
+        return path
+
+    def _media_done(self, chat_id, text, say=""):
+        if hasattr(self, "status_label"):
+            self.status_label.text = self.t("ready")
+        self.set_orb_state("idle")
+        self.add_chat_message(chat_id, "jarvis", text)
+        if say:
+            self.speak_answer(say)
+
+    def _start_media_job(self, chat_id, kind, request):
+        if not self.server_token.strip():
+            self.add_chat_message(chat_id, "jarvis", self.t("server_missing"))
+            return
+        if not request:
+            self.add_chat_message(chat_id, "jarvis", self.t("need_prompt"))
+            return
+        self._set_busy(self.t({"image": "media_image", "search": "media_search", "file": "media_file"}[kind]))
+        target = {"image": self._job_generate, "search": self._job_search, "file": self._job_create_file}[kind]
+        threading.Thread(target=target, args=(chat_id, request), daemon=True).start()
+
+    def _lang_code(self):
+        return self.language if self.language in ("tg", "ru", "en") else "tg"
+
+    def _job_generate(self, chat_id, prompt):
+        try:
+            body = json.dumps({"prompt": prompt[:500], "language": self._lang_code()}, ensure_ascii=False).encode("utf-8")
+            headers, data = self._server_call("/image/generate", body, "application/json", timeout=150)
+            ext = ".png" if headers.get("content-type", "").startswith("image/png") else ".jpg"
+            path = self._save_private(data, "jarvis_image" + ext)
+            text = self.t("image_ready") + "\n[[img:" + path + "]]"
+            say = self.t("image_ready")
+        except Exception as exc:
+            save_crash("Image generation failed:\n" + traceback.format_exc())
+            text, say = self.t("image_failed").format(str(exc)[:200]), ""
+        Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
+
+    def _job_search(self, chat_id, query):
+        import ssl
+        try:
+            body = json.dumps({"query": query[:200], "language": self._lang_code(), "limit": 4}, ensure_ascii=False).encode("utf-8")
+            _headers, data = self._server_call("/image/search", body, "application/json", timeout=60)
+            results = json.loads(data.decode("utf-8")).get("results", [])
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = None
+            lines = [self.t("search_title")]
+            count = 0
+            for item in results[:4]:
+                try:
+                    req = urllib.request.Request(item["thumb"], headers={"User-Agent": "JARVIS-app/1.0"})
+                    with urllib.request.urlopen(req, timeout=25, context=ctx) as response:
+                        blob = response.read(6 * 1024 * 1024)
+                    ext = ".png" if blob[:4] == b"\x89PNG" else ".jpg"
+                    path = self._save_private(blob, "photo" + ext)
+                    caption = item.get("title", "")[:60] + (" – " + item["license"] if item.get("license") else "")
+                    lines.append(caption + "\n[[img:" + path + "]]")
+                    count += 1
+                except Exception:
+                    save_crash("Search thumbnail failed:\n" + traceback.format_exc())
+            text = "\n".join(lines) if count else self.t("search_none")
+        except Exception as exc:
+            save_crash("Image search failed:\n" + traceback.format_exc())
+            text = self.t("image_failed").format(str(exc)[:200])
+        Clock.schedule_once(lambda dt: self._media_done(chat_id, text, ""), 0)
+
+    def _job_create_file(self, chat_id, request):
+        try:
+            body, ctype = self._multipart({"prompt": request[:3000], "language": self._lang_code()})
+            _headers, data = self._server_call("/edit-text", body, ctype, timeout=120)
+            result = json.loads(data.decode("utf-8"))
+            name, content = str(result.get("filename", "jarvis.txt")), str(result.get("text", ""))
+            path = self._save_private(content.encode("utf-8"), name)
+            preview = content[:700] + ("\n…" if len(content) > 700 else "")
+            text = self.t("file_created").format(name) + "\n\n" + preview + "\n[[file:" + path + "]]"
+            say = self.t("file_created").format(name)
+        except Exception as exc:
+            save_crash("File creation failed:\n" + traceback.format_exc())
+            text, say = self.t("edit_failed").format(str(exc)[:200]), ""
+        Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
+
+    def _attachment_edit_job(self, chat_id, name, mime, raw, prompt, mode):
+        try:
+            if mode == "image_edit":
+                body, ctype = self._multipart({"prompt": prompt[:1000], "language": self._lang_code()}, (name, mime, raw))
+                headers, data = self._server_call("/image/edit", body, ctype, timeout=150)
+                import base64
+                summary = ""
+                try:
+                    summary = base64.b64decode(headers.get("x-edit-summary-b64", "")).decode("utf-8")
+                except Exception:
+                    pass
+                ext = headers.get("x-edit-ext", ".jpg")
+                path = self._save_private(data, "jarvis_edited" + ext)
+                text = self.t("edit_ready").format(summary or "") + "\n[[img:" + path + "]]"
+                say = summary
+            else:
+                fname = name if name.lower().endswith(TEXT_FILE_EXTS) else name + ".txt"
+                body, ctype = self._multipart({"prompt": prompt[:3000], "language": self._lang_code()}, (fname, "text/plain", raw))
+                _headers, data = self._server_call("/edit-text", body, ctype, timeout=150)
+                result = json.loads(data.decode("utf-8"))
+                content = str(result.get("text", ""))
+                base, ext = os.path.splitext(fname)
+                out_name = base + "_edited" + ext
+                path = self._save_private(content.encode("utf-8"), out_name)
+                preview = content[:700] + ("\n…" if len(content) > 700 else "")
+                text = self.t("file_edited").format(out_name) + "\n\n" + preview + "\n[[file:" + path + "]]"
+                say = self.t("file_edited").format(out_name)
+        except Exception as exc:
+            save_crash("Attachment edit failed:\n" + traceback.format_exc())
+            text, say = self.t("edit_failed").format(str(exc)[:240]), ""
+        Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
+
+    def save_media(self, path):
+        """Copy a generated picture/file to the phone's gallery (Pictures/JARVIS) or Downloads (Download/JARVIS)."""
+        import mimetypes
+        name = os.path.basename(path).split("__", 1)[-1]
+        mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        is_image = mime.startswith("image/")
+        try:
+            from jnius import autoclass
+            sdk = autoclass("android.os.Build$VERSION").SDK_INT
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            if sdk < 29:
+                raise RuntimeError("Android 10+ is required")
+            ContentValues = autoclass("android.content.ContentValues")
+            values = ContentValues()
+            values.put("_display_name", name)
+            values.put("mime_type", mime)
+            rel = "Pictures/JARVIS" if is_image else "Download/JARVIS"
+            values.put("relative_path", rel)
+            collection = (autoclass("android.provider.MediaStore$Images$Media") if is_image
+                          else autoclass("android.provider.MediaStore$Downloads")).EXTERNAL_CONTENT_URI
+            resolver = activity.getContentResolver()
+            uri = resolver.insert(collection, values)
+            if uri is None:
+                raise RuntimeError("MediaStore refused the file")
+            out = resolver.openOutputStream(uri)
+            inp = autoclass("java.io.FileInputStream")(path)
+            try:
+                autoclass("android.os.FileUtils").copy(inp, out)
+            except Exception:
+                from jnius import jarray, jbyte
+                buf = jarray(jbyte)(65536)
+                while True:
+                    count = inp.read(buf)
+                    if count < 0:
+                        break
+                    out.write(buf, 0, count)
+            inp.close()
+            out.close()
+            self.show_response(self.t("saved_to").format(rel + "/" + name))
+        except Exception as exc:
+            save_crash("Saving media failed:\n" + traceback.format_exc())
+            try:
+                import shutil
+                target = os.path.join(os.path.expanduser("~"), "Downloads")
+                if not os.path.isdir(target):
+                    raise RuntimeError(str(exc))
+                shutil.copy(path, os.path.join(target, name))
+                self.show_response(self.t("saved_to").format(os.path.join(target, name)))
+            except Exception:
+                self.show_response(self.t("save_failed").format(str(exc)[:160]))
+
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
             return
@@ -4029,6 +4398,10 @@ class JarvisApp(App):
             if role in ("user", "assistant") and item.get("text"):
                 history.append({"role": role, "content": item["text"][:4000]})
         self.add_chat_message(chat_id, "user", command_text)
+        media = parse_media_intent(command_text)
+        if media is not None:
+            self._start_media_job(chat_id, media[0], media[1])
+            return
         info_fn = find_info_command(command_text)
         if info_fn is not None:
             self.set_orb_state("thinking")
