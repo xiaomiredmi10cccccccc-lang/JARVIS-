@@ -464,6 +464,8 @@ TEXTS = {
         "server_token_hint": "Токен дар танзимоти телефони шумо нигоҳ дошта мешавад. Онро бо каси дигар мубодила накунед.",
         "server_token_title": "Токени сервери JARVIS",
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
+        "tajik_url_hint": "Овози тоҷикӣ",
+        "tajik_voice_failed": "Овози тоҷикӣ намоёнда нашуд, ба овози телефон мегузарем.",
         "server_save": "Сабт кардан",
         "server_saved": "Токен сабт шуд. Паёмро санҷед.",
         "server_missing": "Аввал дар Танзимот → Ҳисоб токени серверро ворид кунед.",
@@ -579,6 +581,8 @@ TEXTS = {
         "server_token_hint": "Токен хранится в настройках телефона. Не передавайте его другим.",
         "server_token_title": "Токен сервера JARVIS",
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
+        "tajik_url_hint": "Адрес таджикского голоса (https://…hf.space)",
+        "tajik_voice_failed": "Таджикский голос недоступен, используется голос телефона.",
         "server_save": "Сохранить",
         "server_saved": "Токен сохранён. Проверьте отправку сообщения.",
         "server_missing": "Сначала в Настройки → Аккаунт введите токен сервера.",
@@ -694,6 +698,8 @@ TEXTS = {
         "server_token_hint": "The token is stored in your phone settings. Do not share it.",
         "server_token_title": "JARVIS server token",
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
+        "tajik_url_hint": "Tajik voice address (https://…hf.space)",
+        "tajik_voice_failed": "The Tajik voice is unavailable; the phone voice is used.",
         "server_save": "Save",
         "server_saved": "Token saved. Try sending a message.",
         "server_missing": "First enter the server token in Settings → Account.",
@@ -3490,6 +3496,7 @@ class JarvisApp(App):
         self.voice_profile = "JARVIS Classic"
         self.speak_enabled = True
         self.server_token = ""
+        self.tajik_tts_url = ""
         self.last_response = ""
         self.animation_paused = False
         self.orb_state = "idle"
@@ -3594,6 +3601,7 @@ class JarvisApp(App):
             # the user's choice on later launches via the versioned preference.
             self.speak_enabled = bool(data.get("speak_v2", True))
             self.server_token = str(data.get("server_token", ""))
+            self.tajik_tts_url = str(data.get("tajik_tts_url", ""))
         if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
 
@@ -3603,7 +3611,8 @@ class JarvisApp(App):
                        voice_profile=self.voice_profile,
                        speak=self.speak_enabled,
                        speak_v2=self.speak_enabled,
-                       server_token=getattr(self, "server_token", ""))
+                       server_token=getattr(self, "server_token", ""),
+                       tajik_tts_url=getattr(self, "tajik_tts_url", ""))
 
     def update_colors(self):
         theme = THEMES[self.theme_index]
@@ -4124,7 +4133,7 @@ class JarvisApp(App):
                                 font_size=dp(13))
         content.add_widget(token_input)
         content.add_widget(make_label(self.t("server_token_hint"), 10, theme["accent2"], False))
-        popup = self.make_popup(content, size_hint=(0.92, None), height=dp(260))
+        popup = self.make_popup(content, size_hint=(0.92, None), height=dp(280))
         buttons = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         def save_token(*_):
             self.server_token = token_input.text.strip()
@@ -4187,6 +4196,15 @@ class JarvisApp(App):
         import ssl
         import base64
         import tempfile
+        if self._wants_tajik_voice(text):
+            path = self._tajik_speech_path(text)
+            if path:
+                Clock.schedule_once(lambda dt: self._start_synced_answer(chat_id, answer, text, path, []), 0)
+                return
+            # the Tajik voice failed: show the answer now and read it with the phone voice
+            Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", answer), 0)
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0.1)
+            return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
         payload = json.dumps({"text": text, "timings": True,
                               "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")},
@@ -4326,6 +4344,13 @@ class JarvisApp(App):
     def _request_server_speech(self, text, force=False):
         import ssl
         import tempfile
+        if self._wants_tajik_voice(text):
+            path = self._tajik_speech_path(text)
+            if path:
+                Clock.schedule_once(lambda dt: self._play_server_audio(path), 0)
+            else:
+                Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
+            return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
         payload = json.dumps({"text": text, "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, ensure_ascii=False).encode("utf-8")
         try:
@@ -4361,6 +4386,54 @@ class JarvisApp(App):
             save_crash("Server speech failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt: self._note_server_speech_error("network"), 0)
             Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
+
+    def _wants_tajik_voice(self, text):
+        """Tajik text is read by the Tajik voice service (Edge has no Tajik voice) when its address is set."""
+        if not self.server_token.strip():
+            return False
+        if any(ch in "ғӣқӯҳҷҒӢҚӮҲҶ" for ch in text):
+            return True
+        letters = [ch for ch in text if ch.isalpha()]
+        cyr = sum(1 for ch in letters if "\u0400" <= ch <= "\u04ff")
+        russian_only = any(ch in "ыэЫЭ" for ch in text)
+        return self.language == "tg" and bool(letters) and cyr / float(len(letters)) > 0.6 and not russian_only
+
+    def _tajik_speech_path(self, text):
+        """Blocking: ask the Tajik voice service for a WAV file. Returns its path, or None on any failure."""
+        import ssl
+        import tempfile
+        try:
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = None
+            payload = json.dumps({"text": text[:1500], "language": "tg"}, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/speak", data=payload, method="POST",
+                                         headers={"Content-Type": "application/json",
+                                                  "X-Jarvis-Token": self.server_token})
+            with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
+                audio = response.read(30 * 1024 * 1024)
+            if not audio or audio[:4] != b"RIFF":
+                raise RuntimeError("not a WAV file")
+            fd, path = tempfile.mkstemp(prefix="jarvis_tg_", suffix=".wav")
+            with os.fdopen(fd, "wb") as out:
+                out.write(audio)
+            return path
+        except Exception as exc:
+            save_crash("Tajik voice failed:\n" + traceback.format_exc())
+            detail = "HTTP %d" % exc.code if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
+            Clock.schedule_once(lambda dt: self._note_tajik_voice_error(detail), 0)
+            return None
+
+    def _note_tajik_voice_error(self, detail):
+        if getattr(self, "tajik_voice_error_noted", False):
+            return
+        self.tajik_voice_error_noted = True
+        try:
+            self.show_response(self.t("tajik_voice_failed") + " [" + detail + "]")
+        except Exception:
+            pass
 
     def _note_server_speech_error(self, detail):
         """Tell the user (once per launch) why the Edge voice was replaced by the phone voice."""
