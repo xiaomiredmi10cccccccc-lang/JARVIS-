@@ -444,6 +444,31 @@ TEXTS = {
         "lang_changed": "Забон иваз шуд: {}",
         "theme_changed": "Интерфейс: {}",
         "cmd_error": "Хатогӣ рух дод.",
+        "info_error": "Маълумот гирифта нашуд. Интернетро санҷед ва дубора кӯшиш кунед.",
+        "prayer_title": "Вақти намоз — Душанбе",
+        "pr_Fajr": "Бомдод",
+        "pr_Sunrise": "Офтоббаромад",
+        "pr_Dhuhr": "Пешин",
+        "pr_Asr": "Аср",
+        "pr_Maghrib": "Шом",
+        "pr_Isha": "Хуфтан",
+        "hijri": "Санаи ҳиҷрӣ",
+        "weather_title": "Ҳаво — Душанбе",
+        "feels": "ҳис мешавад",
+        "humidity": "намӣ",
+        "wind": "бод",
+        "wind_unit": "км/соат",
+        "wc_clear": "Соф, офтобӣ",
+        "wc_cloud": "Қисман абрнок",
+        "wc_overcast": "Абрнок",
+        "wc_fog": "Туман",
+        "wc_drizzle": "Борони майда",
+        "wc_rain": "Борон",
+        "wc_snow": "Барф",
+        "wc_showers": "Раъду барқ ва борон",
+        "wc_thunder": "Раъду барқ",
+        "rates_title": "Қурби асъор (бозорӣ, на расмии БМТ)",
+        "rates_note": "1 воҳид = сомонӣ",
         "you": "Шумо",
         "file_picker_failed": "Интихоби файл дар ин дастгоҳ кушода нашуд.",
         "file_not_selected": "Файл интихоб нашуд.",
@@ -534,6 +559,31 @@ TEXTS = {
         "lang_changed": "Язык изменён: {}",
         "theme_changed": "Интерфейс: {}",
         "cmd_error": "Произошла ошибка.",
+        "info_error": "Не удалось получить данные. Проверьте интернет и попробуйте снова.",
+        "prayer_title": "Время намаза — Душанбе",
+        "pr_Fajr": "Фаджр",
+        "pr_Sunrise": "Восход",
+        "pr_Dhuhr": "Зухр",
+        "pr_Asr": "Аср",
+        "pr_Maghrib": "Магриб",
+        "pr_Isha": "Иша",
+        "hijri": "Дата по хиджре",
+        "weather_title": "Погода — Душанбе",
+        "feels": "ощущается",
+        "humidity": "влажность",
+        "wind": "ветер",
+        "wind_unit": "км/ч",
+        "wc_clear": "Ясно",
+        "wc_cloud": "Переменная облачность",
+        "wc_overcast": "Пасмурно",
+        "wc_fog": "Туман",
+        "wc_drizzle": "Морось",
+        "wc_rain": "Дождь",
+        "wc_snow": "Снег",
+        "wc_showers": "Ливни",
+        "wc_thunder": "Гроза",
+        "rates_title": "Курсы валют (рыночные, не официальные НБТ)",
+        "rates_note": "1 единица = сомони",
         "you": "Вы",
         "file_picker_failed": "Не удалось открыть выбор файла на этом устройстве.",
         "file_not_selected": "Файл не выбран.",
@@ -624,6 +674,31 @@ TEXTS = {
         "lang_changed": "Language: {}",
         "theme_changed": "Theme: {}",
         "cmd_error": "Error.",
+        "info_error": "Could not get the data. Check the internet and try again.",
+        "prayer_title": "Prayer times — Dushanbe",
+        "pr_Fajr": "Fajr",
+        "pr_Sunrise": "Sunrise",
+        "pr_Dhuhr": "Dhuhr",
+        "pr_Asr": "Asr",
+        "pr_Maghrib": "Maghrib",
+        "pr_Isha": "Isha",
+        "hijri": "Hijri date",
+        "weather_title": "Weather — Dushanbe",
+        "feels": "feels like",
+        "humidity": "humidity",
+        "wind": "wind",
+        "wind_unit": "km/h",
+        "wc_clear": "Clear",
+        "wc_cloud": "Partly cloudy",
+        "wc_overcast": "Overcast",
+        "wc_fog": "Fog",
+        "wc_drizzle": "Drizzle",
+        "wc_rain": "Rain",
+        "wc_snow": "Snow",
+        "wc_showers": "Showers",
+        "wc_thunder": "Thunderstorm",
+        "rates_title": "Exchange rates (market, not official NBT)",
+        "rates_note": "1 unit = somoni",
         "you": "You",
         "file_picker_failed": "The file picker could not be opened on this device.",
         "file_not_selected": "No file selected.",
@@ -3186,6 +3261,105 @@ def cmd_help(app, text):
 def cmd_greeting(app, text):
     return app.t("welcome")
 
+
+# ---- Local information commands (need internet, no API keys): prayer times, weather, exchange rates.
+INFO_COMMANDS = []
+
+
+def info_command(name, *keywords):
+    def register(fn):
+        INFO_COMMANDS.append((name, tuple(k.lower() for k in keywords), fn))
+        return fn
+    return register
+
+
+def find_info_command(text):
+    for name, keywords, fn in INFO_COMMANDS:
+        if command_matches(text, keywords):
+            return fn
+    return None
+
+
+def http_json(url, timeout=12):
+    import ssl
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        ctx = None
+    req = urllib.request.Request(url, headers={"User-Agent": "JARVIS-Android"})
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+@info_command("prayer", "намоз", "вақти намоз", "вақти намозҳо", "намозҳо", "намоз кай аст", "намози имрӯз",
+              "время намаза", "намаз", "молитва", "prayer times", "prayer time", "namaz")
+def info_prayer(app):
+    # Hanafi school (the common one in Tajikistan); times come already in Dushanbe local time.
+    data = http_json("https://api.aladhan.com/v1/timingsByCity?city=Dushanbe&country=Tajikistan&method=13&school=1")
+    timings = data["data"]["timings"]
+    lines = [app.t("prayer_title")]
+    for key in ("Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"):
+        lines.append("%s: %s" % (app.t("pr_" + key), str(timings[key]).split()[0]))
+    try:
+        h = data["data"]["date"]["hijri"]
+        lines.append("%s: %s %s %s" % (app.t("hijri"), h["day"], h["month"]["en"], h["year"]))
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
+def weather_text(app, code):
+    if code == 0:
+        return app.t("wc_clear")
+    if code in (1, 2):
+        return app.t("wc_cloud")
+    if code == 3:
+        return app.t("wc_overcast")
+    if code in (45, 48):
+        return app.t("wc_fog")
+    if code in (51, 53, 55, 56, 57):
+        return app.t("wc_drizzle")
+    if code in (61, 63, 65, 66, 67, 80, 81, 82):
+        return app.t("wc_rain")
+    if code in (71, 73, 75, 77, 85, 86):
+        return app.t("wc_snow")
+    if code in (95,):
+        return app.t("wc_thunder")
+    if code in (96, 99):
+        return app.t("wc_showers")
+    return app.t("wc_cloud")
+
+
+@info_command("weather", "ҳаво", "обу ҳаво", "ҳавои имрӯз", "ҳаво чӣ хел аст", "ҳаво чи хел аст",
+              "погода", "погода сегодня", "weather")
+def info_weather(app):
+    data = http_json("https://api.open-meteo.com/v1/forecast?latitude=38.56&longitude=68.77"
+                     "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m"
+                     "&timezone=auto")
+    cur = data["current"]
+    return "%s\n%s, %+.0f°C (%s %+.0f°C)\n%s: %.0f%%\n%s: %.0f %s" % (
+        app.t("weather_title"), weather_text(app, int(cur["weather_code"])), cur["temperature_2m"],
+        app.t("feels"), cur["apparent_temperature"], app.t("humidity"), cur["relative_humidity_2m"],
+        app.t("wind"), cur["wind_speed_10m"], app.t("wind_unit"))
+
+
+@info_command("rates", "қурб", "қурби асъор", "қурби доллар", "курс", "курс валют", "курс доллара",
+              "exchange rate", "exchange rates", "currency", "rates")
+def info_rates(app):
+    data = http_json("https://open.er-api.com/v6/latest/USD")
+    rates = data["rates"]
+    tjs = float(rates["TJS"])
+    lines = [app.t("rates_title"), app.t("rates_note")]
+    for code in ("USD", "EUR", "RUB", "CNY", "KZT", "UZS"):
+        if code in rates and float(rates[code]) > 0:
+            value, unit = tjs / float(rates[code]), 1
+            while value < 0.5 and unit < 1000:      # small currencies are shown per 100 / 1000 units
+                value, unit = value * 10, unit * 10
+            lines.append("%s%s: %.2f" % ("%d " % unit if unit > 1 else "", code, value))
+    return "\n".join(lines)
+
+
 class IconGlassButton(GlassButton):
     def __init__(self, icon_kind="dots", icon_rgba=(1, 1, 1, 1), **kwargs):
         super().__init__(**kwargs)
@@ -3816,6 +3990,13 @@ class JarvisApp(App):
             if role in ("user", "assistant") and item.get("text"):
                 history.append({"role": role, "content": item["text"][:4000]})
         self.add_chat_message(chat_id, "user", command_text)
+        info_fn = find_info_command(command_text)
+        if info_fn is not None:
+            self.set_orb_state("thinking")
+            if hasattr(self, "status_label"):
+                self.status_label.text = self.t("server_thinking")
+            threading.Thread(target=self._run_info, args=(chat_id, info_fn), daemon=True).start()
+            return
         answer = run_command(self, command_text)
         if answer == self.t("unknown"):
             if not self.server_token.strip():
@@ -3831,6 +4012,14 @@ class JarvisApp(App):
         self.deliver_answer(chat_id, answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
+
+    def _run_info(self, chat_id, fn):
+        try:
+            answer = fn(self)
+        except Exception:
+            save_crash("Info command failed:\n" + traceback.format_exc())
+            answer = self.t("info_error")
+        Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _ask_server(self, chat_id, message, history):
         import ssl
