@@ -777,6 +777,197 @@ EMOJI_GROUPS = (
     ('🎉', '🤖👻💀👽🙈🙉🙊🐶🐱🐭🐹🐰🦊🐻🐼🦁🐯🐸🐵🐔🐧🐦🦋🐝🌸🌹🌻🌳🌍🌙☀🌈☁❄🍎🍌🍉🍕🍔🍟🍩🍰☕🍺⚽🏀🎵🎶🎮📱💻📷💡📚✏📌📎🔑🔒🔔📞✉🚗✈🚀🏠💰💳📈✅❌⚠❓❗➕➖➡⬅⬆⬇▶⏸⭕'),
 )
 
+
+# ---------------------------------------------------------------------------------------------
+# Full-colour emoji in chat bubbles. Kivy cannot draw colour emoji fonts, so the emoji are taken as
+# small PNG pictures from assets/emoji.dat (built from Noto Color Emoji) and drawn over blank spaces
+# that EmojiLabel reserves inside the text. Without the file the monochrome font is used instead.
+# ---------------------------------------------------------------------------------------------
+_EMOJI = {"index": None, "data": None, "tried": False}
+_EMOJI_TEX = {}
+NBSP = " "
+# Emoji_Presentation=Yes characters below U+1F000 (everything above is treated as an emoji already)
+_EMOJI_DEFAULT_RANGES = ((0x231A, 0x231B), (0x23E9, 0x23EC), (0x23F0, 0x23F0), (0x23F3, 0x23F3),
+                         (0x25FD, 0x25FE), (0x2614, 0x2615), (0x2648, 0x2653), (0x267F, 0x267F),
+                         (0x2693, 0x2693), (0x26A1, 0x26A1), (0x26AA, 0x26AB), (0x26BD, 0x26BE),
+                         (0x26C4, 0x26C5), (0x26CE, 0x26CE), (0x26D4, 0x26D4), (0x26EA, 0x26EA),
+                         (0x26F2, 0x26F3), (0x26F5, 0x26F5), (0x26FA, 0x26FA), (0x26FD, 0x26FD),
+                         (0x2705, 0x2705), (0x270A, 0x270B), (0x2728, 0x2728), (0x274C, 0x274C),
+                         (0x274E, 0x274E), (0x2753, 0x2755), (0x2757, 0x2757), (0x2795, 0x2797),
+                         (0x27B0, 0x27B0), (0x27BF, 0x27BF), (0x2B1B, 0x2B1C), (0x2B50, 0x2B50),
+                         (0x2B55, 0x2B55),
+                         # text-style by default in Unicode, but nearly always meant as a coloured emoji
+                         (0x2600, 0x2601), (0x263A, 0x263A), (0x2639, 0x2639), (0x26A0, 0x26A0),
+                         (0x270C, 0x270C), (0x2714, 0x2714), (0x2744, 0x2744), (0x2763, 0x2764))
+
+
+def _emoji_default(cp):
+    return cp >= 0x1F000 or any(a <= cp <= b for a, b in _EMOJI_DEFAULT_RANGES)
+
+
+def emoji_pack():
+    """Load assets/emoji.dat once: returns (index, bytes) or (None, None) when it is missing."""
+    if _EMOJI["tried"]:
+        return _EMOJI["index"], _EMOJI["data"]
+    _EMOJI["tried"] = True
+    try:
+        import struct
+        folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd(),
+                   "/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
+        for folder in folders:
+            for path in (os.path.join(folder, "assets", "emoji.dat"), os.path.join(folder, "emoji.dat")):
+                if os.path.isfile(path):
+                    with open(path, "rb") as fh:
+                        raw = fh.read()
+                    if raw[:4] != b"JEMO":
+                        continue
+                    n = struct.unpack("<I", raw[4:8])[0]
+                    _EMOJI["index"] = json.loads(raw[8:8 + n].decode("utf-8"))
+                    _EMOJI["data"] = raw[8 + n:]
+                    return _EMOJI["index"], _EMOJI["data"]
+    except Exception:
+        save_crash("Emoji pack failed:\n" + traceback.format_exc())
+    return None, None
+
+
+def emoji_texture(key):
+    if key in _EMOJI_TEX:
+        return _EMOJI_TEX[key]
+    tex = None
+    try:
+        index, data = emoji_pack()
+        if index and key in index:
+            import io
+            from kivy.core.image import Image as CoreImage
+            off, length = index[key]
+            tex = CoreImage(io.BytesIO(data[off:off + length]), ext="png", nocache=True).texture
+    except Exception:
+        save_crash("Emoji texture failed:\n" + traceback.format_exc())
+        tex = None
+    _EMOJI_TEX[key] = tex
+    return tex
+
+
+def split_emoji(text):
+    """Split text into [("t", text) | ("e", key)] using the longest emoji sequence at each position
+    (skin tones, flags, keycaps and ZWJ families are one picture)."""
+    index, _data = emoji_pack()
+    if not index:
+        return [("t", text)]
+    out, buf, i, n = [], [], 0, len(text)
+    while i < n:
+        c = text[i]
+        o = ord(c)
+        if o < 0x203C and c not in "#*0123456789":
+            buf.append(c)
+            i += 1
+            continue
+        cps, j, best = [], i, None
+        while j < n and len(cps) < 12:
+            cj = ord(text[j])
+            if cj != 0xFE0F:
+                cps.append(cj)
+            j += 1
+            key = "_".join("%x" % x for x in cps)
+            if key in index:
+                best = (j, key, len(cps))
+            if j >= n:
+                break
+            nx = ord(text[j])
+            more = (nx in (0xFE0F, 0x200D, 0x20E3) or 0x1F3FB <= nx <= 0x1F3FF or 0xE0020 <= nx <= 0xE007F
+                    or cj == 0x200D or (len(cps) == 1 and 0x1F1E6 <= cps[0] <= 0x1F1FF and 0x1F1E6 <= nx <= 0x1F1FF))
+            if not more:
+                break
+        if best is not None:
+            end, key, count = best
+            piece = text[i:end]
+            if count == 1 and not _emoji_default(int(key, 16)) and "️" not in piece:
+                best = None      # a plain symbol such as an arrow: keep it as text
+        if best is None:
+            buf.append(c)
+            i += 1
+            continue
+        if buf:
+            out.append(("t", "".join(buf)))
+            buf = []
+        out.append(("e", best[1]))
+        i = best[0]
+    if buf:
+        out.append(("t", "".join(buf)))
+    return out
+
+
+def markup_escape(s):
+    return s.replace("&", "&amp;").replace("[", "&bl;").replace("]", "&br;")
+
+
+class EmojiLabel(Label):
+    """A Label whose emoji are shown as full-colour pictures. Set the text with set_plain()."""
+
+    def __init__(self, **kwargs):
+        kwargs["markup"] = True
+        super().__init__(**kwargs)
+        self._emoji = []
+        self._plain = ""
+        self._nb = None
+        self.bind(texture=self._draw_emoji, texture_size=self._draw_emoji, pos=self._draw_emoji,
+                  size=self._draw_emoji)
+
+    def _nbsp_count(self):
+        if self._nb is None:
+            try:
+                from kivy.core.text import Label as CoreLabel
+                w = CoreLabel(font_size=int(self.font_size)).get_extents(NBSP * 10)[0] / 10.0
+                self._nb = max(2, int(round(1.25 * self.font_size / max(w, 1.0))))
+            except Exception:
+                self._nb = 5
+        return self._nb
+
+    def set_plain(self, text):
+        self._plain = str(text)
+        index, _data = emoji_pack()
+        if not index:
+            self._emoji = []
+            self.text = markup_escape(self._plain)
+            return
+        parts, keys = [], []
+        for kind, value in split_emoji(self._plain):
+            if kind == "t":
+                parts.append(markup_escape(value))
+            else:
+                parts.append("[ref=e%d]%s[/ref]" % (len(keys), NBSP * self._nbsp_count()))
+                keys.append(value)
+        self._emoji = keys
+        self.text = "".join(parts)
+
+    def _draw_emoji(self, *_):
+        self.canvas.after.clear()
+        if not self._emoji or self.texture is None:
+            return
+        tw, th = self.texture_size
+        left = int(self.center_x - tw / 2.0)
+        top = int(self.center_y + th / 2.0)
+        with self.canvas.after:
+            Color(1, 1, 1, 1)
+            for i, key in enumerate(self._emoji):
+                boxes = self.refs.get("e%d" % i)
+                tex = emoji_texture(key)
+                if not boxes or tex is None:
+                    continue
+                x1, y1, x2, y2 = boxes[0]
+                side = min((x2 - x1) * 0.94, (y2 - y1) * 0.96)
+                cx = left + (x1 + x2) / 2.0
+                cy = top - (y1 + y2) / 2.0
+                Rectangle(texture=tex, pos=(cx - side / 2.0, cy - side / 2.0), size=(side, side))
+
+
+def set_label_text(label, text):
+    """Set the text of a chat label (EmojiLabel shows colour emoji; a plain Label just takes the text)."""
+    if isinstance(label, EmojiLabel):
+        label.set_plain(text)
+    else:
+        label.text = text
+
 ANIM = {"phase": 0.0, "clock_t": 0.0, "level": 0.0}
 # Orb pulse period per state, in milliseconds (ready = slow, listening = fast).
 PULSE_PERIOD_MS = {"idle": 3000, "thinking": 1500, "speaking": 800, "listening": 300}
@@ -3382,9 +3573,10 @@ class JarvisApp(App):
                         size_hint_y=None, height=dp(14))
         caption.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         bubble.add_widget(caption)
-        label = Label(text=text, font_size=dp(15),
-                      color=(1, 1, 1, 1) if user else hex_color(theme["text"]),
-                      halign="right" if user else "left", valign="top", size_hint_y=None)
+        label = EmojiLabel(text="", font_size=dp(15),
+                           color=(1, 1, 1, 1) if user else hex_color(theme["text"]),
+                           halign="right" if user else "left", valign="top", size_hint_y=None)
+        label.set_plain(text)
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
         bubble.add_widget(label)
@@ -3833,13 +4025,13 @@ class JarvisApp(App):
         player = getattr(self, "_server_speech_player", None) if started else None
         if label is None or not words:
             if label is not None:
-                label.text = answer
+                set_label_text(label, answer)
             return
         begin = time.monotonic()
         state = {"shown": 0}
 
         def finish():
-            label.text = answer
+            set_label_text(label, answer)
             self.scroll_chat_down()
 
         def tick(dt):
@@ -3854,7 +4046,7 @@ class JarvisApp(App):
             chars = visible_chars(words, position)
             if chars != state["shown"]:
                 state["shown"] = chars
-                label.text = text[:chars]
+                set_label_text(label, text[:chars])
                 self.scroll_chat_down()
             if not playing and position > 0:
                 finish()
