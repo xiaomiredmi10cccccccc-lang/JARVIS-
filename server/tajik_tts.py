@@ -82,9 +82,13 @@ def _load():
 def start_loading():
     """Start downloading/loading in the background (call once at server start)."""
     with _lock:
-        if not REPO or _state["session"] is not None or _state["loading"]:
+        if not REPO:
+            print("Tajik voice: TAJIK_TTS_REPO is not set, voice is off")
+            return
+        if _state["session"] is not None or _state["loading"]:
             return
         _state["loading"] = True
+    print("Tajik voice: downloading/loading model from", REPO)
     threading.Thread(target=_load, daemon=True).start()
 
 
