@@ -261,16 +261,30 @@ class SpeechRecognizer(object):
 class SpeechSynthesizer(object):
     def __init__(self):
         self._tts = None
+        self._init_status = None      # None = engine still starting, 0 = ready, other = failed
+        self._listener = None
 
     def is_supported(self):
         return android_available()
 
     def _engine(self):
         if self._tts is None:
-            from jnius import autoclass
+            from jnius import autoclass, PythonJavaClass, java_method
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-            self._tts = TextToSpeech(PythonActivity.mActivity, None)
+            owner = self
+
+            class InitListener(PythonJavaClass):
+                __javainterfaces__ = ["android/speech/tts/TextToSpeech$OnInitListener"]
+                __javacontext__ = "app"
+
+                @java_method("(I)V")
+                def onInit(self, status):
+                    owner._init_status = int(status)
+
+            self._init_status = None
+            self._listener = InitListener()      # keep a reference, or it is garbage collected
+            self._tts = TextToSpeech(PythonActivity.mActivity, self._listener)
         return self._tts
 
     def warm_up(self):
@@ -288,17 +302,31 @@ class SpeechSynthesizer(object):
             Locale = autoclass("java.util.Locale")
             TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
             tts = self._engine()
+            if self._init_status is None:
+                return "starting"             # the engine is still starting: the caller tries again shortly
+            if self._init_status != 0:
+                self.shutdown()               # next attempt creates a fresh engine
+                raise VoiceUnavailable("engine init failed (status %s); is a Text-to-Speech engine installed?"
+                                       % self._init_status)
             result = "ok"
             try:
                 tts.setPitch(float(pitch))
             except Exception:
                 pass
+            codes = []
             code = tts.setLanguage(Locale(lang))
-            if code < 0 and lang == "tg":
-                code = tts.setLanguage(Locale("ru"))
-                result = "fallback"
+            codes.append("%s=%s" % (lang, code))
             if code < 0:
-                raise VoiceUnavailable("No voice for this language is installed.")
+                # the wanted language has no voice data: try Russian (for Tajik), the phone's own language, English
+                for name in (("ru",) if lang == "tg" else ()) + ("default", "en"):
+                    loc = Locale.getDefault() if name == "default" else Locale(name)
+                    code = tts.setLanguage(loc)
+                    codes.append("%s=%s" % (name, code))
+                    if code >= 0:
+                        result = "fallback"
+                        break
+            if code < 0:
+                raise VoiceUnavailable("no voice data installed (%s)" % ", ".join(codes))
             speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis")
             if speak_code != 0:
                 return "starting"
@@ -323,6 +351,7 @@ class SpeechSynthesizer(object):
         except Exception:
             pass
         self._tts = None
+        self._init_status = None
 
 class LocalAccountService(object):
     def is_configured(self):
@@ -3469,6 +3498,7 @@ class JarvisApp(App):
         self.account_service = get_service(self.user_data_dir)
         self.speech = SpeechRecognizer(self)
         self.tts = SpeechSynthesizer()
+        Clock.schedule_once(lambda dt: self.tts.warm_up(), 1.5)   # start the phone voice engine early
         try:
             from android import activity
             activity.bind(on_activity_result=self.on_activity_result)
@@ -4138,7 +4168,7 @@ class JarvisApp(App):
                     save_crash("Local speech fallback failed: " + str(exc))
                     if not self.tts_error_noted:
                         self.tts_error_noted = True
-                        self.show_response(self.t("tts_failed_all"))
+                        self.show_response(self.t("tts_failed_all") + "\n[" + str(exc)[:160] + "]")
             Clock.schedule_once(attempt, 0.15)
         except Exception:
             save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
