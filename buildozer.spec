@@ -5,7 +5,7 @@ package.name = jarvis
 package.domain = org.jarvis
 
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ttf
+source.include_exts = py,png,jpg,kv,atlas,ttf,dat
 
 version = 0.1
 
