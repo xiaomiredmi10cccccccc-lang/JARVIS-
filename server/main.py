@@ -29,6 +29,7 @@ except Exception as _exc:  # onnxruntime/numpy missing: Tajik voice simply stays
     print("Tajik voice module not loaded:", type(_exc).__name__)
     tajik_tts = None
 from openai import OpenAI
+import ai_tools
 
 try:
     import edge_tts
@@ -340,9 +341,8 @@ def me(authorization: str | None = Header(default=None)):
 def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
     verify_token(x_jarvis_token)
     check_rate_limit(client_ip(http_request))
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Groq API key is not configured")
+    if not ai_tools.provider_chain():
+        raise HTTPException(status_code=503, detail="No AI provider key is configured")
     instructions = {
         "tg": "Ту JARVIS ҳастӣ — ёвари зеҳни сунъии муфид ва боодоб. Ба корбар бо забони тоҷикии равон ва табиӣ, бо алифбои кириллӣ ҷавоб деҳ. Имло ва сохти ҷумлаҳои тоҷикиро риоя кун. Ба савол мустақим, дақиқ ва фаҳмо ҷавоб деҳ. Барои саволҳои мураккаб бодиққат таҳлил кун. То вақте ки корбар нахоҳад, ҷавобро бо забонҳои русӣ ва англисӣ омехта накун. Агар ҷавобро надонӣ, ростқавлона бигӯ. Ҳеҷ гоҳ нагӯ, ки дар интернет ҷустуҷӯ кардӣ, агар воқеан ҷустуҷӯ накарда бошӣ.",
         "ru": "Ты JARVIS — полезный и вежливый ИИ-помощник. Отвечай ясно, точно и по существу на русском. Для сложных вопросов рассуждай внимательно. Если не знаешь ответа, честно скажи об этом. Не утверждай, что искал информацию в интернете, если поиск фактически не выполнялся.",
@@ -360,22 +360,20 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
             search_error = str(exc)
             messages.append({"role": "system", "content": "Web search was requested/appropriate but did not succeed. Do not claim to have searched the web or invent citations. Answer from existing knowledge and clearly state that live search is unavailable if freshness matters."})
     messages.append({"role": "user", "content": request.message})
-    model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1", timeout=45.0)
-        response = client.chat.completions.create(model=model, messages=messages)
-        if not response.choices:
-            raise HTTPException(status_code=502, detail="The AI returned no choices")
-        answer = response.choices[0].message.content
-        if not answer or not answer.strip():
-            raise HTTPException(status_code=502, detail="The AI returned an empty response")
-        return {"answer": answer.strip(), "web_search": searched, "sources": sources, "search_error": search_error, "model": response.model or model}
-    except HTTPException:
-        raise
+        result = await_free(ai_tools.complete, messages, timeout=45.0)
+        return {"answer": result["answer"], "web_search": searched, "sources": sources, "search_error": search_error,
+                "model": result["provider"] + ":" + result["model"]}
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        print("Groq request failed:", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="The Groq AI service could not complete the request")
+        print("AI chain failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The AI services could not complete the request")
 
+
+def await_free(fn, *args, **kwargs):
+    """Call a blocking AI helper directly (the /chat endpoint is a normal sync def, so it runs in a worker thread)."""
+    return fn(*args, **kwargs)
 
 
 def detect_speech_language(text: str) -> str:
@@ -572,16 +570,14 @@ async def analyze_attachment(http_request: Request, x_jarvis_token: str | None =
         "ru": "Отвечай по-русски. Проанализируй файл, не выдумывай факты и сообщи, если данные прочитать нельзя.",
         "en": "Answer in English. Analyze the file, do not invent facts, and say if its contents cannot be read.",
     }[language]
-    api_key = os.environ.get("GROQ_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Groq API key is not configured")
+    is_image = mime.startswith("image/")
+    if not ai_tools.provider_chain(vision=is_image):
+        raise HTTPException(status_code=503, detail="No AI provider key is configured" + (" for images (Groq or Gemini)" if is_image else ""))
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1", timeout=60.0)
         if mime.startswith("image/"):
             if mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
                 raise HTTPException(status_code=415, detail="Supported images: JPEG, PNG, WEBP, GIF")
             data_url = "data:" + mime + ";base64," + base64.b64encode(raw).decode("ascii")
-            model = os.environ.get("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
             messages = [
                 {"role": "system", "content": instructions},
                 {"role": "user", "content": [
@@ -596,23 +592,157 @@ async def analyze_attachment(http_request: Request, x_jarvis_token: str | None =
                 raise HTTPException(status_code=415, detail="Text file must use UTF-8 encoding")
             if len(file_text) > 30000:
                 file_text = file_text[:30000] + "\n[Файл барои таҳлил кӯтоҳ карда шуд]"
-            model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
             messages = [
                 {"role": "system", "content": instructions},
                 {"role": "user", "content": "Файл: " + filename + "\nДархост: " + prompt + "\n\nМундариҷаи файл:\n" + file_text},
             ]
         else:
             raise HTTPException(status_code=415, detail="Currently supported: images and UTF-8 text files (TXT, CSV, JSON, MD, LOG). PDF and Office documents are not supported yet.")
-        response = client.chat.completions.create(model=model, messages=messages, max_tokens=1500)
-        answer = response.choices[0].message.content if response.choices else ""
-        if not answer or not answer.strip():
-            raise HTTPException(status_code=502, detail="The AI returned an empty analysis")
-        return {"answer": answer.strip(), "filename": filename, "model": response.model or model}
+        result = await asyncio.to_thread(ai_tools.complete, messages, is_image, 1500, 60.0)
+        return {"answer": result["answer"], "filename": filename, "model": result["provider"] + ":" + result["model"]}
     except HTTPException:
         raise
     except Exception as exc:
         print("Attachment analysis failed:", type(exc).__name__)
         raise HTTPException(status_code=502, detail="The AI service could not analyze this file. Check the configured vision model and try again.")
+
+
+def _read_form(content_type: str, body: bytes) -> dict:
+    """Parse multipart/form-data into {name: (bytes, filename, content_type)}."""
+    try:
+        header = ("Content-Type: " + content_type + "\r\nMIME-Version: 1.0\r\n\r\n").encode("latin-1", "replace")
+        form = BytesParser(policy=policy.default).parsebytes(header + body)
+        if not form.is_multipart():
+            raise ValueError("not multipart")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid multipart request")
+    fields = {}
+    for part in form.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if name:
+            fields[name] = (part.get_payload(decode=True) or b"", part.get_filename() or "", part.get_content_type() or "")
+    return fields
+
+
+def _form_text(fields: dict, name: str, default: str = "") -> str:
+    return fields[name][0].decode("utf-8", "replace").strip() if name in fields else default
+
+
+def _lang(value: str) -> str:
+    return value if value in ("tg", "ru", "en") else "tg"
+
+
+class ImageRequest(BaseModel):
+    prompt: str = Field(min_length=2, max_length=500)
+    language: Literal["tg", "ru", "en"] = "tg"
+    width: int = Field(default=1024, ge=256, le=1536)
+    height: int = Field(default=1024, ge=256, le=1536)
+
+
+class ImageSearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=200)
+    language: Literal["tg", "ru", "en"] = "tg"
+    limit: int = Field(default=4, ge=1, le=8)
+
+
+@app.post("/image/generate")
+async def image_generate(request: ImageRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Create a picture from text with a free keyless image service (the prompt is translated to English first)."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    prompt_en = await asyncio.to_thread(ai_tools.to_english, request.prompt.strip(), request.language)
+    try:
+        data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, request.width, request.height)
+    except Exception as exc:
+        print("Image generation failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The free image service is unavailable now (" + type(exc).__name__ + ")")
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/image/search")
+async def image_search(request: ImageSearchRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Find freely licensed pictures on Wikimedia Commons (no key)."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    query_en = await asyncio.to_thread(ai_tools.to_english, request.query.strip(), request.language)
+    try:
+        results = await asyncio.to_thread(ai_tools.search_images, query_en, request.limit)
+    except Exception as exc:
+        print("Image search failed:", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Image search is unavailable now")
+    return {"query": query_en, "results": results, "source": "Wikimedia Commons"}
+
+
+@app.post("/image/edit")
+async def image_edit(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Edit a photo from a text instruction: the AI plans simple operations, Pillow applies them."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    if len(body) > 20 * 1024 * 1024 + 64 * 1024:
+        raise HTTPException(status_code=413, detail="File is too large (20 MB maximum)")
+    fields = _read_form(content_type, body)
+    raw = fields.get("file", (b"",))[0]
+    if not raw:
+        raise HTTPException(status_code=400, detail="Image is missing")
+    language = _lang(_form_text(fields, "language", "tg"))
+    instruction = _form_text(fields, "prompt")
+    if not instruction:
+        raise HTTPException(status_code=400, detail="Describe what to change")
+    try:
+        ops, summary = await asyncio.to_thread(ai_tools.plan_edit, instruction, language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Edit planning failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The AI could not plan the edit")
+    if not ops:
+        raise HTTPException(status_code=422, detail=summary or "This edit is not possible with the free tools")
+    try:
+        data, ctype, ext = await asyncio.to_thread(ai_tools.apply_ops, raw, ops)
+    except Exception as exc:
+        print("Image edit failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=415, detail="This image could not be edited (JPEG/PNG/WEBP expected)")
+    safe_summary = base64.b64encode(summary.encode("utf-8")).decode("ascii")
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
+
+
+@app.post("/edit-text")
+async def edit_text(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+    """Edit a text file, or create a new one when no file is sent. Returns {filename, text}."""
+    verify_token(x_jarvis_token)
+    check_rate_limit(client_ip(http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    if len(body) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Text file is too large (2 MB maximum)")
+    fields = _read_form(content_type, body)
+    instruction = _form_text(fields, "prompt")
+    if not instruction:
+        raise HTTPException(status_code=400, detail="Describe what to do with the file")
+    language = _lang(_form_text(fields, "language", "tg"))
+    filename = os.path.basename((fields.get("file", (b"", "", ""))[1] or "file.txt").replace("\\", "/"))
+    content = ""
+    if "file" in fields and fields["file"][0]:
+        if not filename.lower().endswith(ai_tools.TEXT_EXTENSIONS):
+            raise HTTPException(status_code=415, detail="Only text files can be edited (TXT, MD, CSV, JSON, code, HTML)")
+        try:
+            content = fields["file"][0].decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=415, detail="Text file must use UTF-8 encoding")
+    try:
+        name, text, model = await asyncio.to_thread(ai_tools.edit_text_file, filename, content, instruction, language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Text edit failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The AI could not edit the file")
+    return {"filename": name, "text": text, "model": model, "created": not bool(content)}
 
 
 @app.post("/transcribe")
