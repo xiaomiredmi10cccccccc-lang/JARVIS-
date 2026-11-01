@@ -1,6 +1,6 @@
 [app]
 
-title = JARVIS
+title = S.A.I
 package.name = jarvis
 package.domain = org.jarvis
 
@@ -10,6 +10,10 @@ source.include_exts = py,png,jpg,kv,atlas,ttf,dat
 version = 0.1
 
 requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,pyjnius,requests,certifi,urllib3,idna,chardet
+
+icon.filename = %(source.dir)s/assets/icon.png
+presplash.filename = %(source.dir)s/assets/presplash.png
+android.presplash_color = #000000
 
 orientation = portrait
 
