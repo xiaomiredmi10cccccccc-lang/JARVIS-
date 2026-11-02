@@ -221,7 +221,7 @@ class SpeechRecognizer(object):
             url = "https://jarvis-ai-server-3vuo.onrender.com/transcribe"
             headers = {
                 "Content-Type": "multipart/form-data; boundary=" + boundary,
-                "X-Jarvis-Token": self.app.server_token,
+                "Authorization": "Bearer " + self.app.server_token,
                 "Accept": "application/json",
             }
             request = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -487,13 +487,43 @@ TEXTS = {
         "err_busy": "Сервер ҳоло банд аст ё ҷавоб намедиҳад. Баъдтар дубора кӯшиш кунед.",
         "err_unsupported": "Ин навъи файл дастгирӣ намешавад.",
         "err_cannot": "Ин амалро бо абзорҳои ройгон иҷро кардан мумкин нест.",
-        "err_too_many": "Дархостҳо аз ҳад зиёданд. Чанд сония интизор шавед.",
+        "err_too_many": "Дархостҳо аз ҳад зиёд ё ҳадди рӯзона тамом шуд. Баъдтар дубора кӯшиш кунед.",
         "err_bad": "Дархост нодуруст аст.",
         "err_generic": "Хатои номаълум рух дод. Дубора кӯшиш кунед.",
         "tts_no_tajik": "Дар телефон овози тоҷикӣ нест, барои ҳамин ҷавоб бе овоз монд.",
+        "ob_name_title": "Ёрдамчии худро чӣ ном мегузоред?",
+        "ob_name_hint": "Масалан: S.A.I",
+        "ob_name_note": "Ин ном дар ҳама ҷо нишон дода мешавад ва AI бо ҳамин ном худро муаррифӣ мекунад.",
+        "ob_continue": "Идома",
+        "ob_account_title": "Ворид шудан",
+        "ob_login_tab": "Аккаунти ман",
+        "ob_signup_tab": "Аккаунти нав",
+        "ob_username": "Номи аккаунт",
+        "ob_password": "Парол",
+        "ob_password2": "Паролро такрор кунед",
+        "ob_login_btn": "Ворид шудан",
+        "ob_signup_btn": "Сохтани аккаунт",
+        "ob_google_btn": "Бо Google",
+        "ob_google_soon": "Воридшавӣ бо Google ба зудӣ илова мешавад. Ҳоло номи аккаунт ва паролро истифода баред.",
+        "ob_wait": "Интизор шавед… (сервер шояд бедор шавад, то як дақиқа)",
+        "ob_err_empty": "Ном ва паролро пур кунед.",
+        "ob_err_username": "Ном: аз 3 то 32 ҳарф, рақам, нуқта, тире ё зерхат (бе фосила).",
+        "ob_err_short": "Парол бояд на камтар аз 8 аломат бошад.",
+        "ob_err_mismatch": "Паролҳо мувофиқ нестанд.",
+        "ob_err_wrong": "Ном ё парол нодуруст аст.",
+        "ob_err_exists": "Ин ном аллакай гирифта шудааст. Номи дигар интихоб кунед.",
+        "ob_welcome": "Салом, {}! Ман {} ҳастам. Чӣ кӯмак кунам?",
+        "acct_line": "Аккаунт: {}",
+        "acct_rename": "Тағйири номи ёрдамчӣ",
+        "acct_logout": "Баромадан аз аккаунт",
+        "acct_delete": "Нест кардани аккаунт",
+        "acct_delete_ask": "Аккаунт барои ҳамеша нест карда мешавад. Идома медиҳед?",
+        "acct_delete_yes": "Ҳа, нест кун",
+        "acct_deleted": "Аккаунт нест карда шуд.",
+        "session_expired": "Сессия тамом шуд. Лутфан аз нав ворид шавед.",
         "server_save": "Сабт кардан",
         "server_saved": "Токен сабт шуд. Паёмро санҷед.",
-        "server_missing": "Аввал дар Танзимот → Ҳисоб токени серверро ворид кунед.",
+        "server_missing": "Аввал ба аккаунти худ ворид шавед (Танзимот → Ҳисоб).",
         "server_thinking": "JARVIS фикр мекунад...",
         "server_error": "Ба сервер пайваст нашуд. Интернет ва танзимоти Render-ро санҷед.",
         "mic_denied": "Иҷозати микрофон дода нашуд.",
@@ -629,13 +659,43 @@ TEXTS = {
         "err_busy": "Сервер сейчас занят или не отвечает. Попробуйте позже.",
         "err_unsupported": "Этот тип файла не поддерживается.",
         "err_cannot": "Это действие нельзя выполнить бесплатными инструментами.",
-        "err_too_many": "Слишком много запросов. Подождите несколько секунд.",
+        "err_too_many": "Слишком много запросов или дневной лимит исчерпан. Попробуйте позже.",
         "err_bad": "Запрос некорректен.",
         "err_generic": "Произошла неизвестная ошибка. Попробуйте снова.",
         "tts_no_tajik": "На телефоне нет таджикского голоса, поэтому ответ не озвучен.",
+        "ob_name_title": "Как назовёте своего помощника?",
+        "ob_name_hint": "Например: S.A.I",
+        "ob_name_note": "Это имя будет показано везде, и ИИ будет представляться этим именем.",
+        "ob_continue": "Продолжить",
+        "ob_account_title": "Вход",
+        "ob_login_tab": "Мой аккаунт",
+        "ob_signup_tab": "Новый аккаунт",
+        "ob_username": "Имя аккаунта",
+        "ob_password": "Пароль",
+        "ob_password2": "Повторите пароль",
+        "ob_login_btn": "Войти",
+        "ob_signup_btn": "Создать аккаунт",
+        "ob_google_btn": "Через Google",
+        "ob_google_soon": "Вход через Google скоро появится. Пока используйте имя аккаунта и пароль.",
+        "ob_wait": "Подождите… (сервер может просыпаться до минуты)",
+        "ob_err_empty": "Заполните имя и пароль.",
+        "ob_err_username": "Имя: от 3 до 32 букв, цифр, точек, дефисов или подчёркиваний (без пробелов).",
+        "ob_err_short": "Пароль должен быть не короче 8 символов.",
+        "ob_err_mismatch": "Пароли не совпадают.",
+        "ob_err_wrong": "Неверное имя или пароль.",
+        "ob_err_exists": "Это имя уже занято. Выберите другое.",
+        "ob_welcome": "Здравствуйте, {}! Я {}. Чем помочь?",
+        "acct_line": "Аккаунт: {}",
+        "acct_rename": "Изменить имя помощника",
+        "acct_logout": "Выйти из аккаунта",
+        "acct_delete": "Удалить аккаунт",
+        "acct_delete_ask": "Аккаунт будет удалён навсегда. Продолжить?",
+        "acct_delete_yes": "Да, удалить",
+        "acct_deleted": "Аккаунт удалён.",
+        "session_expired": "Сессия истекла. Пожалуйста, войдите снова.",
         "server_save": "Сохранить",
         "server_saved": "Токен сохранён. Проверьте отправку сообщения.",
-        "server_missing": "Сначала в Настройки → Аккаунт введите токен сервера.",
+        "server_missing": "Сначала войдите в свой аккаунт (Настройки → Аккаунт).",
         "server_thinking": "JARVIS думает...",
         "server_error": "Не удалось подключиться к серверу. Проверьте интернет и настройки Render.",
         "mic_denied": "Доступ к микрофону не предоставлен.",
@@ -771,13 +831,43 @@ TEXTS = {
         "err_busy": "The server is busy or not responding. Try again later.",
         "err_unsupported": "This file type is not supported.",
         "err_cannot": "This cannot be done with the free tools.",
-        "err_too_many": "Too many requests. Wait a few seconds.",
+        "err_too_many": "Too many requests or the daily limit is used up. Try again later.",
         "err_bad": "The request is not valid.",
         "err_generic": "An unknown error occurred. Try again.",
         "tts_no_tajik": "The phone has no Tajik voice, so the answer was not read aloud.",
+        "ob_name_title": "What will you name your assistant?",
+        "ob_name_hint": "For example: S.A.I",
+        "ob_name_note": "This name is shown everywhere and the AI introduces itself with it.",
+        "ob_continue": "Continue",
+        "ob_account_title": "Sign in",
+        "ob_login_tab": "My account",
+        "ob_signup_tab": "New account",
+        "ob_username": "Account name",
+        "ob_password": "Password",
+        "ob_password2": "Repeat the password",
+        "ob_login_btn": "Sign in",
+        "ob_signup_btn": "Create account",
+        "ob_google_btn": "With Google",
+        "ob_google_soon": "Google sign-in is coming soon. For now use an account name and password.",
+        "ob_wait": "Please wait… (the server may need up to a minute to wake up)",
+        "ob_err_empty": "Fill in the name and password.",
+        "ob_err_username": "Name: 3 to 32 letters, digits, dots, dashes or underscores (no spaces).",
+        "ob_err_short": "The password must be at least 8 characters.",
+        "ob_err_mismatch": "The passwords do not match.",
+        "ob_err_wrong": "Wrong name or password.",
+        "ob_err_exists": "This name is already taken. Choose another.",
+        "ob_welcome": "Hello, {}! I am {}. How can I help?",
+        "acct_line": "Account: {}",
+        "acct_rename": "Change the assistant's name",
+        "acct_logout": "Sign out",
+        "acct_delete": "Delete account",
+        "acct_delete_ask": "The account will be deleted permanently. Continue?",
+        "acct_delete_yes": "Yes, delete",
+        "acct_deleted": "The account was deleted.",
+        "session_expired": "The session expired. Please sign in again.",
         "server_save": "Save",
         "server_saved": "Token saved. Try sending a message.",
-        "server_missing": "First enter the server token in Settings → Account.",
+        "server_missing": "First sign in to your account (Settings → Account).",
         "server_thinking": "JARVIS is thinking...",
         "server_error": "Could not connect to the server. Check internet and Render settings.",
         "mic_denied": "No mic permission.",
@@ -3701,7 +3791,7 @@ class FlatIconButton(Button):
 
 class JarvisApp(App):
     def build(self):
-        self.title = "JARVIS"
+        self.title = "S.A.I"
         ExceptionManager.add_handler(JarvisExceptionHandler())
         self.startup_error = None
         self._last_err = None
@@ -3712,12 +3802,16 @@ class JarvisApp(App):
         self.voice_profile = "JARVIS Classic"
         self.speak_enabled = True
         self.server_token = ""
+        self.assistant_name = "S.A.I"
+        self.username = ""
+        self.onboarded = False
         self.tajik_tts_url = ""
         self.last_response = ""
         self.animation_paused = False
         self.orb_state = "idle"
         self._orb_event = None
         self.load_settings()
+        self.title = self.assistant_name
         self.account_service = get_service(self.user_data_dir)
         self.speech = SpeechRecognizer(self)
         self.tts = SpeechSynthesizer()
@@ -3802,8 +3896,16 @@ class JarvisApp(App):
         self.grad_rect.pos = self.root_layout.pos
         self.grad_rect.size = (self.root_layout.width, self.root_layout.height * 0.44)
 
+    def brand(self, text):
+        """The user chose the assistant's name: it replaces JARVIS in every text (also in old chats and AI replies)."""
+        name = getattr(self, "assistant_name", "") or "S.A.I"
+        text = str(text)
+        if "JARVIS" in text or "Jarvis" in text:
+            text = text.replace("JARVIS", name).replace("Jarvis", name)
+        return text
+
     def t(self, key):
-        return TEXTS.get(self.language, TEXTS["tg"]).get(key, key)
+        return self.brand(TEXTS.get(self.language, TEXTS["tg"]).get(key, key))
 
     def load_settings(self):
         if self.store.exists("settings"):
@@ -3818,6 +3920,11 @@ class JarvisApp(App):
             self.speak_enabled = bool(data.get("speak_v2", True))
             self.server_token = str(data.get("server_token", ""))
             self.tajik_tts_url = str(data.get("tajik_tts_url", ""))
+            self.assistant_name = str(data.get("assistant_name", "S.A.I")) or "S.A.I"
+            self.username = str(data.get("username", ""))
+            self.onboarded = bool(data.get("onboarded", False))
+            if not self.onboarded:
+                self.server_token = ""      # an old shared token is no longer used
         if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
 
@@ -3828,7 +3935,10 @@ class JarvisApp(App):
                        speak=self.speak_enabled,
                        speak_v2=self.speak_enabled,
                        server_token=getattr(self, "server_token", ""),
-                       tajik_tts_url=getattr(self, "tajik_tts_url", ""))
+                       tajik_tts_url=getattr(self, "tajik_tts_url", ""),
+                       assistant_name=getattr(self, "assistant_name", "S.A.I"),
+                       username=getattr(self, "username", ""),
+                       onboarded=getattr(self, "onboarded", False))
 
     def update_colors(self):
         theme = THEMES[self.theme_index]
@@ -3978,6 +4088,9 @@ class JarvisApp(App):
         return chat.get("title") or self.t("chat_default")
 
     def make_bubble(self, role, text, full_text=None):
+        text = self.brand(text)
+        if full_text is not None:
+            full_text = self.brand(full_text)
         theme = THEMES[self.theme_index]
         user = role == "user"
         accent = hex_color(theme["accent"])[:3]
@@ -3985,7 +4098,7 @@ class JarvisApp(App):
             tint, fill, who = accent, 0.20, self.t("you")
             who_color = (accent[0], accent[1], accent[2], 1)
         else:
-            tint, fill, who = (0.05, 0.07, 0.14), 0.55, "JARVIS"
+            tint, fill, who = (0.05, 0.07, 0.14), 0.55, self.assistant_name
             who_color = (accent[0], accent[1], accent[2], 1)
         # ChatGPT-like transcript: user messages appear in a distinct rounded
         # accent bubble; JARVIS replies use the full available width on the
@@ -4123,6 +4236,7 @@ class JarvisApp(App):
         self.scroll_chat_down()
 
     def add_chat_message(self, chat_id, role, text):
+        text = self.brand(text)
         self.chats.add_message(chat_id, role, text)
         if self.chats.current_id != chat_id:
             return
@@ -4236,7 +4350,7 @@ class JarvisApp(App):
                 ctx = ssl.create_default_context(cafile=certifi.where())
             except Exception:
                 pass
-            req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/analyze", data=body, method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary, "X-Jarvis-Token": self.server_token})
+            req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/analyze", data=body, method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary, "Authorization": "Bearer " + self.server_token})
             with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
                 result = json.loads(response.read().decode("utf-8"))
             answer = str(result.get("answer", self.t("file_no_answer")))
@@ -4287,7 +4401,7 @@ class JarvisApp(App):
         for attempt in (1, 2):   # the second try covers a sleeping Render server
             try:
                 req = urllib.request.Request(SERVER_BASE + path, data=body, method="POST",
-                                             headers={"Content-Type": content_type, "X-Jarvis-Token": self.server_token})
+                                             headers={"Content-Type": content_type, "Authorization": "Bearer " + self.server_token})
                 with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
                     headers = {k.lower(): v for k, v in response.headers.items()}
                     return headers, response.read(30 * 1024 * 1024)
@@ -4445,7 +4559,7 @@ class JarvisApp(App):
             values = ContentValues()
             values.put("_display_name", name)
             values.put("mime_type", mime)
-            rel = "Pictures/JARVIS" if is_image else "Download/JARVIS"
+            rel = "Pictures/SAI" if is_image else "Download/SAI"
             values.put("relative_path", rel)
             collection = (autoclass("android.provider.MediaStore$Images$Media") if is_image
                           else autoclass("android.provider.MediaStore$Downloads")).EXTERNAL_CONTENT_URI
@@ -4482,6 +4596,7 @@ class JarvisApp(App):
             code = " [%d]" % c
             if c in (401, 403):
                 key = "server_missing"
+                Clock.schedule_once(lambda dt: self._session_expired(), 0)
             elif c == 413:
                 key = "file_too_big"
             elif c == 415:
@@ -4547,6 +4662,241 @@ class JarvisApp(App):
         if gen == getattr(self, "_tajik_gen", 0):
             Clock.schedule_once(lambda dt: self.set_orb_state("idle"), 0)
 
+    # ------------------------------------------------------------------ first start: language, name, account
+    def start_onboarding(self):
+        if getattr(self, "_ob_active", False):
+            return
+        self._ob_active = True
+        if self.onboarded:
+            self._ob_account_step("login")
+        else:
+            self._ob_language_step()
+
+    def _ob_popup(self, box, height):
+        return self.make_popup(box, size_hint=(0.92, None), height=dp(height), auto_dismiss=False,
+                               pos_hint={"center_x": 0.5, "top": 0.97})
+
+    def _ob_language_step(self):
+        theme = THEMES[self.theme_index]
+        box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
+        box.add_widget(make_label("Choose your language", 18, theme["accent"], True, size_hint_y=None, height=dp(38)))
+        popup = self._ob_popup(box, 290)
+
+        def pick(code):
+            self.language = code
+            self.save_settings()
+            popup.dismiss()
+            Clock.schedule_once(lambda dt: self._ob_name_step(), 0.15)
+
+        for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
+            self.glass_option(box, label, False, lambda inst, c=code: pick(c), height=54)
+        popup.open()
+
+    def _ob_name_step(self):
+        theme = THEMES[self.theme_index]
+        box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
+        box.add_widget(make_label(self.t("ob_name_title"), 17, theme["accent"], True, size_hint_y=None, height=dp(40)))
+        name_input = TextInput(text=self.assistant_name or "S.A.I", hint_text=self.t("ob_name_hint"), multiline=False,
+                               size_hint_y=None, height=dp(48), font_size=dp(16), input_type="text", write_tab=False)
+        box.add_widget(name_input)
+        box.add_widget(make_label(self.t("ob_name_note"), 11, theme["accent2"], False, size_hint_y=None, height=dp(48)))
+        popup = self._ob_popup(box, 290)
+
+        def go(*_):
+            name = " ".join(name_input.text.split())[:24] or "S.A.I"
+            self.assistant_name = name
+            self.title = name
+            self.save_settings()
+            popup.dismiss()
+            Clock.schedule_once(lambda dt: self._ob_account_step("signup"), 0.15)
+
+        name_input.bind(on_text_validate=go)
+        box.add_widget(self.make_button(self.t("ob_continue"), go, theme["accent"], 48))
+        popup.open()
+
+    def _ob_account_step(self, mode="login", prefill="", note=""):
+        theme = THEMES[self.theme_index]
+        signup = mode == "signup"
+        box = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(8))
+        box.add_widget(make_label(self.t("ob_account_title"), 17, theme["accent"], True, size_hint_y=None, height=dp(32)))
+        popup = self._ob_popup(box, 480 if signup else 430)
+        tabs = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(6))
+
+        def switch(new_mode):
+            if new_mode != mode:
+                popup.dismiss()
+                Clock.schedule_once(lambda dt: self._ob_account_step(new_mode, user_in.text), 0.1)
+
+        self.glass_option(tabs, self.t("ob_login_tab"), not signup, lambda inst: switch("login"), height=44)
+        self.glass_option(tabs, self.t("ob_signup_tab"), signup, lambda inst: switch("signup"), height=44)
+        box.add_widget(tabs)
+        user_in = TextInput(text=prefill, hint_text=self.t("ob_username"), multiline=False, size_hint_y=None,
+                            height=dp(46), font_size=dp(15), input_type="text", write_tab=False)
+        pass_in = TextInput(hint_text=self.t("ob_password"), password=True, multiline=False, size_hint_y=None,
+                            height=dp(46), font_size=dp(15), write_tab=False)
+        box.add_widget(user_in)
+        box.add_widget(pass_in)
+        pass2_in = None
+        if signup:
+            pass2_in = TextInput(hint_text=self.t("ob_password2"), password=True, multiline=False, size_hint_y=None,
+                                 height=dp(46), font_size=dp(15), write_tab=False)
+            box.add_widget(pass2_in)
+        status = make_label(note, 12, "#FFB4B4", False, size_hint_y=None, height=dp(54))
+        box.add_widget(status)
+        state = {"busy": False}
+
+        def submit(*_):
+            if state["busy"]:
+                return
+            username, password = user_in.text.strip(), pass_in.text
+            if not username or not password:
+                status.text = self.t("ob_err_empty")
+                return
+            if signup:
+                if not re.fullmatch(r"[\w.\-]{3,32}", username):
+                    status.text = self.t("ob_err_username")
+                    return
+                if len(password) < 8:
+                    status.text = self.t("ob_err_short")
+                    return
+                if password != pass2_in.text:
+                    status.text = self.t("ob_err_mismatch")
+                    return
+            state["busy"] = True
+            status.text = self.t("ob_wait")
+            threading.Thread(target=self._auth_job, args=(mode, username, password, popup, status, state), daemon=True).start()
+
+        pass_in.bind(on_text_validate=submit)
+        box.add_widget(self.make_button(self.t("ob_signup_btn" if signup else "ob_login_btn"), submit, theme["accent"], 48))
+        self.glass_option(box, self.t("ob_google_btn"), False,
+                          lambda inst: setattr(status, "text", self.t("ob_google_soon")), height=46, tint=(1, 1, 1))
+        popup.open()
+
+    def _auth_job(self, mode, username, password, popup, status, state):
+        import ssl
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            ctx = None
+        body = json.dumps({"username": username, "password": password}, ensure_ascii=False).encode("utf-8")
+        result, message = None, ""
+        for attempt in (1, 2):      # the second try covers a sleeping Render server
+            try:
+                req = urllib.request.Request(SERVER_BASE + ("/auth/signup" if mode == "signup" else "/auth/signin"),
+                                             data=body, method="POST", headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code == 401:
+                    message = self.t("ob_err_wrong")
+                elif exc.code == 409:
+                    message = self.t("ob_err_exists")
+                elif exc.code in (400, 422):
+                    message = self.t("ob_err_username")
+                elif exc.code in (502, 503, 504) and attempt == 1:
+                    time.sleep(5)
+                    continue
+                else:
+                    message = self.friendly_error(exc)
+                break
+            except Exception as exc:
+                save_crash("Sign-in request failed:\n" + traceback.format_exc())
+                message = self.friendly_error(exc)
+                if attempt == 1:
+                    continue
+
+        def done(dt):
+            state["busy"] = False
+            if result and result.get("access_token"):
+                self.server_token = str(result["access_token"])
+                self.username = str(result.get("username", username))
+                self.onboarded = True
+                self._ob_active = False
+                self.save_settings()
+                popup.dismiss()
+                self.build_interface()
+                self.show_response(self.t("ob_welcome").format(self.username, self.assistant_name))
+            else:
+                status.text = message or self.t("err_generic")
+
+        Clock.schedule_once(done, 0)
+
+    def _session_expired(self):
+        if getattr(self, "_ob_active", False):
+            return
+        self._ob_active = True
+        self.server_token = ""
+        self.save_settings()
+        self._ob_account_step("login", self.username, self.t("session_expired"))
+
+    def rename_assistant(self, *_):
+        theme = THEMES[self.theme_index]
+        box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
+        box.add_widget(make_label(self.t("ob_name_title"), 16, theme["accent"], True, size_hint_y=None, height=dp(38)))
+        name_input = TextInput(text=self.assistant_name, multiline=False, size_hint_y=None, height=dp(48),
+                               font_size=dp(16), input_type="text", write_tab=False)
+        box.add_widget(name_input)
+        popup = self.make_popup(box, size_hint=(0.92, None), height=dp(220), pos_hint={"center_x": 0.5, "top": 0.97})
+
+        def save(*_):
+            self.assistant_name = " ".join(name_input.text.split())[:24] or "S.A.I"
+            self.title = self.assistant_name
+            self.save_settings()
+            popup.dismiss()
+            if getattr(self, "settings_popup", None) is not None:
+                self.settings_popup.dismiss()
+            self.build_interface()
+
+        name_input.bind(on_text_validate=save)
+        box.add_widget(self.make_button(self.t("ob_continue"), save, theme["accent"], 46))
+        popup.open()
+
+    def logout_account(self, *_):
+        if getattr(self, "settings_popup", None) is not None:
+            self.settings_popup.dismiss()
+        self.server_token = ""
+        self.save_settings()
+        self._ob_active = True
+        self._ob_account_step("login", self.username)
+
+    def delete_account_ask(self, *_):
+        theme = THEMES[self.theme_index]
+        box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
+        box.add_widget(make_label(self.t("acct_delete_ask"), 14, theme["text"], False))
+        popup = self.make_popup(box, size_hint=(0.9, None), height=dp(230))
+        row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+
+        def confirm(*_):
+            popup.dismiss()
+            threading.Thread(target=self._delete_account_job, daemon=True).start()
+
+        row.add_widget(self.make_button(self.t("acct_delete_yes"), confirm, "#FF5C6C", 46))
+        row.add_widget(self.make_button(self.t("close"), lambda *_: popup.dismiss(), theme["accent2"], 46))
+        box.add_widget(row)
+        popup.open()
+
+    def _delete_account_job(self):
+        try:
+            self._server_call("/auth/delete", b"{}", "application/json", timeout=60)
+        except Exception as exc:
+            text = self.friendly_error(exc)
+            Clock.schedule_once(lambda dt: self.show_response(text), 0)
+            return
+
+        def after(dt):
+            if getattr(self, "settings_popup", None) is not None:
+                self.settings_popup.dismiss()
+            self.server_token = ""
+            self.username = ""
+            self.save_settings()
+            self.show_response(self.t("acct_deleted"))
+            self._ob_active = True
+            self._ob_account_step("signup")
+
+        Clock.schedule_once(after, 0)
+
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
             return
@@ -4606,6 +4956,7 @@ class JarvisApp(App):
             "history": history[-12:],
             "web_search": False,
             "language": self.language if self.language in ("tg", "ru", "en") else "tg",
+            "assistant_name": self.assistant_name,
         }
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         try:
@@ -4630,7 +4981,7 @@ class JarvisApp(App):
                 req = urllib.request.Request(
                     url, data=body, method="POST",
                     headers={"Content-Type": "application/json",
-                             "X-Jarvis-Token": self.server_token})
+                             "Authorization": "Bearer " + self.server_token})
                 with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
                     data = json.loads(response.read().decode("utf-8"))
                 answer = extract(data)
@@ -4641,7 +4992,7 @@ class JarvisApp(App):
             except urllib.error.HTTPError as exc:
                 save_crash("Chat HTTP error: %s" % exc.code)
                 if exc.code in (401, 403):
-                    answer = self.t("server_missing") + " (%d)" % exc.code
+                    answer = self.friendly_error(exc)
                 else:
                     last = self.friendly_error(exc)
                 break
@@ -4684,7 +5035,7 @@ class JarvisApp(App):
         """Prefer server-generated speech; fall back to Android TTS if the server is unavailable."""
         if not self.speak_enabled or not answer:
             return
-        text = str(answer).strip()[:4000]
+        text = self.brand(answer).strip()[:4000]
         if not text:
             return
         # Server speech/network work must run off the Kivy UI thread.
@@ -4720,6 +5071,7 @@ class JarvisApp(App):
 
     def deliver_answer(self, chat_id, answer):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
+        answer = self.brand(answer)
         text = str(answer).strip()[:4000]
         if self.speak_enabled and text and self.server_token.strip():
             threading.Thread(target=self._request_synced_speech,
@@ -4749,7 +5101,7 @@ class JarvisApp(App):
             req = urllib.request.Request(
                 url, data=payload, method="POST",
                 headers={"Content-Type": "application/json",
-                         "X-Jarvis-Token": self.server_token,
+                         "Authorization": "Bearer " + self.server_token,
                          "Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=75, context=ctx) as response:
                 data = json.loads(response.read(30 * 1024 * 1024).decode("utf-8"))
@@ -4884,7 +5236,7 @@ class JarvisApp(App):
             req = urllib.request.Request(
                 url, data=payload, method="POST",
                 headers={"Content-Type": "application/json",
-                         "X-Jarvis-Token": self.server_token,
+                         "Authorization": "Bearer " + self.server_token,
                          "Accept": "audio/mpeg"})
             with urllib.request.urlopen(req, timeout=75, context=ctx) as response:
                 audio = response.read(15 * 1024 * 1024 + 1)
@@ -4929,7 +5281,7 @@ class JarvisApp(App):
             payload = json.dumps({"text": text[:1500], "language": "tg"}, ensure_ascii=False).encode("utf-8")
             req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/speak", data=payload, method="POST",
                                          headers={"Content-Type": "application/json",
-                                                  "X-Jarvis-Token": self.server_token})
+                                                  "Authorization": "Bearer " + self.server_token})
             with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
                 audio = response.read(30 * 1024 * 1024)
             if not audio or audio[:4] != b"RIFF":
@@ -5320,10 +5672,11 @@ class JarvisApp(App):
             content.add_widget(make_label(self.t("voice_hint"), 10, theme["accent2"]))
             content.add_widget(Widget())
         else:
-            content.add_widget(make_label(self.t("acct_status"), 13, theme["text"], False))
-            content.add_widget(self.make_button(self.t("server_token_btn"),
-                                                self.configure_server_token,
-                                                theme["accent"], 48))
+            content.add_widget(make_label(self.t("acct_line").format(self.username or "-"), 15, theme["text"], True,
+                                          size_hint_y=None, height=dp(36)))
+            content.add_widget(self.make_button(self.t("acct_rename"), self.rename_assistant, theme["accent"], 48))
+            content.add_widget(self.make_button(self.t("acct_logout"), self.logout_account, theme["accent2"], 48))
+            content.add_widget(self.make_button(self.t("acct_delete"), self.delete_account_ask, "#FF5C6C", 48))
             content.add_widget(Widget())
 
         nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
@@ -5355,6 +5708,8 @@ class JarvisApp(App):
 
     def on_start(self):
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
+        if not self.onboarded or not self.server_token.strip():
+            Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
 
     def show_pending_errors(self):
         text = self.startup_error or read_last_crash()
