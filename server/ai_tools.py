@@ -19,7 +19,7 @@ TEXT_EXTENSIONS = (".txt", ".md", ".csv", ".json", ".log", ".py", ".html", ".css
 
 
 # ------------------------------------------------------------------ providers
-def provider_chain(vision=False):
+def provider_chain(vision=False, language=None):
     """Providers that have a key, in order of preference: [(name, key, base_url, model), ...]."""
     env = os.environ.get
     available = {}
@@ -35,7 +35,9 @@ def provider_chain(vision=False):
         model = env("OPENROUTER_VISION_MODEL", "").strip() if vision else env("OPENROUTER_MODEL", "openrouter/free")
         if model:
             available["openrouter"] = ("openrouter", key, "https://openrouter.ai/api/v1", model)
-    order = [p.strip() for p in env("AI_PROVIDER_ORDER", "groq,gemini,openrouter").split(",") if p.strip()]
+    # Gemini writes Tajik better than the other free models, so Tajik requests try it first
+    default_order = env("AI_PROVIDER_ORDER_TG", "gemini,groq,openrouter") if language == "tg" else env("AI_PROVIDER_ORDER", "groq,gemini,openrouter")
+    order = [p.strip() for p in default_order.split(",") if p.strip()]
     chain = [available[name] for name in order if name in available]
     chain += [value for name, value in available.items() if name not in order]
     return chain
@@ -45,9 +47,9 @@ class NoProvider(Exception):
     pass
 
 
-def complete(messages, vision=False, max_tokens=None, timeout=45.0):
+def complete(messages, vision=False, max_tokens=None, timeout=45.0, language=None):
     """Ask the first working provider. Returns {"answer", "model", "provider"}. Raises NoProvider / RuntimeError."""
-    chain = provider_chain(vision)
+    chain = provider_chain(vision, language)
     if not chain:
         raise NoProvider("No AI provider key is configured (set GROQ_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY)")
     failures = []
