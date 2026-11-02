@@ -435,6 +435,8 @@ VOICE_LOCAL_PITCH = {"JARVIS Classic": 0.8, "Aura": 1.1}
 TEXTS = {
     "tg": {
         "ready": "ҶАРВИС ОМОДА АСТ",
+        "voice_preparing": "Овоз омода мешавад…",
+        "file_waiting": "Файл қабул шуд. Бо он чӣ кор кунам? (масалан: таҳлил кун, матнро хон, таҳрир кун)",
         "online": "Система фаъол аст",
         "welcome": "Салом! Ман JARVIS ҳастам. Чӣ кор кунам?",
         "input": "Фармонро нависед...",
@@ -607,6 +609,8 @@ TEXTS = {
     },
     "ru": {
         "ready": "JARVIS ГОТОВ",
+        "voice_preparing": "Готовлю голос…",
+        "file_waiting": "Файл получен. Что с ним сделать? (например: проанализируй, прочитай текст, отредактируй)",
         "online": "Система активна",
         "welcome": "Здравствуйте! Я JARVIS. Чем могу помочь?",
         "input": "Введите команду...",
@@ -779,6 +783,8 @@ TEXTS = {
     },
     "en": {
         "ready": "JARVIS IS READY",
+        "voice_preparing": "Preparing voice…",
+        "file_waiting": "File received. What should I do with it? (for example: analyze, read the text, edit)",
         "online": "System online",
         "welcome": "Hello! I am JARVIS.",
         "input": "Type a command...",
@@ -3482,6 +3488,14 @@ def find_info_command(text):
 
 
 SERVER_BASE = "https://jarvis-ai-server-3vuo.onrender.com"
+def dotted_name(name):
+    """SAI -> S.A.I, Jarvis -> J.A.R.V.I.S (a dot after every letter, words stay apart)."""
+    words = []
+    for word in str(name).replace(".", "").split():
+        words.append(".".join(word.upper()))
+    return "  ".join(words) or "S.A.I"
+
+
 MEDIA_RE = re.compile(r"\[\[(img|file):([^\]]+)\]\]")
 TEXT_FILE_EXTS = (".txt", ".md", ".csv", ".json", ".log", ".py", ".html", ".css", ".js", ".xml", ".yaml", ".yml", ".ini", ".kv")
 
@@ -3964,7 +3978,8 @@ class JarvisApp(App):
         self.root_layout.add_widget(main)
 
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
-        title = make_label("J.A.R.V.I.S", 21, theme["accent"], True, halign="left")
+        shown = dotted_name(getattr(self, "assistant_name", "") or "S.A.I")
+        title = make_label(shown, 21 if len(shown) <= 14 else 15, theme["accent"], True, halign="left")
         menu_btn = FlatIconButton(icon_kind="dots", icon_rgba=hex_color(theme["text"]), fill=0.10,
                                   size_hint_x=None, width=dp(48))
         menu_btn.bind(on_release=self.show_menu)
@@ -4318,21 +4333,32 @@ class JarvisApp(App):
             if hasattr(self, "command_input"):
                 self.command_input.text = ""
             chat_id = self.chats.current_id
-            display = "📎 " + name + ("\n" + prompt if prompt else "\n" + self.t("file_default_prompt"))
-            self.add_chat_message(chat_id, "user", display)
-            mode = "analyze"
-            if mime.startswith("image/") and looks_like_edit(prompt, "image"):
-                mode = "image_edit"
-            elif is_text_file(name, mime) and looks_like_edit(prompt, "text"):
-                mode = "text_edit"
-            if mode == "analyze":
-                threading.Thread(target=self._upload_attachment, args=(chat_id, name, mime, raw, prompt), daemon=True).start()
+            path = self._save_private(raw, os.path.basename(name).replace("]", "_"))
+            marker = ("[[img:" if mime.startswith("image/") else "[[file:") + path + "]]"
+            att = {"chat_id": chat_id, "name": name, "mime": mime, "raw": raw}
+            if prompt:
+                self.add_chat_message(chat_id, "user", "📎 " + name + "\n" + prompt + "\n" + marker)
+                self._process_attachment(chat_id, att, prompt)
             else:
-                self._set_busy(self.t("media_edit"))
-                threading.Thread(target=self._attachment_edit_job, args=(chat_id, name, mime, raw, prompt, mode), daemon=True).start()
+                # Show the picture/file and wait for the user's instruction.
+                self.add_chat_message(chat_id, "user", "📎 " + name + "\n" + marker)
+                self._pending_attachment = att
+                self.add_chat_message(chat_id, "jarvis", self.t("file_waiting"))
         except Exception as exc:
             save_crash("Attachment read failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt, message=self.friendly_error(exc): self.show_response(self.t("file_read_failed").format(message)), 0)
+
+    def _process_attachment(self, chat_id, att, prompt):
+        name, mime, raw = att["name"], att["mime"], att["raw"]
+        mode = "analyze"
+        if mime.startswith("image/") and looks_like_edit(prompt, "image"):
+            mode = "image_edit"
+        elif is_text_file(name, mime) and looks_like_edit(prompt, "text"):
+            mode = "text_edit"
+        self._set_busy(self.t("media_edit") if mode != "analyze" else self.t("server_thinking"))
+        target = self._upload_attachment if mode == "analyze" else self._attachment_edit_job
+        args = (chat_id, name, mime, raw, prompt) if mode == "analyze" else (chat_id, name, mime, raw, prompt, mode)
+        threading.Thread(target=target, args=args, daemon=True).start()
 
     def _upload_attachment(self, chat_id, filename, mime, raw, prompt):
         import ssl
@@ -4364,6 +4390,7 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt, message=self.friendly_error(exc): self._attachment_answer(chat_id, self.t("file_send_failed").format(message)), 0)
 
     def _attachment_answer(self, chat_id, answer):
+        self._status_after_answer()
         self.deliver_answer(chat_id, answer)
 
     # ------------------------------------------------------------------ media: pictures and files
@@ -4431,8 +4458,7 @@ class JarvisApp(App):
         return path
 
     def _media_done(self, chat_id, text, say=""):
-        if hasattr(self, "status_label"):
-            self.status_label.text = self.t("ready")
+        self._status_after_answer() if say else self._voice_ready()
         self.set_orb_state("idle")
         self.add_chat_message(chat_id, "jarvis", text)
         if say:
@@ -4624,6 +4650,7 @@ class JarvisApp(App):
     def _tajik_stream_run(self, text, gen):
         chunks = split_for_speech(text)
         if not chunks:
+            Clock.schedule_once(lambda dt: self._voice_ready(), 0)
             return
         got = {}
 
@@ -4633,6 +4660,7 @@ class JarvisApp(App):
         fetch(0)
         for i in range(len(chunks)):
             if gen != getattr(self, "_tajik_gen", 0) or not got.get(i):
+                Clock.schedule_once(lambda dt: self._voice_ready(), 0)
                 return                      # stopped by the user, or the voice failed (the user was told once)
             following = None
             if i + 1 < len(chunks):
@@ -4912,7 +4940,13 @@ class JarvisApp(App):
             role = "assistant" if item.get("role") == "jarvis" else item.get("role")
             if role in ("user", "assistant") and item.get("text"):
                 history.append({"role": role, "content": item["text"][:4000]})
+        history = self._with_memory(chat_id, history)
         self.add_chat_message(chat_id, "user", command_text)
+        pending = getattr(self, "_pending_attachment", None)
+        if pending and pending.get("chat_id") == chat_id:
+            self._pending_attachment = None
+            self._process_attachment(chat_id, pending, command_text)
+            return
         media = parse_media_intent(command_text)
         if media is not None:
             self._start_media_job(chat_id, media[0], media[1])
@@ -4939,6 +4973,42 @@ class JarvisApp(App):
         self.deliver_answer(chat_id, answer)
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
+
+    def _with_memory(self, chat_id, history):
+        """Earlier chats + app facts as two leading messages, so a new chat is not a blank page."""
+        try:
+            lines = []
+            now_chat = self.chats.get(chat_id)
+            others = [c for c in self.chats.sorted_chats() if c is not now_chat and c.get("messages")][:6]
+            for c in others:
+                users = [strip_media(m.get("text", "")).replace("\n", " ").strip()[:160]
+                         for m in c["messages"] if m.get("role") == "user"][-4:]
+                users = [u for u in users if u]
+                if users:
+                    lines.append("- " + (c.get("title") or "?") + ": " + " | ".join(users))
+            facts = ["assistant name: " + str(self.assistant_name), "app language: " + str(self.language)]
+            if self.username:
+                facts.append("user account name: " + str(self.username))
+            text = ("Background about this user and this app (use only when relevant, never mention this note): "
+                    + "; ".join(facts) + ".")
+            if lines:
+                text += "\nTopics from earlier chats:\n" + "\n".join(lines)
+            memory = [{"role": "user", "content": text[:3500]},
+                      {"role": "assistant", "content": "OK."}]
+            return memory + history[-10:]
+        except Exception:
+            return history
+
+    def _voice_ready(self):
+        if hasattr(self, "status_label"):
+            self.status_label.text = self.t("ready")
+
+    def _status_after_answer(self):
+        if hasattr(self, "status_label"):
+            waiting = self.speak_enabled and self.server_token.strip()
+            self.status_label.text = self.t("voice_preparing" if waiting else "ready")
+            if waiting:
+                Clock.schedule_once(lambda dt: self._voice_ready(), 45)   # safety: never stay in "preparing"
 
     def _run_info(self, chat_id, fn):
         try:
@@ -5004,8 +5074,7 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _finish_server_answer(self, chat_id, answer):
-        if hasattr(self, "status_label"):
-            self.status_label.text = self.t("ready")
+        self._status_after_answer()
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.02))
         self.deliver_answer(chat_id, answer)
 
@@ -5047,6 +5116,7 @@ class JarvisApp(App):
 
     def _speak_local_fallback(self, answer, force=False):
         """Use the Android TTS engine selected in system settings if server speech fails."""
+        Clock.schedule_once(lambda dt: self._voice_ready(), 0)
         if (not self.speak_enabled and not force) or not answer:
             return
         try:
@@ -5334,6 +5404,7 @@ class JarvisApp(App):
                     pass
             self._server_speech_player = player
             player.start()
+            self._voice_ready()
             return True
         except Exception:
             save_crash("Server audio playback failed:\n" + traceback.format_exc())
