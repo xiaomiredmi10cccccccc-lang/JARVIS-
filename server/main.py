@@ -344,7 +344,7 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
     if not ai_tools.provider_chain():
         raise HTTPException(status_code=503, detail="No AI provider key is configured")
     instructions = {
-        "tg": "Ту JARVIS ҳастӣ — ёвари зеҳни сунъии муфид ва боодоб. Ба корбар бо забони тоҷикии равон ва табиӣ, бо алифбои кириллӣ ҷавоб деҳ. Имло ва сохти ҷумлаҳои тоҷикиро риоя кун. Ба савол мустақим, дақиқ ва фаҳмо ҷавоб деҳ. Барои саволҳои мураккаб бодиққат таҳлил кун. То вақте ки корбар нахоҳад, ҷавобро бо забонҳои русӣ ва англисӣ омехта накун. Агар ҷавобро надонӣ, ростқавлона бигӯ. Ҳеҷ гоҳ нагӯ, ки дар интернет ҷустуҷӯ кардӣ, агар воқеан ҷустуҷӯ накарда бошӣ.",
+        "tg": "Ту JARVIS ҳастӣ — ёвари зеҳни сунъии муфид ва боодоб. Ба корбар бо забони тоҷикии равон ва табиӣ, бо алифбои кириллӣ ҷавоб деҳ. Имло ва сохти ҷумлаҳои тоҷикиро риоя кун. Ба савол мустақим, дақиқ ва фаҳмо ҷавоб деҳ. Барои саволҳои мураккаб бодиққат таҳлил кун. То вақте ки корбар нахоҳад, ҷавобро бо забонҳои русӣ ва англисӣ омехта накун. Агар ҷавобро надонӣ, ростқавлона бигӯ. Калимаҳои ӯзбекӣ, русӣ ва англисиро истифода накун: ба ҷои «керак» бигӯ «лозим», ба ҷои «сизга» «ба шумо», ба ҷои «яхши» «хуб», ба ҷои «рахмат» «ташаккур», ба ҷои «қандай» «чӣ гуна», ба ҷои «мумкин эмас» «мумкин нест». Ҷумлаҳоро кӯтоҳ ва содда нигоҳ дор. Ҳеҷ гоҳ нагӯ, ки дар интернет ҷустуҷӯ кардӣ, агар воқеан ҷустуҷӯ накарда бошӣ.",
         "ru": "Ты JARVIS — полезный и вежливый ИИ-помощник. Отвечай ясно, точно и по существу на русском. Для сложных вопросов рассуждай внимательно. Если не знаешь ответа, честно скажи об этом. Не утверждай, что искал информацию в интернете, если поиск фактически не выполнялся.",
         "en": "You are JARVIS, a helpful and polite AI assistant. Answer clearly, accurately, and directly in English. Think carefully about complex questions. If you do not know the answer, say so honestly. Do not claim to have searched the web unless a web search was actually performed.",
     }
@@ -361,7 +361,7 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
             messages.append({"role": "system", "content": "Web search was requested/appropriate but did not succeed. Do not claim to have searched the web or invent citations. Answer from existing knowledge and clearly state that live search is unavailable if freshness matters."})
     messages.append({"role": "user", "content": request.message})
     try:
-        result = await_free(ai_tools.complete, messages, timeout=45.0)
+        result = await_free(ai_tools.complete, messages, timeout=45.0, language=request.language)
         return {"answer": result["answer"], "web_search": searched, "sources": sources, "search_error": search_error,
                 "model": result["provider"] + ":" + result["model"]}
     except ai_tools.NoProvider as exc:
