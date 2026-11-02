@@ -318,7 +318,7 @@ class SpeechSynthesizer(object):
             codes.append("%s=%s" % (lang, code))
             if code < 0:
                 # the wanted language has no voice data: try Russian (for Tajik), the phone's own language, English
-                for name in (("ru",) if lang == "tg" else ()) + ("default", "en"):
+                for name in (() if lang == "tg" else ("default", "en")):     # Tajik is never read with another language's voice
                     loc = Locale.getDefault() if name == "default" else Locale(name)
                     code = tts.setLanguage(loc)
                     codes.append("%s=%s" % (name, code))
@@ -465,7 +465,7 @@ TEXTS = {
         "server_token_title": "Токени сервери JARVIS",
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
         "tajik_url_hint": "Овози тоҷикӣ",
-        "tajik_voice_failed": "Овози тоҷикӣ намоёнда нашуд, ба овози телефон мегузарем.",
+        "tajik_voice_failed": "Овози тоҷикӣ ҳоло дастнорас аст (сервер шояд бедор шуда истодааст). Ҷавоб бе овоз монд, баъди як дақиқа дубора кӯшиш кунед.",
         "media_image": "Акс месозам, 20–60 сония интизор шавед…",
         "media_edit": "Таҳрир мекунам…",
         "media_search": "Аксҳоро меҷӯям…",
@@ -482,6 +482,15 @@ TEXTS = {
         "save_btn": "Захира",
         "saved_to": "Захира шуд: {}",
         "save_failed": "Захира нашуд: {}",
+        "err_network": "Интернет нест ё хеле суст аст. Пайвастшавиро санҷед.",
+        "err_timeout": "Вақти интизорӣ тамом шуд. Сервер шояд ҳоло бедор шуда истодааст, баъди як дақиқа дубора кӯшиш кунед.",
+        "err_busy": "Сервер ҳоло банд аст ё ҷавоб намедиҳад. Баъдтар дубора кӯшиш кунед.",
+        "err_unsupported": "Ин навъи файл дастгирӣ намешавад.",
+        "err_cannot": "Ин амалро бо абзорҳои ройгон иҷро кардан мумкин нест.",
+        "err_too_many": "Дархостҳо аз ҳад зиёданд. Чанд сония интизор шавед.",
+        "err_bad": "Дархост нодуруст аст.",
+        "err_generic": "Хатои номаълум рух дод. Дубора кӯшиш кунед.",
+        "tts_no_tajik": "Дар телефон овози тоҷикӣ нест, барои ҳамин ҷавоб бе овоз монд.",
         "server_save": "Сабт кардан",
         "server_saved": "Токен сабт шуд. Паёмро санҷед.",
         "server_missing": "Аввал дар Танзимот → Ҳисоб токени серверро ворид кунед.",
@@ -598,7 +607,7 @@ TEXTS = {
         "server_token_title": "Токен сервера JARVIS",
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
         "tajik_url_hint": "Адрес таджикского голоса (https://…hf.space)",
-        "tajik_voice_failed": "Таджикский голос недоступен, используется голос телефона.",
+        "tajik_voice_failed": "Таджикский голос пока недоступен (сервер, возможно, просыпается). Ответ не озвучен, повторите через минуту.",
         "media_image": "Рисую, подождите 20–60 секунд…",
         "media_edit": "Редактирую…",
         "media_search": "Ищу картинки…",
@@ -615,6 +624,15 @@ TEXTS = {
         "save_btn": "Сохранить",
         "saved_to": "Сохранено: {}",
         "save_failed": "Не удалось сохранить: {}",
+        "err_network": "Нет интернета или он очень медленный. Проверьте подключение.",
+        "err_timeout": "Время ожидания истекло. Возможно, сервер ещё просыпается, повторите через минуту.",
+        "err_busy": "Сервер сейчас занят или не отвечает. Попробуйте позже.",
+        "err_unsupported": "Этот тип файла не поддерживается.",
+        "err_cannot": "Это действие нельзя выполнить бесплатными инструментами.",
+        "err_too_many": "Слишком много запросов. Подождите несколько секунд.",
+        "err_bad": "Запрос некорректен.",
+        "err_generic": "Произошла неизвестная ошибка. Попробуйте снова.",
+        "tts_no_tajik": "На телефоне нет таджикского голоса, поэтому ответ не озвучен.",
         "server_save": "Сохранить",
         "server_saved": "Токен сохранён. Проверьте отправку сообщения.",
         "server_missing": "Сначала в Настройки → Аккаунт введите токен сервера.",
@@ -731,7 +749,7 @@ TEXTS = {
         "server_token_title": "JARVIS server token",
         "server_token_placeholder": "JARVIS_SERVER_TOKEN",
         "tajik_url_hint": "Tajik voice address (https://…hf.space)",
-        "tajik_voice_failed": "The Tajik voice is unavailable; the phone voice is used.",
+        "tajik_voice_failed": "The Tajik voice is not available yet (the server may be waking up). The answer was not read aloud; try again in a minute.",
         "media_image": "Drawing, please wait 20–60 seconds…",
         "media_edit": "Editing…",
         "media_search": "Searching pictures…",
@@ -748,6 +766,15 @@ TEXTS = {
         "save_btn": "Save",
         "saved_to": "Saved: {}",
         "save_failed": "Could not save: {}",
+        "err_network": "No internet or it is very slow. Check your connection.",
+        "err_timeout": "The request timed out. The server may still be waking up, try again in a minute.",
+        "err_busy": "The server is busy or not responding. Try again later.",
+        "err_unsupported": "This file type is not supported.",
+        "err_cannot": "This cannot be done with the free tools.",
+        "err_too_many": "Too many requests. Wait a few seconds.",
+        "err_bad": "The request is not valid.",
+        "err_generic": "An unknown error occurred. Try again.",
+        "tts_no_tajik": "The phone has no Tajik voice, so the answer was not read aloud.",
         "server_save": "Save",
         "server_saved": "Token saved. Try sending a message.",
         "server_missing": "First enter the server token in Settings → Account.",
@@ -3424,6 +3451,86 @@ def strip_media(text):
     return MEDIA_RE.sub("", str(text)).strip()
 
 
+def copy_java_stream(stream, output, limit=None):
+    """Copy a Java InputStream into a Java OutputStream through NIO channels (works without Java arrays)."""
+    from jnius import autoclass
+    Channels = autoclass("java.nio.channels.Channels")
+    ByteBuffer = autoclass("java.nio.ByteBuffer")
+    src, dst = Channels.newChannel(stream), Channels.newChannel(output)
+    buf = ByteBuffer.allocate(65536)
+    total = 0
+    while True:
+        count = src.read(buf)
+        if count < 0:
+            break
+        total += count
+        if limit and total > limit:
+            raise RuntimeError("too big")
+        buf.flip()
+        while buf.hasRemaining():
+            dst.write(buf)
+        buf.clear()
+    return total
+
+
+def java_bytes(array):
+    """Python bytes from a Java byte[] (pyjnius may hand back signed ints)."""
+    try:
+        return bytes(bytearray(array))
+    except Exception:
+        return bytes((b & 0xFF) for b in array)
+
+
+
+class LocalizedError(Exception):
+    """An error whose text is already written in the app language."""
+
+
+TAJIK_LETTERS = "ғӣқӯҳҷҒӢҚӮҲҶ"
+
+
+def speech_lang_for(text, app_lang):
+    """Language of a text for the phone voice: tg / ru / en (Tajik is never mixed up with Russian)."""
+    if any(ch in TAJIK_LETTERS for ch in text):
+        return "tg"
+    letters = [ch for ch in text if ch.isalpha()]
+    if not letters:
+        return app_lang if app_lang in ("ru", "en") else "tg"
+    cyr = sum(1 for ch in letters if "Ѐ" <= ch <= "ӿ")
+    if cyr / float(len(letters)) > 0.5:
+        if any(ch in "ыэщЫЭЩ" for ch in text) or app_lang == "ru":
+            return "ru"
+        return "tg" if app_lang == "tg" else "ru"
+    return "en"
+
+
+def split_for_speech(text, first=110, rest=190):
+    """Cut a text into short pieces at sentence ends so that the first piece is ready quickly."""
+    text = " ".join(str(text).replace("\r", "").split("\n"))
+    parts = [p.strip() for p in re.split(r"(?<=[.!?…])\s+", text) if p.strip()]
+    chunks, cur = [], ""
+    for part in parts:
+        limit = first if not chunks else rest
+        while len(part) > limit * 1.4:
+            cut = max(part.rfind(", ", 0, int(limit * 1.3)), part.rfind(" ", 0, int(limit * 1.3)))
+            if cut < 30:
+                cut = int(limit * 1.3)
+            head, part = part[:cut + 1].strip(), part[cut + 1:].strip()
+            if cur:
+                chunks.append(cur)
+                cur = ""
+            chunks.append(head)
+            limit = rest
+        if cur and len(cur) + 1 + len(part) > limit:
+            chunks.append(cur)
+            cur = part
+        else:
+            cur = (cur + " " + part).strip()
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def http_json(url, timeout=12):
     import ssl
     try:
@@ -4073,24 +4180,15 @@ class JarvisApp(App):
             mime = str(resolver.getType(uri) or "application/octet-stream")
             stream = resolver.openInputStream(uri)
             output = autoclass("java.io.ByteArrayOutputStream")()
-            buffer = autoclass("byte[]") if False else None
-            # Read in bounded chunks without needing filesystem permission.
-            chunk = autoclass("byte[]") if False else None
-            from jnius import cast, jarray, jbyte
-            buf = jarray(jbyte)(8192)
-            total = 0
-            while True:
-                count = stream.read(buf)
-                if count < 0:
-                    break
-                total += count
-                if total > 20 * 1024 * 1024:
-                    raise RuntimeError(self.t("file_too_big"))
-                output.write(buf, 0, count)
+            # Copy with Java channels: no Java arrays are needed (pyjnius has no `jarray`).
+            try:
+                copy_java_stream(stream, output, 20 * 1024 * 1024)
+            except RuntimeError:
+                raise LocalizedError(self.t("file_too_big"))
             stream.close()
-            raw = bytes(output.toByteArray())
+            raw = java_bytes(output.toByteArray())
             if not raw:
-                raise RuntimeError(self.t("file_empty"))
+                raise LocalizedError(self.t("file_empty"))
             name = str(uri.getLastPathSegment() or "attachment")
             try:
                 cursor = resolver.query(uri, None, None, None, None)
@@ -4120,7 +4218,7 @@ class JarvisApp(App):
                 threading.Thread(target=self._attachment_edit_job, args=(chat_id, name, mime, raw, prompt, mode), daemon=True).start()
         except Exception as exc:
             save_crash("Attachment read failed:\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt, message=str(exc): self.show_response(self.t("file_read_failed").format(message)), 0)
+            Clock.schedule_once(lambda dt, message=self.friendly_error(exc): self.show_response(self.t("file_read_failed").format(message)), 0)
 
     def _upload_attachment(self, chat_id, filename, mime, raw, prompt):
         import ssl
@@ -4144,14 +4242,12 @@ class JarvisApp(App):
             answer = str(result.get("answer", self.t("file_no_answer")))
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, answer), 0)
         except urllib.error.HTTPError as exc:
-            detail = self.t("server_http_error").format(exc.code)
-            try:
-                payload = json.loads(exc.read().decode("utf-8")); detail = str(payload.get("detail", detail))
-            except Exception:
-                pass
+            save_crash("Attachment upload HTTP error: %s" % exc.code)
+            detail = self.friendly_error(exc)
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, detail), 0)
         except Exception as exc:
-            Clock.schedule_once(lambda dt, message=str(exc): self._attachment_answer(chat_id, self.t("file_send_failed").format(message)), 0)
+            save_crash("Attachment upload failed:\n" + traceback.format_exc())
+            Clock.schedule_once(lambda dt, message=self.friendly_error(exc): self._attachment_answer(chat_id, self.t("file_send_failed").format(message)), 0)
 
     def _attachment_answer(self, chat_id, answer):
         self.deliver_answer(chat_id, answer)
@@ -4180,14 +4276,14 @@ class JarvisApp(App):
         return body, "multipart/form-data; boundary=" + boundary
 
     def _server_call(self, path, body, content_type, timeout=120):
-        """POST to the JARVIS server. Returns (lower-case headers, bytes). Raises RuntimeError with a readable reason."""
+        """POST to the JARVIS server. Returns (lower-case headers, bytes). Raises LocalizedError (text in the app language)."""
         import ssl
         try:
             import certifi
             ctx = ssl.create_default_context(cafile=certifi.where())
         except Exception:
             ctx = None
-        last = ""
+        failure = None
         for attempt in (1, 2):   # the second try covers a sleeping Render server
             try:
                 req = urllib.request.Request(SERVER_BASE + path, data=body, method="POST",
@@ -4196,21 +4292,23 @@ class JarvisApp(App):
                     headers = {k.lower(): v for k, v in response.headers.items()}
                     return headers, response.read(30 * 1024 * 1024)
             except urllib.error.HTTPError as exc:
-                detail = self.t("server_http_error").format(exc.code)
-                try:
-                    detail = str(json.loads(exc.read().decode("utf-8")).get("detail", detail))[:200]
-                except Exception:
-                    pass
-                if exc.code in (401, 403):
-                    raise RuntimeError(self.t("server_missing") + " (%d)" % exc.code)
+                failure = exc
+                save_crash("Server call %s failed with HTTP %s" % (path, exc.code))
+                if exc.code == 422:        # the AI explains in the user's language why this edit is impossible
+                    try:
+                        raise LocalizedError(str(json.loads(exc.read().decode("utf-8")).get("detail", "")) or self.friendly_error(exc))
+                    except LocalizedError:
+                        raise
+                    except Exception:
+                        raise LocalizedError(self.friendly_error(exc))
                 if exc.code in (502, 503, 504) and attempt == 1:
                     time.sleep(4)
-                    last = detail
                     continue
-                raise RuntimeError(detail)
+                raise LocalizedError(self.friendly_error(exc))
             except Exception as exc:
-                last = "%s: %s" % (type(exc).__name__, str(exc)[:100])
-        raise RuntimeError(last or "network")
+                failure = exc
+                save_crash("Server call %s failed:\n%s" % (path, traceback.format_exc()))
+        raise LocalizedError(self.friendly_error(failure))
 
     def _save_private(self, data, name):
         path = os.path.join(self.media_dir(), uuid.uuid4().hex[:8] + "__" + name)
@@ -4250,7 +4348,7 @@ class JarvisApp(App):
             say = self.t("image_ready")
         except Exception as exc:
             save_crash("Image generation failed:\n" + traceback.format_exc())
-            text, say = self.t("image_failed").format(str(exc)[:200]), ""
+            text, say = self.t("image_failed").format(self.friendly_error(exc)), ""
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
     def _job_search(self, chat_id, query):
@@ -4281,7 +4379,7 @@ class JarvisApp(App):
             text = "\n".join(lines) if count else self.t("search_none")
         except Exception as exc:
             save_crash("Image search failed:\n" + traceback.format_exc())
-            text = self.t("image_failed").format(str(exc)[:200])
+            text = self.t("image_failed").format(self.friendly_error(exc))
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, ""), 0)
 
     def _job_create_file(self, chat_id, request):
@@ -4296,7 +4394,7 @@ class JarvisApp(App):
             say = self.t("file_created").format(name)
         except Exception as exc:
             save_crash("File creation failed:\n" + traceback.format_exc())
-            text, say = self.t("edit_failed").format(str(exc)[:200]), ""
+            text, say = self.t("edit_failed").format(self.friendly_error(exc)), ""
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
     def _attachment_edit_job(self, chat_id, name, mime, raw, prompt, mode):
@@ -4328,7 +4426,7 @@ class JarvisApp(App):
                 say = self.t("file_edited").format(out_name)
         except Exception as exc:
             save_crash("Attachment edit failed:\n" + traceback.format_exc())
-            text, say = self.t("edit_failed").format(str(exc)[:240]), ""
+            text, say = self.t("edit_failed").format(self.friendly_error(exc)), ""
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
     def save_media(self, path):
@@ -4357,16 +4455,7 @@ class JarvisApp(App):
                 raise RuntimeError("MediaStore refused the file")
             out = resolver.openOutputStream(uri)
             inp = autoclass("java.io.FileInputStream")(path)
-            try:
-                autoclass("android.os.FileUtils").copy(inp, out)
-            except Exception:
-                from jnius import jarray, jbyte
-                buf = jarray(jbyte)(65536)
-                while True:
-                    count = inp.read(buf)
-                    if count < 0:
-                        break
-                    out.write(buf, 0, count)
+            copy_java_stream(inp, out)
             inp.close()
             out.close()
             self.show_response(self.t("saved_to").format(rel + "/" + name))
@@ -4380,7 +4469,83 @@ class JarvisApp(App):
                 shutil.copy(path, os.path.join(target, name))
                 self.show_response(self.t("saved_to").format(os.path.join(target, name)))
             except Exception:
-                self.show_response(self.t("save_failed").format(str(exc)[:160]))
+                self.show_response(self.t("save_failed").format(self.friendly_error(exc)))
+
+    def friendly_error(self, exc):
+        """A short, non-technical error text in the app language. Details go to the crash log only."""
+        if isinstance(exc, LocalizedError):
+            return str(exc)
+        code = ""
+        key = "err_generic"
+        if isinstance(exc, urllib.error.HTTPError):
+            c = int(exc.code)
+            code = " [%d]" % c
+            if c in (401, 403):
+                key = "server_missing"
+            elif c == 413:
+                key = "file_too_big"
+            elif c == 415:
+                key = "err_unsupported"
+            elif c == 422:
+                key = "err_cannot"
+            elif c == 429:
+                key = "err_too_many"
+            elif c in (400, 404):
+                key = "err_bad"
+            elif c >= 500:
+                key = "err_busy"
+        elif isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
+            key = "err_timeout"
+        elif isinstance(exc, OSError) or str(exc) == "network":
+            key = "err_network"
+        return self.t(key) + code
+
+    # ------------------------------------------------------------------ Tajik voice: short pieces, text first
+    def _tajik_stream(self, text):
+        self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
+        gen = self._tajik_gen
+        threading.Thread(target=self._tajik_stream_run, args=(strip_media(text)[:900], gen), daemon=True).start()
+
+    def _tajik_stream_run(self, text, gen):
+        chunks = split_for_speech(text)
+        if not chunks:
+            return
+        got = {}
+
+        def fetch(i):
+            got[i] = self._tajik_speech_path(chunks[i])
+
+        fetch(0)
+        for i in range(len(chunks)):
+            if gen != getattr(self, "_tajik_gen", 0) or not got.get(i):
+                return                      # stopped by the user, or the voice failed (the user was told once)
+            following = None
+            if i + 1 < len(chunks):
+                following = threading.Thread(target=fetch, args=(i + 1,), daemon=True)
+                following.start()           # the next piece is made while this one is spoken
+            started = threading.Event()
+
+            def play(dt, path=got[i], size=len(chunks[i])):
+                self.set_orb_state("speaking", min(20.0, 1.0 + size * 0.08))
+                self._play_server_audio(path)
+                started.set()
+
+            Clock.schedule_once(play, 0)
+            started.wait(5)
+            time.sleep(0.4)
+            while gen == getattr(self, "_tajik_gen", 0):
+                player = getattr(self, "_server_speech_player", None)
+                try:
+                    playing = bool(player is not None and player.isPlaying())
+                except Exception:
+                    playing = False
+                if not playing:
+                    break
+                time.sleep(0.2)
+            if following is not None:
+                following.join(timeout=100)
+        if gen == getattr(self, "_tajik_gen", 0):
+            Clock.schedule_once(lambda dt: self.set_orb_state("idle"), 0)
 
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
@@ -4474,20 +4639,17 @@ class JarvisApp(App):
                     last = self.t("reply_format").format(keys)
                 break
             except urllib.error.HTTPError as exc:
-                detail = ""
-                try:
-                    detail = str(json.loads(exc.read().decode("utf-8")).get("detail", ""))[:120]
-                except Exception:
-                    pass
+                save_crash("Chat HTTP error: %s" % exc.code)
                 if exc.code in (401, 403):
                     answer = self.t("server_missing") + " (%d)" % exc.code
                 else:
-                    last = "HTTP %d %s" % (exc.code, detail)
+                    last = self.friendly_error(exc)
                 break
             except Exception as exc:
-                last = "%s: %s" % (type(exc).__name__, str(exc)[:120])
+                save_crash("Chat request failed:\n" + traceback.format_exc())
+                last = self.friendly_error(exc)
         if not answer:
-            answer = self.t("server_error") + "\n[" + last + "]"
+            answer = last or self.t("server_error")
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _finish_server_answer(self, chat_id, answer):
@@ -4542,7 +4704,7 @@ class JarvisApp(App):
                 if not self.speak_enabled and not force:
                     return
                 try:
-                    result = self.tts.speak(answer[:4000], lang=("ru" if self.language == "tg" else self.language),
+                    result = self.tts.speak(answer[:4000], lang=speech_lang_for(answer, self.language),
                                            pitch=VOICE_LOCAL_PITCH.get(self.voice_profile, 1.0))
                     if result == "starting" and tries < 8:
                         Clock.schedule_once(lambda dt: attempt(dt, tries + 1), 0.5)
@@ -4550,7 +4712,8 @@ class JarvisApp(App):
                     save_crash("Local speech fallback failed: " + str(exc))
                     if not self.tts_error_noted:
                         self.tts_error_noted = True
-                        self.show_response(self.t("tts_failed_all") + "\n[" + str(exc)[:160] + "]")
+                        tajik = speech_lang_for(answer, self.language) == "tg"
+                        self.show_response(self.t("tts_no_tajik" if tajik else "tts_failed_all"))
             Clock.schedule_once(attempt, 0.15)
         except Exception:
             save_crash("Could not schedule local speech fallback:\n" + traceback.format_exc())
@@ -4570,13 +4733,8 @@ class JarvisApp(App):
         import base64
         import tempfile
         if self._wants_tajik_voice(text):
-            path = self._tajik_speech_path(text)
-            if path:
-                Clock.schedule_once(lambda dt: self._start_synced_answer(chat_id, answer, text, path, []), 0)
-                return
-            # the Tajik voice failed: show the answer now and read it with the phone voice
-            Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", answer), 0)
-            Clock.schedule_once(lambda dt: self._speak_local_fallback(text), 0.1)
+            Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", answer), 0)   # text at once
+            self._tajik_stream(text)
             return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
         payload = json.dumps({"text": text, "timings": True,
@@ -4604,13 +4762,7 @@ class JarvisApp(App):
                 out.write(audio)
             Clock.schedule_once(lambda dt: self._start_synced_answer(chat_id, answer, text, path, words), 0)
         except Exception as exc:
-            detail = "network"
-            if isinstance(exc, urllib.error.HTTPError):
-                detail = "HTTP %d" % exc.code
-                try:
-                    detail = str(json.loads(exc.read().decode("utf-8")).get("detail", detail))[:140]
-                except Exception:
-                    pass
+            detail = self.friendly_error(exc)
             save_crash("Synced speech failed: " + detail + "\n" + traceback.format_exc())
             def fallback(dt):
                 self.add_chat_message(chat_id, "jarvis", answer)
@@ -4700,6 +4852,7 @@ class JarvisApp(App):
             self._speak_local_fallback(text, force=True)
 
     def stop_speaking(self, *_):
+        self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1      # also stops a running Tajik read-out
         try:
             self.tts.stop()
         except Exception:
@@ -4718,11 +4871,7 @@ class JarvisApp(App):
         import ssl
         import tempfile
         if self._wants_tajik_voice(text):
-            path = self._tajik_speech_path(text)
-            if path:
-                Clock.schedule_once(lambda dt: self._play_server_audio(path), 0)
-            else:
-                Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
+            self._tajik_stream(text)
             return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
         payload = json.dumps({"text": text, "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, ensure_ascii=False).encode("utf-8")
@@ -4746,18 +4895,14 @@ class JarvisApp(App):
                 out.write(audio)
             Clock.schedule_once(lambda dt: self._play_server_audio(path), 0)
         except urllib.error.HTTPError as exc:
-            detail = "HTTP %d" % exc.code
-            try:
-                data = json.loads(exc.read().decode("utf-8"))
-                detail = str(data.get("detail", detail))[:140]
-            except Exception:
-                pass
+            detail = self.friendly_error(exc)
             save_crash("Server speech error: " + detail)
             Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
             Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
-        except Exception:
+        except Exception as exc:
             save_crash("Server speech failed:\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt: self._note_server_speech_error("network"), 0)
+            detail = self.friendly_error(exc)
+            Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
             Clock.schedule_once(lambda dt: self._speak_local_fallback(text, force), 0)
 
     def _wants_tajik_voice(self, text):
@@ -4795,7 +4940,7 @@ class JarvisApp(App):
             return path
         except Exception as exc:
             save_crash("Tajik voice failed:\n" + traceback.format_exc())
-            detail = "HTTP %d" % exc.code if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
+            detail = self.friendly_error(exc)
             Clock.schedule_once(lambda dt: self._note_tajik_voice_error(detail), 0)
             return None
 
@@ -4804,7 +4949,7 @@ class JarvisApp(App):
             return
         self.tajik_voice_error_noted = True
         try:
-            self.show_response(self.t("tajik_voice_failed") + " [" + detail + "]")
+            self.show_response(self.t("tajik_voice_failed") + "\n" + detail)
         except Exception:
             pass
 
