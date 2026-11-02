@@ -36,9 +36,9 @@ try:
 except ImportError:  # the rest of the server must keep working if the package is missing
     edge_tts = None
 
-RATE_LIMIT = 10
+RATE_LIMIT = 30
 RATE_WINDOW = 60
-AUTH_RATE_LIMIT = 5
+AUTH_RATE_LIMIT = 10
 MAX_TRANSCRIPTION_BYTES = 20 * 1024 * 1024
 MAX_SPEECH_CHARS = 4000
 TAVILY_TIMEOUT_SECONDS = 12
@@ -69,6 +69,7 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list, max_length=12)
     web_search: bool = False
     language: Literal["tg", "ru", "en"] = "tg"
+    assistant_name: str = Field(default="JARVIS", max_length=30)
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_SPEECH_CHARS)
@@ -80,6 +81,10 @@ class SpeechRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+
+class AccountRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=8, max_length=128)
 
 class LoginRequest(BaseModel):
@@ -116,6 +121,14 @@ def init_database() -> None:
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            for statement in (
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(40)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64)",
+                "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+                "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower ON users (LOWER(username))",
+                "CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL",
+            ):
+                conn.execute(statement)
         print("Database initialization successful")
     except Exception as exc:
         print("Database initialization failed:", type(exc).__name__)
@@ -160,6 +173,79 @@ def verify_token(token: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+QUOTAS = {"chat": 150, "speak": 300, "analyze": 40, "stt": 100, "image": 15, "search": 60, "edit": 30}
+usage_counts = defaultdict(int)
+usage_day = {"day": ""}
+
+
+def require_auth(authorization: str | None, x_jarvis_token: str | None = None) -> dict:
+    """Every protected endpoint needs a personal sign-in token (Authorization: Bearer ...).
+    The old shared token still works only while JARVIS_SERVER_TOKEN is set on the server; remove it to switch it off."""
+    if authorization:
+        parts = authorization.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Invalid authorization header")
+        try:
+            payload = jwt.decode(parts[1], jwt_secret(), algorithms=["HS256"])
+            uid = int(payload["sub"])
+            if not user_exists(uid):
+                raise HTTPException(status_code=401, detail="Account not found")
+            return {"id": uid, "name": str(payload.get("email", ""))}
+        except (jwt.InvalidTokenError, ValueError, KeyError, TypeError):
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if x_jarvis_token:
+        verify_token(x_jarvis_token)
+        return {"id": 0, "name": "legacy"}
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def rate_key(user: dict, request: Request) -> str:
+    """Per-account key (many phones share one mobile-network IP address, so the IP alone would be unfair)."""
+    return "u%s" % user["id"] if user.get("id") else client_ip(request)
+
+
+_user_cache: dict = {}
+
+
+def user_exists(uid: int) -> bool:
+    """A deleted account must stop working at once, even though its token has not expired (cached for 5 minutes)."""
+    now = time.monotonic()
+    hit = _user_cache.get(uid)
+    if hit and now - hit[0] < 300:
+        return hit[1]
+    try:
+        with psycopg.connect(database_url(), connect_timeout=5) as conn:
+            ok = conn.execute("SELECT 1 FROM users WHERE id = %s", (uid,)).fetchone() is not None
+    except Exception:
+        return True      # a database hiccup must not lock honest users out
+    _user_cache[uid] = (now, ok)
+    return ok
+
+
+def check_quota(user: dict, kind: str) -> None:
+    """Daily per-user limits protect the free AI services from one person using everything."""
+    uid = user.get("id")
+    if not uid:
+        return
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    limit = int(os.environ.get("QUOTA_" + kind.upper(), QUOTAS.get(kind, 100)))
+    with rate_lock:
+        if usage_day["day"] != today:
+            usage_counts.clear()
+            usage_day["day"] = today
+        key = (uid, kind)
+        if usage_counts[key] >= limit:
+            raise HTTPException(status_code=429, detail="Daily limit reached for this feature")
+        usage_counts[key] += 1
+
+
+def normalize_username(name: str) -> str:
+    name = name.strip()
+    if not re.fullmatch(r"[\w.\-]{3,32}", name):
+        raise HTTPException(status_code=400, detail="Username: 3-32 letters, digits, dot, dash or underscore")
+    return name
+
+
 def normalize_email(email: str) -> str:
     email = email.strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
@@ -169,7 +255,7 @@ def normalize_email(email: str) -> str:
 
 def create_access_token(user_id: int, email: str) -> str:
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "email": email, "iat": now, "exp": now + timedelta(hours=24)}
+    payload = {"sub": str(user_id), "email": email, "iat": now, "exp": now + timedelta(days=30)}
     return jwt.encode(payload, jwt_secret(), algorithm="HS256")
 
 
@@ -331,6 +417,65 @@ def login(data: LoginRequest, request: Request):
     return {"message": "Login successful", "access_token": token, "token_type": "bearer", "user": {"id": user["id"], "email": user["email"], "created_at": user["created_at"]}}
 
 
+@app.post("/auth/signup", status_code=201)
+def signup(data: AccountRequest, request: Request):
+    check_auth_rate_limit(client_ip(request))
+    username = normalize_username(data.username)
+    try:
+        hashed_password = password_hash.hash(data.password)
+        with psycopg.connect(database_url(), connect_timeout=10, row_factory=dict_row) as conn:
+            user = conn.execute("INSERT INTO users (username, password_hash) VALUES (%s, %s) RETURNING id, username", (username, hashed_password)).fetchone()
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(status_code=409, detail="This username is already taken")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Signup failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Registration service is temporarily unavailable")
+    return {"access_token": create_access_token(user["id"], user["username"]), "token_type": "bearer", "username": user["username"]}
+
+
+@app.post("/auth/signin")
+def signin(data: AccountRequest, request: Request):
+    check_auth_rate_limit(client_ip(request))
+    username = data.username.strip()
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10, row_factory=dict_row) as conn:
+            user = conn.execute("SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER(%s)", (username,)).fetchone()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Signin lookup failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Login service is temporarily unavailable")
+    stored = user["password_hash"] if user and user["password_hash"] else password_hash.hash("invalid-password-placeholder")
+    ok = False
+    try:
+        ok = bool(password_hash.verify(data.password, stored))
+    except Exception:
+        ok = False
+    if not user or not ok:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    return {"access_token": create_access_token(user["id"], user["username"]), "token_type": "bearer", "username": user["username"]}
+
+
+@app.post("/auth/delete")
+def delete_account(authorization: str | None = Header(default=None)):
+    """Permanently delete the signed-in account (required for Google Play)."""
+    user = require_auth(authorization)
+    if not user["id"]:
+        raise HTTPException(status_code=400, detail="Nothing to delete")
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            conn.execute("DELETE FROM users WHERE id = %s", (user["id"],))
+        _user_cache[user["id"]] = (time.monotonic(), False)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Account deletion failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is temporarily unavailable")
+    return {"deleted": True}
+
+
 @app.get("/auth/me")
 def me(authorization: str | None = Header(default=None)):
     user = get_current_user(authorization)
@@ -338,9 +483,10 @@ def me(authorization: str | None = Header(default=None)):
 
 
 @app.post("/chat")
-def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "chat")
+    check_rate_limit(rate_key(user, http_request))
     if not ai_tools.provider_chain():
         raise HTTPException(status_code=503, detail="No AI provider key is configured")
     instructions = {
@@ -348,7 +494,8 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
         "ru": "Ты JARVIS — полезный и вежливый ИИ-помощник. Отвечай ясно, точно и по существу на русском. Для сложных вопросов рассуждай внимательно. Если не знаешь ответа, честно скажи об этом. Не утверждай, что искал информацию в интернете, если поиск фактически не выполнялся.",
         "en": "You are JARVIS, a helpful and polite AI assistant. Answer clearly, accurately, and directly in English. Think carefully about complex questions. If you do not know the answer, say so honestly. Do not claim to have searched the web unless a web search was actually performed.",
     }
-    messages = [{"role": "system", "content": instructions[request.language]}]
+    assistant_name = " ".join(request.assistant_name.split())[:30] or "JARVIS"
+    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name)}]
     messages.extend({"role": item.role, "content": item.content} for item in request.history)
     searched, sources, search_error = False, [], None
     if should_search_web(request):
@@ -433,10 +580,11 @@ async def _synthesize_edge_tts(text: str, voice: str) -> tuple[bytes, list[list[
 
 
 @app.post("/speak")
-async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Generate speech audio (MP3) with Edge TTS. Never substitutes another language for Tajik."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "speak")
+    check_rate_limit(rate_key(user, http_request))
     if edge_tts is None:
         raise HTTPException(status_code=503, detail="edge-tts is not installed on the server")
     text = request.text.strip()
@@ -528,10 +676,11 @@ def _call_groq_transcription(api_key: str, filename: str, audio: bytes, audio_ty
 
 
 @app.post("/analyze")
-async def analyze_attachment(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def analyze_attachment(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Analyze uploaded images or plain-text files using the configured Groq service."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "analyze")
+    check_rate_limit(rate_key(user, http_request))
     content_type = http_request.headers.get("content-type", "")
     if not content_type.lower().startswith("multipart/form-data"):
         raise HTTPException(status_code=415, detail="Expected multipart/form-data")
@@ -646,10 +795,11 @@ class ImageSearchRequest(BaseModel):
 
 
 @app.post("/image/generate")
-async def image_generate(request: ImageRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def image_generate(request: ImageRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Create a picture from text with a free keyless image service (the prompt is translated to English first)."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "image")
+    check_rate_limit(rate_key(user, http_request))
     prompt_en = await asyncio.to_thread(ai_tools.to_english, request.prompt.strip(), request.language)
     try:
         data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, request.width, request.height)
@@ -660,10 +810,11 @@ async def image_generate(request: ImageRequest, http_request: Request, x_jarvis_
 
 
 @app.post("/image/search")
-async def image_search(request: ImageSearchRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def image_search(request: ImageSearchRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Find freely licensed pictures on Wikimedia Commons (no key)."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "search")
+    check_rate_limit(rate_key(user, http_request))
     query_en = await asyncio.to_thread(ai_tools.to_english, request.query.strip(), request.language)
     try:
         results = await asyncio.to_thread(ai_tools.search_images, query_en, request.limit)
@@ -674,10 +825,11 @@ async def image_search(request: ImageSearchRequest, http_request: Request, x_jar
 
 
 @app.post("/image/edit")
-async def image_edit(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def image_edit(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Edit a photo from a text instruction: the AI plans simple operations, Pillow applies them."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "edit")
+    check_rate_limit(rate_key(user, http_request))
     content_type = http_request.headers.get("content-type", "")
     if not content_type.lower().startswith("multipart/form-data"):
         raise HTTPException(status_code=415, detail="Expected multipart/form-data")
@@ -711,10 +863,11 @@ async def image_edit(http_request: Request, x_jarvis_token: str | None = Header(
 
 
 @app.post("/edit-text")
-async def edit_text(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def edit_text(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Edit a text file, or create a new one when no file is sent. Returns {filename, text}."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "edit")
+    check_rate_limit(rate_key(user, http_request))
     content_type = http_request.headers.get("content-type", "")
     if not content_type.lower().startswith("multipart/form-data"):
         raise HTTPException(status_code=415, detail="Expected multipart/form-data")
@@ -746,10 +899,11 @@ async def edit_text(http_request: Request, x_jarvis_token: str | None = Header(d
 
 
 @app.post("/transcribe")
-async def transcribe(http_request: Request, x_jarvis_token: str | None = Header(default=None)):
+async def transcribe(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Transcribe audio recorded within the Android app, including Tajik (tg)."""
-    verify_token(x_jarvis_token)
-    check_rate_limit(client_ip(http_request))
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "stt")
+    check_rate_limit(rate_key(user, http_request))
     content_type = http_request.headers.get("content-type", "")
     if not content_type.lower().startswith("multipart/form-data"):
         raise HTTPException(status_code=415, detail="Expected multipart/form-data")
