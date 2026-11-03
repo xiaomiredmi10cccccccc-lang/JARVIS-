@@ -36,7 +36,11 @@ def provider_chain(vision=False, language=None):
         if model:
             available["openrouter"] = ("openrouter", key, "https://openrouter.ai/api/v1", model)
     # Gemini writes Tajik better than the other free models, so Tajik requests try it first
-    default_order = env("AI_PROVIDER_ORDER_TG", "gemini,groq,openrouter") if language == "tg" else env("AI_PROVIDER_ORDER", "groq,gemini,openrouter")
+    if vision:
+        # Gemini reads images reliably; the Groq vision model is the backup (set AI_PROVIDER_ORDER_VISION to change)
+        default_order = env("AI_PROVIDER_ORDER_VISION", "gemini,groq,openrouter")
+    else:
+        default_order = env("AI_PROVIDER_ORDER_TG", "gemini,groq,openrouter") if language == "tg" else env("AI_PROVIDER_ORDER", "groq,gemini,openrouter")
     order = [p.strip() for p in default_order.split(",") if p.strip()]
     chain = [available[name] for name in order if name in available]
     chain += [value for name, value in available.items() if name not in order]
