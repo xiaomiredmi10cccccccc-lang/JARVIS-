@@ -30,6 +30,8 @@ from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
                            RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate,
                            RenderContext, Mesh)
 from kivy.graphics.texture import Texture
+from kivy.graphics.fbo import Fbo
+from kivy.graphics import ClearColor, ClearBuffers, Scale, Translate
 from kivy.core.text import LabelBase
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -461,6 +463,12 @@ TEXTS = {
     "tg": {
         "ready": "ҶАРВИС ОМОДА АСТ",
         "voice_preparing": "Овоз омода мешавад…",
+        "sec_profile": "Дар бораи ман",
+        "title_profile": "Дар бораи ман",
+        "profile_note": "Ман ҳар чизеро, ки дар бораи худатон нависед (ном, шаҳр, кор, дӯстдоштаҳо), дар хотир дорам. Ин танҳо дар телефони шумо захира мешавад.",
+        "profile_empty": "Ҳоло чизе нест. Нависед «Номи ман …» ё «Ман дар … зиндагӣ мекунам», ё дар поён илова кунед.",
+        "profile_hint": "Чизе дар бораи худатон нависед",
+        "profile_add": "Илова кардан",
         "sec_mode": "Равшан / торик",
         "title_mode": "Намуд",
         "mode_auto": "Мувофиқи система",
@@ -641,6 +649,12 @@ TEXTS = {
     "ru": {
         "ready": "JARVIS ГОТОВ",
         "voice_preparing": "Готовлю голос…",
+        "sec_profile": "Обо мне",
+        "title_profile": "Обо мне",
+        "profile_note": "Я запоминаю всё, что вы пишете о себе (имя, город, работа, увлечения). Это хранится только на вашем телефоне.",
+        "profile_empty": "Пока пусто. Напишите «Меня зовут …» или «Я живу в …», либо добавьте ниже.",
+        "profile_hint": "Напишите что-нибудь о себе",
+        "profile_add": "Добавить",
         "sec_mode": "Светлая / тёмная",
         "title_mode": "Режим",
         "mode_auto": "Как в системе",
@@ -821,6 +835,12 @@ TEXTS = {
     "en": {
         "ready": "JARVIS IS READY",
         "voice_preparing": "Preparing voice…",
+        "sec_profile": "About me",
+        "title_profile": "About me",
+        "profile_note": "I remember what you tell me about yourself (name, city, work, interests). It is stored only on your phone.",
+        "profile_empty": "Nothing yet. Write: My name is … or I live in …, or add below.",
+        "profile_hint": "Write something about yourself",
+        "profile_add": "Add",
         "sec_mode": "Light / dark",
         "title_mode": "Mode",
         "mode_auto": "Same as system",
@@ -3272,6 +3292,66 @@ def format_time(iso):
     except Exception:
         return ""
 
+FACT_PATTERNS = [re.compile(x, re.IGNORECASE) for x in (
+    # Tajik
+    r"номи ман\b", r"^\s*ман\s+.{2,}\s(ҳастам|будам|зиндагӣ мекунам|кор мекунам|мехонам|мехонам|дорам|дӯст медорам|таваллуд шудам)\b",
+    r"\b(ёд гир|дар ёд дор|фаромӯш накун|дар хотир дор)\b",
+    # Russian
+    r"меня зовут", r"^\s*я\s+.{2,}\s(живу|работаю|учусь|люблю|занимаюсь|родил(ся|ась)|студент|врач|программист)\b",
+    r"\b(запомни|не забудь)\b", r"\bмо(й|я|и)\s+\w+\s+(—|-|это)\s",
+    # English
+    r"\bmy name is\b", r"^\s*i\s+(am|live|work|study|like|love|have|was born)\b", r"\bremember (that|this)\b",
+)]
+
+
+def extract_facts(text):
+    """Sentences in which the user tells something lasting about himself (no questions)."""
+    facts = []
+    for sentence in re.split(r"(?<=[.!\n])\s+", str(text)):
+        sentence = " ".join(sentence.split())
+        if not (4 <= len(sentence) <= 220) or sentence.endswith("?"):
+            continue
+        if any(rx.search(sentence) for rx in FACT_PATTERNS):
+            facts.append(sentence)
+    return facts
+
+
+class ProfileStore(object):
+    """The "about the user" folder: facts the user told the assistant. Stored only on this phone."""
+
+    def __init__(self, path):
+        self.path = path
+        self.facts = []
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                self.facts = [f for f in json.load(handle).get("facts", []) if isinstance(f, dict) and f.get("text")]
+        except Exception:
+            self.facts = []
+
+    def save(self):
+        try:
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump({"facts": self.facts}, handle, ensure_ascii=False)
+            os.replace(tmp, self.path)
+        except Exception:
+            pass
+
+    def add(self, text):
+        text = " ".join(str(text).split())[:220]
+        if not text or any(f["text"].lower() == text.lower() for f in self.facts):
+            return False
+        self.facts.append({"text": text, "time": datetime.now().strftime("%Y-%m-%d")})
+        self.facts = self.facts[-80:]
+        self.save()
+        return True
+
+    def remove(self, index):
+        if 0 <= index < len(self.facts):
+            del self.facts[index]
+            self.save()
+
+
 class ChatStore(object):
     def __init__(self, path=None):
         self.path = path
@@ -3987,6 +4067,85 @@ class Hair(Widget):
         self._line.size = self.size
 
 
+BLUR_FS = """$HEADER$
+uniform vec2 step_dir;
+void main(void) {
+    vec2 uv = tex_coord0;
+    vec4 c = texture2D(texture0, uv) * 0.2270270270;
+    c += texture2D(texture0, uv + step_dir * 1.3846153846) * 0.3162162162;
+    c += texture2D(texture0, uv - step_dir * 1.3846153846) * 0.3162162162;
+    c += texture2D(texture0, uv + step_dir * 3.2307692308) * 0.0702702703;
+    c += texture2D(texture0, uv - step_dir * 3.2307692308) * 0.0702702703;
+    gl_FragColor = c * frag_color;
+}
+"""
+_BLUR_KEEP = []          # the frame buffers must stay alive as long as their textures are shown
+
+
+def _blur_pass(texture, dx, dy):
+    width, height = texture.size
+    fbo = Fbo(size=(width, height))
+    fbo.shader.fs = BLUR_FS
+    if not fbo.shader.success:
+        raise RuntimeError("blur shader did not compile")
+    fbo["step_dir"] = (dx / float(width), dy / float(height))
+    with fbo:
+        Color(1, 1, 1, 1)
+        Rectangle(texture=texture, pos=(0, 0), size=(width, height))
+    fbo.draw()
+    _BLUR_KEEP.append(fbo)
+    out = fbo.texture
+    out.mag_filter = "linear"
+    out.min_filter = "linear"
+    return out
+
+
+def capture_blur(widget, scale=0.16):
+    """A frosted-glass picture of what `widget` shows now: a small snapshot is smoothed with a real gaussian
+    blur (shader, several passes) and stretched back, so no blocky pixels are visible.
+    Returns a texture or None (then only the dim layer is used)."""
+    parent = widget.parent
+    index = -1
+    try:
+        width, height = int(widget.width * scale), int(widget.height * scale)
+        if width < 8 or height < 8:
+            return None
+        del _BLUR_KEEP[:]
+        if parent is not None:
+            index = parent.canvas.indexof(widget.canvas)
+            if index > -1:
+                parent.canvas.remove(widget.canvas)
+        fbo = Fbo(size=(width, height))
+        with fbo:
+            ClearColor(0, 0, 0, 1)
+            ClearBuffers()
+            Scale(scale, scale, 1)
+            Translate(-widget.x, -widget.y, 0)
+        fbo.add(widget.canvas)
+        fbo.draw()
+        fbo.remove(widget.canvas)
+        _BLUR_KEEP.append(fbo)
+        texture = fbo.texture
+        texture.mag_filter = "linear"
+        texture.min_filter = "linear"
+    except Exception:
+        save_crash("Blur capture failed:\n" + traceback.format_exc())
+        return None
+    finally:
+        try:
+            if parent is not None and index > -1 and widget.canvas not in parent.canvas.children:
+                parent.canvas.insert(index, widget.canvas)
+        except Exception:
+            save_crash("Blur capture could not restore the canvas:\n" + traceback.format_exc())
+    try:
+        for radius in (1.0, 2.0, 3.0):
+            texture = _blur_pass(texture, radius, 0)
+            texture = _blur_pass(texture, 0, radius)
+    except Exception:
+        save_crash("Blur shader failed (the small snapshot is used):\n" + traceback.format_exc())
+    return texture
+
+
 class GlassSheet(FloatLayout):
     """Frosted panel over a dim scrim: used for the menu and for every section opened from it."""
 
@@ -3997,7 +4156,9 @@ class GlassSheet(FloatLayout):
         theme = THEMES[app.theme_index]
         tint = hex_color(theme["accent"])[:3]
         with self.canvas.before:
-            Color(*((0.86, 0.92, 1.0, 0.62) if UI_LIGHT else (0.0, 0.01, 0.05, 0.66)))
+            self._bg_c = Color(1, 1, 1, 0)
+            self._bg_rect = Rectangle(pos=self.pos, size=self.size)
+            self._scrim_c = Color(*((0.86, 0.92, 1.0, 0.62) if UI_LIGHT else (0.0, 0.01, 0.05, 0.66)))
             self._scrim = Rectangle(pos=self.pos, size=self.size)
             self._glow_c = Color(1, 1, 1, 0.30 if UI_LIGHT else 0.55)
             self._glow = Rectangle(texture=glow_texture(tint), pos=(0, 0), size=(10, 10))
@@ -4032,11 +4193,18 @@ class GlassSheet(FloatLayout):
     def _layout(self, *_):
         self._scrim.pos = self.pos
         self._scrim.size = self.size
+        self._bg_rect.pos = self.pos
+        self._bg_rect.size = self.size
         size = max(self.width, self.height) * 1.2
         self._glow.size = (size, size)
         self._glow.pos = (self.right - size * 0.7, self.top - size * 0.6)
 
     def open(self):
+        texture = capture_blur(self.app.root_layout) if hasattr(self.app, "root_layout") else None
+        if texture is not None:                 # the app screen behind turns into fog
+            self._bg_rect.texture = texture
+            self._scrim_c.a = 0.30 if UI_LIGHT else 0.38
+            Animation(a=1, d=0.30, t="out_quad").start(self._bg_c)
         Window.add_widget(self)
         self.app.sheet_opened(self)
         Animation(opacity=1, d=0.22, t="out_quad").start(self)
@@ -4093,7 +4261,9 @@ class GlassDialog(GlassSheet):
         theme = THEMES[app.theme_index]
         tint = hex_color(theme["accent"])[:3]
         with self.canvas.before:
-            Color(*((0.86, 0.92, 1.0, 0.62) if UI_LIGHT else (0.0, 0.01, 0.05, 0.66)))
+            self._bg_c = Color(1, 1, 1, 0)
+            self._bg_rect = Rectangle(pos=self.pos, size=self.size)
+            self._scrim_c = Color(*((0.86, 0.92, 1.0, 0.62) if UI_LIGHT else (0.0, 0.01, 0.05, 0.66)))
             self._scrim = Rectangle(pos=self.pos, size=self.size)
             self._glow_c = Color(1, 1, 1, 0.30 if UI_LIGHT else 0.55)
             self._glow = Rectangle(texture=glow_texture(tint), pos=(0, 0), size=(10, 10))
@@ -4290,6 +4460,58 @@ def glass_input(app, hint, text="", password=False, center=False, size=15):
     return wrap, ti
 
 
+class EmojiInput(TextInput):
+    """Text field that paints typed emoji as full-colour pictures (the same ones the chat shows).
+    The text itself is untouched; the pictures are drawn over the plain glyphs. If anything about the
+    geometry cannot be read, nothing is drawn and the plain glyphs stay visible."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._emoji_ev = None
+        for prop in ("text", "pos", "size", "scroll_x", "scroll_y", "font_size", "padding"):
+            self.bind(**{prop: self._emoji_later})
+
+    def _emoji_later(self, *_):
+        if self._emoji_ev is not None:
+            self._emoji_ev.cancel()
+        self._emoji_ev = Clock.schedule_once(self._emoji_draw, 0.04)
+
+    def _emoji_draw(self, *_):
+        self.canvas.after.clear()
+        try:
+            if not self.text or not emoji_pack()[0]:
+                return
+            label = self._label_cached
+            line_h = self.line_height + self.line_spacing
+            left = self.x + self.padding[0] - self.scroll_x
+            top = self.top - self.padding[1] + self.scroll_y
+            side = self.font_size * 1.25
+            with self.canvas.after:
+                Color(1, 1, 1, 1)
+                for row, line in enumerate(self._lines):
+                    if not any(ord(ch) >= 0x203C for ch in line) and not any(ch in "#*0123456789" for ch in line):
+                        continue
+                    before = ""
+                    bottom = top - (row + 1) * line_h
+                    for kind, value in split_emoji(line):
+                        if kind == "t":
+                            before += value
+                            continue
+                        tex = emoji_texture(value)
+                        start = label.get_extents(before)[0] if before else 0
+                        width = label.get_extents(value)[0]
+                        before += value
+                        if tex is None:
+                            continue
+                        cx = left + start + width / 2.0
+                        cy = bottom + line_h / 2.0
+                        if cy < self.y or cy > self.top:        # scrolled out of sight
+                            continue
+                        Rectangle(texture=tex, pos=(cx - side / 2.0, cy - side / 2.0), size=(side, side))
+        except Exception:
+            self.canvas.after.clear()
+
+
 class JarvisApp(App):
     def build(self):
         self.title = "S.A.I"
@@ -4298,6 +4520,7 @@ class JarvisApp(App):
         self._last_err = None
         self._err_count = 0
         self.store = JsonStore(os.path.join(self.user_data_dir, "jarvis_settings.json"))
+        self.profile = ProfileStore(os.path.join(self.user_data_dir, "user_profile.json"))
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
@@ -4537,7 +4760,7 @@ class JarvisApp(App):
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
         glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
-        self.command_input = TextInput(
+        self.command_input = EmojiInput(
             hint_text=self.t("input"), multiline=True, size_hint_x=1,
             font_size=dp(15), foreground_color=hex_color(theme["text"]),
             hint_text_color=(*hex_color(theme["accent"])[:3], 0.52),
@@ -4545,7 +4768,7 @@ class JarvisApp(App):
             background_normal="", background_active="",
             background_color=(0, 0, 0, 0),
             padding=[dp(8), dp(15), dp(4), dp(10)],
-            input_type="text", keyboard_suggestions=True,
+            input_type="text", keyboard_suggestions=False,
         )
         # Enter starts a new paragraph (multiline); a message is sent only with the send button.
         self.command_input.bind(text=self.on_text_change)
@@ -4805,7 +5028,46 @@ class JarvisApp(App):
             save_crash("Attachment picker failed: " + str(exc))
             self.show_response(self.t("file_picker_failed"))
 
+    def _read_uri_bytes(self, resolver, uri, limit):
+        """Bytes of a picked document. Three independent ways; the first one that returns data wins."""
+        from jnius import autoclass
+        raw = b""
+        try:                                                        # 1) plain file descriptor, read by Python
+            pfd = resolver.openFileDescriptor(uri, "r")
+            fd = pfd.detachFd()
+            with os.fdopen(fd, "rb") as handle:
+                raw = handle.read(limit + 1)
+        except Exception:
+            save_crash("Read way 1 (descriptor) failed:\n" + traceback.format_exc())
+            raw = b""
+        if raw:
+            return raw
+        try:                                                        # 2) Android copies the stream into a temp file
+            tmp = os.path.join(self.media_dir(), "_incoming.tmp")
+            stream = resolver.openInputStream(uri)
+            out = autoclass("java.io.FileOutputStream")(tmp)
+            autoclass("android.os.FileUtils").copy(stream, out)
+            out.close()
+            stream.close()
+            with open(tmp, "rb") as handle:
+                raw = handle.read(limit + 1)
+            os.remove(tmp)
+        except Exception:
+            save_crash("Read way 2 (FileUtils) failed:\n" + traceback.format_exc())
+            raw = b""
+        if raw:
+            return raw
+        stream = resolver.openInputStream(uri)                      # 3) Java channels
+        output = autoclass("java.io.ByteArrayOutputStream")()
+        try:
+            copy_java_stream(stream, output, limit)
+        except RuntimeError:
+            raise LocalizedError(self.t("file_too_big"))
+        stream.close()
+        return java_bytes(output.toByteArray())
+
     def on_activity_result(self, request_code, result_code, data):
+        """Runs on the Android thread: only the file is read here, everything on screen happens in the Kivy thread."""
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
             return
         self._attachment_pending = False
@@ -4817,32 +5079,14 @@ class JarvisApp(App):
                 return
             uri = data.getData()
             if uri is None:
-                self.show_response(self.t("file_not_selected"))
+                Clock.schedule_once(lambda dt: self.show_response(self.t("file_not_selected")), 0)
                 return
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             resolver = PythonActivity.mActivity.getContentResolver()
             mime = str(resolver.getType(uri) or "application/octet-stream")
             stage = "read"
             limit = 20 * 1024 * 1024
-            raw = b""
-            try:
-                # Simplest and most reliable way: a plain file descriptor that Python reads itself.
-                pfd = resolver.openFileDescriptor(uri, "r")
-                fd = pfd.detachFd()
-                with os.fdopen(fd, "rb") as handle:
-                    raw = handle.read(limit + 1)
-            except Exception:
-                save_crash("File descriptor read failed, trying streams:\n" + traceback.format_exc())
-                raw = b""
-            if not raw:
-                stream = resolver.openInputStream(uri)
-                output = autoclass("java.io.ByteArrayOutputStream")()
-                try:
-                    copy_java_stream(stream, output, limit)
-                except RuntimeError:
-                    raise LocalizedError(self.t("file_too_big"))
-                stream.close()
-                raw = java_bytes(output.toByteArray())
+            raw = self._read_uri_bytes(resolver, uri, limit)
             if len(raw) > limit:
                 raise LocalizedError(self.t("file_too_big"))
             if not raw:
@@ -4859,11 +5103,20 @@ class JarvisApp(App):
                     cursor.close()
             except Exception:
                 pass
+            Clock.schedule_once(lambda dt: self._attachment_ui(name, mime, raw), 0)
+        except Exception as exc:
+            save_crash("Attachment read failed at stage " + stage + ":\n" + traceback.format_exc())
+            message = self.friendly_error(exc) + " <" + stage + ">"
+            Clock.schedule_once(lambda dt: self.show_response(self.t("file_read_failed").format(message)), 0)
+
+    def _attachment_ui(self, name, mime, raw):
+        """Kivy thread: show the picture/file in the chat and wait for (or run) the user's instruction."""
+        stage = "save"
+        try:
             prompt = self.command_input.text.strip() if hasattr(self, "command_input") else ""
             if hasattr(self, "command_input"):
                 self.command_input.text = ""
             chat_id = self.chats.current_id
-            stage = "save"
             path = self._save_private(raw, os.path.basename(name).replace("]", "_"))
             marker = ("[[img:" if mime.startswith("image/") else "[[file:") + path + "]]"
             att = {"chat_id": chat_id, "name": name, "mime": mime, "raw": raw}
@@ -4873,14 +5126,13 @@ class JarvisApp(App):
                 stage = "send"
                 self._process_attachment(chat_id, att, prompt)
             else:
-                # Show the picture/file and wait for the user's instruction.
                 self.add_chat_message(chat_id, "user", name + "\n" + marker)
                 stage = "wait-note"
                 self._pending_attachment = att
                 self.add_chat_message(chat_id, "jarvis", self.t("file_waiting"))
         except Exception as exc:
-            save_crash("Attachment read failed at stage " + stage + ":\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt, message=self.friendly_error(exc) + " <" + stage + ">": self.show_response(self.t("file_read_failed").format(message)), 0)
+            save_crash("Attachment display failed at stage " + stage + ":\n" + traceback.format_exc())
+            self.show_response(self.t("file_read_failed").format(self.friendly_error(exc) + " <" + stage + ">"))
 
     def _process_attachment(self, chat_id, att, prompt):
         name, mime, raw = att["name"], att["mime"], att["raw"]
@@ -5521,11 +5773,13 @@ class JarvisApp(App):
         # Keep prior turns for the API before adding the current user message.
         chat = self.chats.get(chat_id) or self.chats.current()
         history = []
-        for item in chat.get("messages", [])[-12:]:
+        for item in chat.get("messages", [])[-24:]:
             role = "assistant" if item.get("role") == "jarvis" else item.get("role")
             if role in ("user", "assistant") and item.get("text"):
                 history.append({"role": role, "content": self.brand(item["text"])[:4000]})
-        history = self._with_memory(chat_id, history)
+        history = self._with_memory(chat_id, history, command_text)
+        for fact in extract_facts(command_text):
+            self.profile.add(fact)
         self.add_chat_message(chat_id, "user", command_text)
         pending = getattr(self, "_pending_attachment", None)
         if pending and pending.get("chat_id") == chat_id:
@@ -5559,30 +5813,107 @@ class JarvisApp(App):
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.03))
 
 
-    def _with_memory(self, chat_id, history):
-        """Earlier chats + app facts as two leading messages, so a new chat is not a blank page."""
+    def _with_memory(self, chat_id, history, query=""):
+        """Everything the assistant should know before answering, as two leading messages: who the user is,
+        all older commands of this chat, the topics of other chats and the earlier messages that fit the question.
+        (The server accepts 12 messages; older turns are squeezed into this note instead of being dropped.)"""
         try:
-            lines = []
-            now_chat = self.chats.get(chat_id)
-            others = [c for c in self.chats.sorted_chats() if c is not now_chat and c.get("messages")][:6]
-            for c in others:
-                users = [strip_media(m.get("text", "")).replace("\n", " ").strip()[:160]
-                         for m in c["messages"] if m.get("role") == "user"][-4:]
-                users = [u for u in users if u]
-                if users:
-                    lines.append("- " + (c.get("title") or "?") + ": " + " | ".join(users))
-            facts = ["assistant name: " + str(self.assistant_name), "app language: " + str(self.language)]
-            if self.username:
-                facts.append("user account name: " + str(self.username))
-            text = ("Background about this user and this app (use only when relevant, never mention this note): "
-                    + "; ".join(facts) + ".")
-            if lines:
-                text += "\nTopics from earlier chats:\n" + "\n".join(lines)
-            memory = [{"role": "user", "content": text[:3500]},
-                      {"role": "assistant", "content": "OK."}]
-            return memory + history[-10:]
+            def one_line(text, n):
+                return " ".join(strip_media(text).split())[:n]
+
+            recent = history[-10:]
+            cut = max(0, len(history) - 10)
+            chat = self.chats.get(chat_id)
+            parts = ["Background about this user and this app (use it when relevant, never mention this note). "
+                     "assistant name: " + str(self.assistant_name) + "; app language: " + str(self.language) +
+                     ("; account: " + str(self.username) if self.username else "") + "."]
+            facts = [f["text"] for f in self.profile.facts][-40:]
+            if facts:
+                block, size = [], 0
+                for fact in reversed(facts):
+                    if size + len(fact) > 1300:
+                        break
+                    block.append("- " + fact)
+                    size += len(fact) + 3
+                parts.append("What the user told about himself:\n" + "\n".join(reversed(block)))
+            messages = chat.get("messages", []) if chat else []
+            older = [one_line(m.get("text", ""), 110) for m in messages[:-10] if m.get("role") == "user"]
+            older = [o for o in older if o][-30:]
+            if older:
+                parts.append("Earlier user messages in this chat (oldest first):\n" + "\n".join("- " + o for o in older))
+            titles = [c.get("title") for c in self.chats.sorted_chats() if c is not chat and c.get("title")][:14]
+            if titles:
+                parts.append("Topics of the user's other chats: " + "; ".join(titles) + ".")
+            tokens = {w[:5] for w in re.findall(r"\w{4,}", str(query).lower())}
+            if tokens:
+                scored = []
+                for c in self.chats.chats:
+                    msgs = c.get("messages", [])
+                    for i, m in enumerate(msgs):
+                        if c is chat and i >= len(msgs) - 10:
+                            continue
+                        low = strip_media(m.get("text", "")).lower()
+                        score = sum(1 for t in tokens if t in low)
+                        if score:
+                            scored.append((score, c.get("updated", ""), c.get("title") or "?", m.get("role"), m.get("text", "")))
+                scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                lines = ["- [" + t + "] " + ("user" if r == "user" else "assistant") + ": " + one_line(txt, 200)
+                         for _sc, _up, t, r, txt in scored[:6]]
+                if lines:
+                    parts.append("Earlier messages that may be related:\n" + "\n".join(lines))
+            note = "\n\n".join(parts)[:3800]
+            return [{"role": "user", "content": note}, {"role": "assistant", "content": "OK."}] + recent
         except Exception:
-            return history
+            save_crash("Memory block failed:\n" + traceback.format_exc())
+            return history[-12:]
+
+    def _maybe_retitle(self, chat_id):
+        """Name the chat after its topic (not after the first command): after the first answer, and again later."""
+        try:
+            chat = self.chats.get(chat_id)
+            if not chat or not self.server_token.strip():
+                return
+            count, done = len(chat.get("messages", [])), int(chat.get("titled_at", 0))
+            step = 2 if (count >= 2 and done < 2) else 10 if (count >= 10 and done < 10) else 30 if (count >= 30 and done < 30) else 0
+            if not step:
+                return
+            chat["titled_at"] = step
+            self.chats.save()
+            lines = []
+            for m in chat["messages"][:14]:
+                lines.append(("user: " if m.get("role") == "user" else "assistant: ") + " ".join(strip_media(m.get("text", "")).split())[:180])
+            threading.Thread(target=self._title_job, args=(chat_id, "\n".join(lines)), daemon=True).start()
+        except Exception:
+            save_crash("Retitle failed:\n" + traceback.format_exc())
+
+    def _title_job(self, chat_id, transcript):
+        try:
+            name = {"tg": "Tajik (Cyrillic)", "ru": "Russian", "en": "English"}[self._lang_code()]
+            ask = ("Name the topic of this conversation with a very short title: 2 to 5 words, in " + name +
+                   ", no quotes, no final punctuation. Output only the title.\n\nConversation:\n" + transcript)
+            payload = json.dumps({"message": ask[:3900], "history": [], "web_search": False,
+                                  "language": self._lang_code(), "assistant_name": self.assistant_name},
+                                 ensure_ascii=False).encode("utf-8")
+            _headers, data = self._server_call("/chat", payload, "application/json", timeout=60)
+            answer = str(json.loads(data.decode("utf-8")).get("answer", "")).strip()
+            title = answer.splitlines()[0].strip().strip("\"'«»*#").strip() if answer else ""
+            for prefix in ("Title:", "Сарлавҳа:", "Название:", "Тема:"):
+                if title.lower().startswith(prefix.lower()):
+                    title = title[len(prefix):].strip()
+            title = title.rstrip(".!:;,")[:40]
+            if len(title) < 3:
+                return
+
+            def apply(dt):
+                chat = self.chats.get(chat_id)
+                if chat is not None:
+                    chat["title"] = title
+                    self.chats.save()
+                    if self.chats.current_id == chat_id and hasattr(self, "response_title"):
+                        self.response_title.text = self.chat_title()
+            Clock.schedule_once(apply, 0)
+        except Exception:
+            save_crash("Title job failed:\n" + traceback.format_exc())
 
     def _voice_ready(self):
         if hasattr(self, "status_label"):
@@ -5726,6 +6057,7 @@ class JarvisApp(App):
 
     def deliver_answer(self, chat_id, answer):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
+        Clock.schedule_once(lambda dt: self._maybe_retitle(chat_id), 10)
         answer = self.brand(answer)
         text = str(answer).strip()[:4000]
         if self.speak_enabled and text and self.server_token.strip():
@@ -6315,16 +6647,45 @@ class JarvisApp(App):
         theme = THEMES[self.theme_index]
         content = BoxLayout(orientation="vertical", spacing=dp(8))
         titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
-                  "voice": "title_voice", "account": "title_account", "mode": "title_mode"}
+                  "voice": "title_voice", "account": "title_account", "mode": "title_mode",
+                  "profile": "title_profile"}
 
         def option(text, active, callback, height=54):
             self.frost_row(content, text, active, callback, height)
 
         if section == "main":
-            for key, target in (("sec_theme", "theme"), ("sec_mode", "mode"), ("sec_lang", "language"),
-                                ("sec_voice", "voice"), ("sec_account", "account")):
+            for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
+                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_account", "account")):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
             content.add_widget(Widget())
+        elif section == "profile":
+            content.add_widget(make_label(self.t("profile_note"), 11, muted(), False, size_hint_y=None, height=dp(44)))
+            scroll = ScrollView(do_scroll_x=False)
+            grid = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
+            grid.bind(minimum_height=grid.setter("height"))
+            if not self.profile.facts:
+                grid.add_widget(make_label(self.t("profile_empty"), 13, theme["text"], False, size_hint_y=None, height=dp(60)))
+            for index, fact in enumerate(self.profile.facts):
+                row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(52))
+                chip = FrostButton(tint=hex_color(theme["accent"])[:3], alpha=0.10, text=mk(fact["text"]), font_size=dp(13),
+                                   color=hex_color(theme["text"]))
+                gone = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, text="×", font_size=dp(24),
+                                   halign="center", size_hint_x=None, width=dp(48), color=hex_color(theme["text"]))
+                gone.bind(on_release=lambda inst, i=index: (self.profile.remove(i), self.open_section("profile")))
+                row.add_widget(chip)
+                row.add_widget(gone)
+                grid.add_widget(row)
+            scroll.add_widget(grid)
+            content.add_widget(scroll)
+            wrap, fact_in = glass_input(self, self.t("profile_hint"), "", size=14)
+            content.add_widget(wrap)
+
+            def add_fact(*_):
+                if fact_in.text.strip():
+                    self.profile.add(fact_in.text)
+                    self.open_section("profile")
+            fact_in.bind(on_text_validate=add_fact)
+            self.frost_row(content, self.t("profile_add"), True, add_fact, 48, center=True)
         elif section == "mode":
             for key, code in (("mode_auto", "auto"), ("mode_dark", "dark"), ("mode_light", "light")):
                 option(self.t(key), self.ui_mode == code,
