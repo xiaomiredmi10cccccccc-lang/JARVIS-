@@ -10,3 +10,5 @@ edge-tts
 onnxruntime>=1.17,<2
 numpy>=1.26,<3
 pillow>=10,<12
+pypdf
+python-docx
