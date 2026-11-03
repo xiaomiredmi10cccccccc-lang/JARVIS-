@@ -463,6 +463,7 @@ TEXTS = {
     "tg": {
         "ready": "ҶАРВИС ОМОДА АСТ",
         "voice_preparing": "Овоз омода мешавад…",
+        "attach_ready": "Фармон нависед ва тугмаи фиристоданро зер кунед",
         "sec_profile": "Дар бораи ман",
         "title_profile": "Дар бораи ман",
         "profile_note": "Ман ҳар чизеро, ки дар бораи худатон нависед (ном, шаҳр, кор, дӯстдоштаҳо), дар хотир дорам. Ин танҳо дар телефони шумо захира мешавад.",
@@ -649,6 +650,7 @@ TEXTS = {
     "ru": {
         "ready": "JARVIS ГОТОВ",
         "voice_preparing": "Готовлю голос…",
+        "attach_ready": "Напишите, что сделать, и нажмите «Отправить»",
         "sec_profile": "Обо мне",
         "title_profile": "Обо мне",
         "profile_note": "Я запоминаю всё, что вы пишете о себе (имя, город, работа, увлечения). Это хранится только на вашем телефоне.",
@@ -835,6 +837,7 @@ TEXTS = {
     "en": {
         "ready": "JARVIS IS READY",
         "voice_preparing": "Preparing voice…",
+        "attach_ready": "Write what to do and press Send",
         "sec_profile": "About me",
         "title_profile": "About me",
         "profile_note": "I remember what you tell me about yourself (name, city, work, interests). It is stored only on your phone.",
@@ -4801,7 +4804,13 @@ class JarvisApp(App):
         command_row.add_widget(self.command_input)
         command_row.add_widget(self.stop_speech_btn)
         command_row.add_widget(self.action_btn)
+        self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
+                                      padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
+        frost(self.attach_strip, 20, tint, 0.10, 0.30)
+        main.add_widget(self.attach_strip)
         main.add_widget(command_row)
+        self._refresh_attach_strip()
+        self._sync_action_mode()
 
         footer = make_label(self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"],
                             10, (*hex_color(theme["text"])[:3], 0.7), False,
@@ -5110,29 +5119,66 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt: self.show_response(self.t("file_read_failed").format(message)), 0)
 
     def _attachment_ui(self, name, mime, raw):
-        """Kivy thread: show the picture/file in the chat and wait for (or run) the user's instruction."""
+        """Kivy thread: the picked picture/file waits above the input field; it goes to the AI with the send button."""
         stage = "save"
         try:
-            prompt = self.command_input.text.strip() if hasattr(self, "command_input") else ""
-            if hasattr(self, "command_input"):
-                self.command_input.text = ""
-            chat_id = self.chats.current_id
             path = self._save_private(raw, os.path.basename(name).replace("]", "_"))
-            marker = ("[[img:" if mime.startswith("image/") else "[[file:") + path + "]]"
-            att = {"chat_id": chat_id, "name": name, "mime": mime, "raw": raw}
-            stage = "show"
-            if prompt:
-                self.add_chat_message(chat_id, "user", name + "\n" + prompt + "\n" + marker)
-                stage = "send"
-                self._process_attachment(chat_id, att, prompt)
-            else:
-                self.add_chat_message(chat_id, "user", name + "\n" + marker)
-                stage = "wait-note"
-                self._pending_attachment = att
-                self.add_chat_message(chat_id, "jarvis", self.t("file_waiting"))
+            stage = "stage"
+            self._pending_attachment = {"chat_id": self.chats.current_id, "name": name, "mime": mime, "raw": raw, "path": path}
+            self._refresh_attach_strip()
+            self._sync_action_mode()
+            if hasattr(self, "command_input"):
+                self.command_input.focus = True
         except Exception as exc:
             save_crash("Attachment display failed at stage " + stage + ":\n" + traceback.format_exc())
             self.show_response(self.t("file_read_failed").format(self.friendly_error(exc) + " <" + stage + ">"))
+
+    def _sync_action_mode(self):
+        if hasattr(self, "action_btn") and hasattr(self, "command_input"):
+            has = bool(self.command_input.text.strip()) or bool(getattr(self, "_pending_attachment", None))
+            self.action_btn.set_mode("plane" if has else "wave")
+
+    def clear_attachment(self, *_):
+        self._pending_attachment = None
+        self._refresh_attach_strip()
+        self._sync_action_mode()
+
+    def _refresh_attach_strip(self):
+        """The preview row above the input: thumbnail or file type, name, a hint and a remove button."""
+        strip = getattr(self, "attach_strip", None)
+        if strip is None:
+            return
+        strip.clear_widgets()
+        att = getattr(self, "_pending_attachment", None)
+        if not att:
+            strip.height = 0
+            strip.opacity = 0
+            return
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        strip.height = dp(68)
+        strip.opacity = 1
+        thumb = None
+        if att["mime"].startswith("image/"):
+            try:
+                from kivy.uix.image import Image as KivyImage
+                thumb = KivyImage(source=att["path"], size_hint=(None, 1), width=dp(56), fit_mode="cover", nocache=True)
+            except Exception:
+                thumb = None
+        if thumb is None:
+            ext = (os.path.splitext(att["name"])[1][1:5] or "FILE").upper()
+            thumb = make_label(ext, 13, theme["accent"], True, size_hint=(None, 1), width=dp(56))
+            frost(thumb, 14, tint, 0.16, 0.4)
+        strip.add_widget(thumb)
+        text = BoxLayout(orientation="vertical", spacing=dp(2))
+        text.add_widget(make_label(att["name"], 13, theme["text"], True, halign="left"))
+        text.add_widget(make_label(self.t("attach_ready"), 11, muted(), False, halign="left"))
+        strip.add_widget(text)
+        gone = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.14, radius=16, text="×", font_size=dp(24), halign="center",
+                           size_hint=(None, None), size=(dp(44), dp(44)), pos_hint={"center_y": 0.5},
+                           color=hex_color(theme["text"]))
+        gone.bind(on_release=self.clear_attachment)
+        strip.add_widget(gone)
 
     def _process_attachment(self, chat_id, att, prompt):
         name, mime, raw = att["name"], att["mime"], att["raw"]
@@ -5766,10 +5812,22 @@ class JarvisApp(App):
         if not hasattr(self, "command_input"):
             return
         command_text = self.command_input.text.strip()
-        if not command_text:
+        pending = getattr(self, "_pending_attachment", None)
+        if not command_text and not pending:
             return
         self.command_input.text = ""
         chat_id = self.chats.current_id
+        if pending:                         # picture/file + the typed instruction go to the AI together
+            self._pending_attachment = None
+            self._refresh_attach_strip()
+            self._sync_action_mode()
+            marker = ("[[img:" if pending["mime"].startswith("image/") else "[[file:") + pending["path"] + "]]"
+            shown = pending["name"] + ("\n" + command_text if command_text else "") + "\n" + marker
+            self.add_chat_message(chat_id, "user", shown)
+            for fact in extract_facts(command_text):
+                self.profile.add(fact)
+            self._process_attachment(chat_id, pending, command_text)
+            return
         # Keep prior turns for the API before adding the current user message.
         chat = self.chats.get(chat_id) or self.chats.current()
         history = []
@@ -5781,11 +5839,6 @@ class JarvisApp(App):
         for fact in extract_facts(command_text):
             self.profile.add(fact)
         self.add_chat_message(chat_id, "user", command_text)
-        pending = getattr(self, "_pending_attachment", None)
-        if pending and pending.get("chat_id") == chat_id:
-            self._pending_attachment = None
-            self._process_attachment(chat_id, pending, command_text)
-            return
         media = parse_media_intent(command_text)
         if media is not None:
             self._start_media_job(chat_id, media[0], media[1])
@@ -6341,11 +6394,10 @@ class JarvisApp(App):
         return run_command(self, command_text)
 
     def on_text_change(self, instance, value):
-        if hasattr(self, "action_btn"):
-            self.action_btn.set_mode("plane" if value.strip() else "wave")
+        self._sync_action_mode()
 
     def on_action(self, *_):
-        if self.command_input.text.strip():
+        if self.command_input.text.strip() or getattr(self, "_pending_attachment", None):
             self.send_command()
         else:
             self.toggle_listening()
