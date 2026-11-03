@@ -3,6 +3,7 @@
 All keys come from environment variables on Render (never from code):
   GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY   (any subset; missing ones are skipped)
   GROQ_MODEL, GROQ_VISION_MODEL, GEMINI_MODEL, OPENROUTER_MODEL, OPENROUTER_VISION_MODEL, AI_PROVIDER_ORDER
+  (GEMINI_MODEL and GROQ_VISION_MODEL may hold several model ids separated by commas: they are tried in turn)
   IMAGE_GEN_URL   optional template with {prompt} {w} {h} {seed}  (default: Pollinations, no key)
 """
 import io
@@ -25,16 +26,19 @@ def provider_chain(vision=False, language=None):
     available = {}
     key = env("GROQ_API_KEY", "").strip()
     if key:
-        model = env("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct") if vision else env("GROQ_MODEL", "openai/gpt-oss-120b")
-        available["groq"] = ("groq", key, "https://api.groq.com/openai/v1", model)
+        model = env("GROQ_VISION_MODEL", "qwen/qwen3.8-27b") if vision else env("GROQ_MODEL", "openai/gpt-oss-120b")
+        available["groq"] = [("groq", key, "https://api.groq.com/openai/v1", m.strip()) for m in model.split(",") if m.strip()]
     key = env("GEMINI_API_KEY", "").strip()
     if key:
-        available["gemini"] = ("gemini", key, "https://generativelanguage.googleapis.com/v1beta/openai/", env("GEMINI_MODEL", "gemini-2.5-flash"))
+        # Provider model names change often (gemini-2.5-flash is closed to new users): several are tried in turn.
+        models = env("GEMINI_MODEL", "gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.8-flash")
+        available["gemini"] = [("gemini", key, "https://generativelanguage.googleapis.com/v1beta/openai/", m.strip())
+                               for m in models.split(",") if m.strip()]
     key = env("OPENROUTER_API_KEY", "").strip()
     if key:
         model = env("OPENROUTER_VISION_MODEL", "").strip() if vision else env("OPENROUTER_MODEL", "openrouter/free")
         if model:
-            available["openrouter"] = ("openrouter", key, "https://openrouter.ai/api/v1", model)
+            available["openrouter"] = [("openrouter", key, "https://openrouter.ai/api/v1", model)]
     # Gemini writes Tajik better than the other free models, so Tajik requests try it first
     if vision:
         # Gemini reads images reliably; the Groq vision model is the backup (set AI_PROVIDER_ORDER_VISION to change)
@@ -42,8 +46,12 @@ def provider_chain(vision=False, language=None):
     else:
         default_order = env("AI_PROVIDER_ORDER_TG", "gemini,groq,openrouter") if language == "tg" else env("AI_PROVIDER_ORDER", "groq,gemini,openrouter")
     order = [p.strip() for p in default_order.split(",") if p.strip()]
-    chain = [available[name] for name in order if name in available]
-    chain += [value for name, value in available.items() if name not in order]
+    chain = []
+    for name in order:
+        chain += available.get(name, [])
+    for name, value in available.items():
+        if name not in order:
+            chain += value
     return chain
 
 
