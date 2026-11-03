@@ -720,12 +720,16 @@ async def analyze_attachment(http_request: Request, x_jarvis_token: str | None =
         "en": "Answer in English. Analyze the file, do not invent facts, and say if its contents cannot be read.",
     }[language]
     is_image = mime.startswith("image/")
-    if not ai_tools.provider_chain(vision=is_image):
+    if not ai_tools.provider_chain(vision=is_image, language=language):
         raise HTTPException(status_code=503, detail="No AI provider key is configured" + (" for images (Groq or Gemini)" if is_image else ""))
     try:
-        if mime.startswith("image/"):
-            if mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
-                raise HTTPException(status_code=415, detail="Supported images: JPEG, PNG, WEBP, GIF")
+        if is_image:
+            try:
+                raw, mime = await asyncio.to_thread(prepare_image, raw)
+            except Exception as exc:
+                print("Image preparation failed:", type(exc).__name__, str(exc)[:100])
+                if mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+                    raise HTTPException(status_code=415, detail="Supported images: JPEG, PNG, WEBP, GIF")
             data_url = "data:" + mime + ";base64," + base64.b64encode(raw).decode("ascii")
             messages = [
                 {"role": "system", "content": instructions},
@@ -734,26 +738,88 @@ async def analyze_attachment(http_request: Request, x_jarvis_token: str | None =
                     {"type": "image_url", "image_url": {"url": data_url}},
                 ]},
             ]
-        elif mime.startswith("text/") or filename.lower().endswith((".txt", ".csv", ".json", ".md", ".log")):
+        else:
             try:
-                file_text = raw.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                raise HTTPException(status_code=415, detail="Text file must use UTF-8 encoding")
+                file_text = await asyncio.to_thread(extract_text, filename, raw, mime)
+            except UnsupportedFile as exc:
+                raise HTTPException(status_code=415, detail=str(exc))
+            if not file_text.strip():
+                raise HTTPException(status_code=422, detail="No readable text found in this file (a scanned PDF has no text layer)")
             if len(file_text) > 30000:
                 file_text = file_text[:30000] + "\n[Файл барои таҳлил кӯтоҳ карда шуд]"
             messages = [
                 {"role": "system", "content": instructions},
                 {"role": "user", "content": "Файл: " + filename + "\nДархост: " + prompt + "\n\nМундариҷаи файл:\n" + file_text},
             ]
-        else:
-            raise HTTPException(status_code=415, detail="Currently supported: images and UTF-8 text files (TXT, CSV, JSON, MD, LOG). PDF and Office documents are not supported yet.")
-        result = await asyncio.to_thread(ai_tools.complete, messages, is_image, 1500, 60.0)
+        result = await asyncio.to_thread(ai_tools.complete, messages, is_image, 1500, 60.0, language)
         return {"answer": result["answer"], "filename": filename, "model": result["provider"] + ":" + result["model"]}
     except HTTPException:
         raise
     except Exception as exc:
-        print("Attachment analysis failed:", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="The AI service could not analyze this file. Check the configured vision model and try again.")
+        print("Attachment analysis failed:", type(exc).__name__, str(exc)[:200])
+        # Only provider names and exception types (no keys or user data) are returned, to make problems easy to find.
+        raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
+
+
+class UnsupportedFile(Exception):
+    pass
+
+
+TEXT_EXTS = (".txt", ".csv", ".json", ".md", ".log", ".py", ".html", ".htm", ".css", ".js", ".xml", ".yaml", ".yml", ".ini", ".kv", ".tsv", ".sql")
+
+
+def prepare_image(raw: bytes):
+    """Phone photos are large; vision models want a modest JPEG. Returns (jpeg_bytes, "image/jpeg")."""
+    import io
+    from PIL import Image, ImageOps
+    img = Image.open(io.BytesIO(raw))
+    img.load()
+    try:
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        pass
+    img = img.convert("RGB")
+    width, height = img.size
+    scale = min(1.0, 1600.0 / max(width, height))
+    if scale < 1.0:
+        img = img.resize((max(1, int(width * scale)), max(1, int(height * scale))), Image.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=85)
+    return out.getvalue(), "image/jpeg"
+
+
+def extract_text(filename: str, raw: bytes, mime: str) -> str:
+    import io
+    low = filename.lower()
+    if low.endswith(".pdf") or mime == "application/pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            raise UnsupportedFile("PDF reading is not installed on the server (add pypdf to requirements.txt)")
+        reader = PdfReader(io.BytesIO(raw))
+        parts = []
+        for page in reader.pages[:40]:
+            parts.append(page.extract_text() or "")
+        return "\n".join(parts)
+    if low.endswith(".docx"):
+        try:
+            from docx import Document
+        except ImportError:
+            raise UnsupportedFile("Word reading is not installed on the server (add python-docx to requirements.txt)")
+        doc = Document(io.BytesIO(raw))
+        parts = [p.text for p in doc.paragraphs]
+        for table in doc.tables:
+            for row in table.rows:
+                parts.append(" | ".join(cell.text for cell in row.cells))
+        return "\n".join(parts)
+    if mime.startswith("text/") or low.endswith(TEXT_EXTS):
+        for encoding in ("utf-8-sig", "cp1251"):
+            try:
+                return raw.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return raw.decode("utf-8", "replace")
+    raise UnsupportedFile("Supported files: images, PDF, Word (DOCX) and text files (TXT, CSV, JSON, MD, LOG, code)")
 
 
 def _read_form(content_type: str, body: bytes) -> dict:
