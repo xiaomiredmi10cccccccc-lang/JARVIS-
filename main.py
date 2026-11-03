@@ -4821,15 +4821,28 @@ class JarvisApp(App):
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             resolver = PythonActivity.mActivity.getContentResolver()
             mime = str(resolver.getType(uri) or "application/octet-stream")
-            stream = resolver.openInputStream(uri)
-            output = autoclass("java.io.ByteArrayOutputStream")()
-            # Copy with Java channels: no Java arrays are needed (pyjnius has no `jarray`).
+            limit = 20 * 1024 * 1024
+            raw = b""
             try:
-                copy_java_stream(stream, output, 20 * 1024 * 1024)
-            except RuntimeError:
+                # Simplest and most reliable way: a plain file descriptor that Python reads itself.
+                pfd = resolver.openFileDescriptor(uri, "r")
+                fd = pfd.detachFd()
+                with os.fdopen(fd, "rb") as handle:
+                    raw = handle.read(limit + 1)
+            except Exception:
+                save_crash("File descriptor read failed, trying streams:\n" + traceback.format_exc())
+                raw = b""
+            if not raw:
+                stream = resolver.openInputStream(uri)
+                output = autoclass("java.io.ByteArrayOutputStream")()
+                try:
+                    copy_java_stream(stream, output, limit)
+                except RuntimeError:
+                    raise LocalizedError(self.t("file_too_big"))
+                stream.close()
+                raw = java_bytes(output.toByteArray())
+            if len(raw) > limit:
                 raise LocalizedError(self.t("file_too_big"))
-            stream.close()
-            raw = java_bytes(output.toByteArray())
             if not raw:
                 raise LocalizedError(self.t("file_empty"))
             name = str(uri.getLastPathSegment() or "attachment")
@@ -5160,7 +5173,16 @@ class JarvisApp(App):
         elif isinstance(exc, OSError) or str(exc) == "network":
             key = "err_network"
         else:
-            code = " [" + type(exc).__name__[:30] + "]"      # which kind of internal error (helps to find the cause)
+            where = ""
+            try:                                             # where it happened: function name and line
+                tb = exc.__traceback__
+                while tb is not None and tb.tb_next is not None:
+                    tb = tb.tb_next
+                if tb is not None:
+                    where = " @" + tb.tb_frame.f_code.co_name[:24] + ":" + str(tb.tb_lineno)
+            except Exception:
+                pass
+            code = " [" + type(exc).__name__[:30] + where + "]"
         return self.t(key) + code
 
     # ------------------------------------------------------------------ Tajik voice: short pieces, text first
