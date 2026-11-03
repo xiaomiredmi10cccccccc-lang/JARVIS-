@@ -4,6 +4,7 @@ JARVIS Android Assistant
 Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
 """
 from datetime import datetime
+import copy
 import json
 import math
 import os
@@ -19,6 +20,7 @@ import urllib.error
 
 from kivy.app import App
 from kivy.base import ExceptionHandler, ExceptionManager
+from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp
@@ -413,6 +415,29 @@ THEMES = [
      "background": "#01050A", "panel": "#08141F", "text": "#E8F8FF"},
 ]
 
+BASE_THEMES = copy.deepcopy(THEMES)
+LIGHT_THEMES = [
+    {"accent": "#2563C7", "accent2": "#4F7BFF", "background": "#CDD6E4", "panel": "#DCE4EF", "text": "#0F1E38"},
+    {"accent": "#0A7FA6", "accent2": "#1A8FB0", "background": "#CBDDE3", "panel": "#DAE7EC", "text": "#0B2230"},
+    {"accent": "#0A74A6", "accent2": "#2B7FC0", "background": "#CCDCE6", "panel": "#DBE6EE", "text": "#08202E"},
+]
+UI_LIGHT = False
+
+
+def apply_mode(light):
+    """Light/dark mode: the theme dictionaries are updated in place, every screen reads them when it is built."""
+    global UI_LIGHT
+    UI_LIGHT = bool(light)
+    for i, base in enumerate(BASE_THEMES):
+        THEMES[i].update(base)
+        if UI_LIGHT:
+            THEMES[i].update(LIGHT_THEMES[i])
+
+
+def muted():
+    return "#5E7194" if UI_LIGHT else "#8FA6C8"
+
+
 def visible_chars(words, position_ms):
     """How many characters of the spoken text should be visible at this playback position.
     `words` is [[start_ms, end_char], ...] from the server, in order."""
@@ -436,6 +461,12 @@ TEXTS = {
     "tg": {
         "ready": "ҶАРВИС ОМОДА АСТ",
         "voice_preparing": "Овоз омода мешавад…",
+        "sec_mode": "Равшан / торик",
+        "title_mode": "Намуд",
+        "mode_auto": "Мувофиқи система",
+        "mode_dark": "Торик",
+        "mode_light": "Равшан",
+        "ob_or": "ё",
         "file_waiting": "Файл қабул шуд. Бо он чӣ кор кунам? (масалан: таҳлил кун, матнро хон, таҳрир кун)",
         "online": "Система фаъол аст",
         "welcome": "Салом! Ман JARVIS ҳастам. Чӣ кор кунам?",
@@ -610,6 +641,12 @@ TEXTS = {
     "ru": {
         "ready": "JARVIS ГОТОВ",
         "voice_preparing": "Готовлю голос…",
+        "sec_mode": "Светлая / тёмная",
+        "title_mode": "Режим",
+        "mode_auto": "Как в системе",
+        "mode_dark": "Тёмный",
+        "mode_light": "Светлый",
+        "ob_or": "или",
         "file_waiting": "Файл получен. Что с ним сделать? (например: проанализируй, прочитай текст, отредактируй)",
         "online": "Система активна",
         "welcome": "Здравствуйте! Я JARVIS. Чем могу помочь?",
@@ -784,6 +821,12 @@ TEXTS = {
     "en": {
         "ready": "JARVIS IS READY",
         "voice_preparing": "Preparing voice…",
+        "sec_mode": "Light / dark",
+        "title_mode": "Mode",
+        "mode_auto": "Same as system",
+        "mode_dark": "Dark",
+        "mode_light": "Light",
+        "ob_or": "or",
         "file_waiting": "File received. What should I do with it? (for example: analyze, read the text, edit)",
         "online": "System online",
         "welcome": "Hello! I am JARVIS.",
@@ -3488,6 +3531,11 @@ def find_info_command(text):
 
 
 SERVER_BASE = "https://jarvis-ai-server-3vuo.onrender.com"
+OLD_NAME_RE = re.compile(
+    r"(?<![\w/.\-])(?:[Jj]\.?[Aa]\.?[Rr]\.?[Vv]\.?[Ii]\.?[Ss]|Джарвис|Ҷарвис|Жарвис|Чарвис|ДЖАРВИС|ҶАРВИС)"
+    r"(?:[а-яёӣӯқғҳҷ]{0,3})?(?![\w\-])", re.IGNORECASE)
+
+
 def dotted_name(name):
     """SAI -> S.A.I, Jarvis -> J.A.R.V.I.S (a dot after every letter, words stay apart)."""
     words = []
@@ -3803,6 +3851,445 @@ class FlatIconButton(Button):
         self._icon_rect.texture = icon_texture(kind)
 
 
+# ---------------------------------------------------------------------------------------------
+# Frosted-glass look: layered translucent fills, a soft top sheen and a light edge (Kivy has no
+# real live blur, so the "blur" is made from glow textures behind translucent panels).
+# ---------------------------------------------------------------------------------------------
+_GLOW = {}
+_GRAD = {}
+
+
+def glow_texture(rgb):
+    """Soft round glow (colour fades to transparent at the edge)."""
+    key = (round(rgb[0], 2), round(rgb[1], 2), round(rgb[2], 2))
+    tex = _GLOW.get(key)
+    if tex is None:
+        n = 64
+        buf = bytearray()
+        half = (n - 1) / 2.0
+        for y in range(n):
+            for x in range(n):
+                d = math.hypot(x - half, y - half) / (n / 2.0)
+                a = max(0.0, 1.0 - d)
+                a = a * a
+                buf += bytes((int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255), int(a * 255)))
+        tex = Texture.create(size=(n, n), colorfmt="rgba")
+        tex.blit_buffer(bytes(buf), colorfmt="rgba", bufferfmt="ubyte")
+        tex.mag_filter = "linear"
+        tex.min_filter = "linear"
+        _GLOW[key] = tex
+    return tex
+
+
+def vertical_gradient(top, bottom):
+    key = (tuple(top), tuple(bottom))
+    tex = _GRAD.get(key)
+    if tex is None:
+        n = 64
+        buf = bytearray()
+        for i in range(n):                      # row 0 is the bottom
+            f = i / float(n - 1)
+            buf += bytes((int((bottom[0] + (top[0] - bottom[0]) * f) * 255),
+                          int((bottom[1] + (top[1] - bottom[1]) * f) * 255),
+                          int((bottom[2] + (top[2] - bottom[2]) * f) * 255), 255))
+        tex = Texture.create(size=(1, n), colorfmt="rgba")
+        tex.blit_buffer(bytes(buf), colorfmt="rgba", bufferfmt="ubyte")
+        tex.mag_filter = "linear"
+        tex.min_filter = "linear"
+        _GRAD[key] = tex
+    return tex
+
+
+def mk(text):
+    """Escape text for Kivy markup."""
+    return str(text).replace("&", "&amp;").replace("[", "&bl;").replace("]", "&br;")
+
+
+def frost(widget, radius=22, tint=(0.55, 0.78, 1.0), alpha=0.13, edge=0.34):
+    r = dp(radius)
+    if UI_LIGHT:
+        if alpha >= 0.2:                                  # coloured (selected / primary) glass
+            body = (tint[0], tint[1], tint[2], min(0.92, alpha * 2.2))
+        else:                                             # neutral milk glass
+            body = (1, 1, 1, min(0.85, 0.50 + alpha * 2.0))
+        sheen = (1, 1, 1, 0.22)
+        line = (tint[0] * 0.55, tint[1] * 0.55, tint[2] * 0.6, min(1.0, edge * 0.9 + 0.10))
+    else:
+        body = (tint[0], tint[1], tint[2], alpha)
+        sheen = (1, 1, 1, alpha * 0.5)
+        line = (tint[0] * 0.5 + 0.5, tint[1] * 0.5 + 0.5, tint[2] * 0.5 + 0.5, edge)
+    widget._fr_a0 = body[3]
+    with widget.canvas.before:
+        widget._fr_body_c = Color(*body)
+        widget._fr_body = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[r])
+        Color(*sheen)
+        widget._fr_sheen = RoundedRectangle(pos=(widget.x, widget.y + widget.height * 0.55),
+                                            size=(widget.width, widget.height * 0.45), radius=[r, r, 0, 0])
+        Color(*line)
+        widget._fr_edge = Line(rounded_rectangle=(widget.x, widget.y, widget.width, widget.height, r), width=dp(1))
+
+    def update(w, *_):
+        w._fr_body.pos = w.pos
+        w._fr_body.size = w.size
+        w._fr_sheen.pos = (w.x, w.y + w.height * 0.55)
+        w._fr_sheen.size = (w.width, w.height * 0.45)
+        w._fr_edge.rounded_rectangle = (w.x, w.y, w.width, w.height, r)
+
+    widget.bind(pos=update, size=update)
+
+
+class FrostButton(Button):
+    """Glass button. `marker=True` draws a small glowing dot on the left (selected item)."""
+
+    def __init__(self, tint=(0.55, 0.78, 1.0), alpha=0.11, radius=18, edge=0.30, marker=False, **kwargs):
+        kwargs.setdefault("markup", True)
+        kwargs.setdefault("halign", "left")
+        kwargs.setdefault("valign", "middle")
+        super().__init__(**kwargs)
+        self.background_normal = ""
+        self.background_down = ""
+        self.background_color = (0, 0, 0, 0)
+        self._base_alpha = alpha
+        self._margin = dp(36) if marker else dp(18)
+        frost(self, radius, tint, alpha, edge)
+        if marker:
+            with self.canvas.after:
+                Color(tint[0] * 0.4 + 0.6, tint[1] * 0.4 + 0.6, tint[2] * 0.4 + 0.6, 1)
+                self._dot = Ellipse(size=(dp(9), dp(9)), pos=(self.x + dp(15), self.center_y - dp(4.5)))
+            self.bind(pos=self._move_dot, size=self._move_dot)
+        self.bind(size=self._fit_text, state=self._feedback)
+        self._fit_text()
+
+    def _move_dot(self, *_):
+        self._dot.pos = (self.x + dp(15), self.center_y - dp(4.5))
+
+    def _fit_text(self, *_):
+        self.text_size = (max(0, self.width - 2 * self._margin), self.height)
+
+    def _feedback(self, *_):
+        self._fr_body_c.a = min(1.0, self._fr_a0 + (0.16 if self.state == "down" else 0.0))
+
+
+class Hair(Widget):
+    """A thin horizontal light line."""
+
+    def __init__(self, alpha=0.16, **kwargs):
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(1))
+        super().__init__(**kwargs)
+        with self.canvas:
+            Color(*((0.1, 0.2, 0.4, alpha) if UI_LIGHT else (1, 1, 1, alpha)))
+            self._line = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._upd, size=self._upd)
+
+    def _upd(self, *_):
+        self._line.pos = self.pos
+        self._line.size = self.size
+
+
+class GlassSheet(FloatLayout):
+    """Frosted panel over a dim scrim: used for the menu and for every section opened from it."""
+
+    def __init__(self, app, title, body, back=None, anchor="center", height=None, **kwargs):
+        super().__init__(size_hint=(1, 1), **kwargs)
+        self.app = app
+        self.closing = False
+        theme = THEMES[app.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        with self.canvas.before:
+            Color(*((0.86, 0.92, 1.0, 0.62) if UI_LIGHT else (0.0, 0.01, 0.05, 0.66)))
+            self._scrim = Rectangle(pos=self.pos, size=self.size)
+            self._glow_c = Color(1, 1, 1, 0.30 if UI_LIGHT else 0.55)
+            self._glow = Rectangle(texture=glow_texture(tint), pos=(0, 0), size=(10, 10))
+        self.bind(pos=self._layout, size=self._layout)
+        self._fit = (0.94, 0.9) if anchor == "center" else (0.80, None)
+        panel = BoxLayout(orientation="vertical", padding=(dp(14), dp(10), dp(14), dp(14)), spacing=dp(8))
+        panel.size_hint = (self._fit[0] * 0.92, self._fit[1] * 0.92) if self._fit[1] else (self._fit[0], None)
+        if not self._fit[1]:
+            panel.height = dp(height or 360)
+        panel.pos_hint = ({"center_x": 0.5, "center_y": 0.5} if anchor == "center"
+                          else {"right": 0.96, "top": 0.93})
+        frost(panel, 28, tint, 0.15, 0.45)
+        self.panel = panel
+        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(8))
+        if back is not None:
+            b = FrostButton(tint=tint, alpha=0.12, radius=14, text="‹", font_size=dp(26), halign="center",
+                            size_hint_x=None, width=dp(44), color=hex_color(theme["text"]))
+            b.bind(on_release=lambda *_: back())
+            head.add_widget(b)
+        head.add_widget(make_label(title, 17, theme["accent"], True, halign="left"))
+        x = FrostButton(tint=tint, alpha=0.12, radius=14, text="×", font_size=dp(28), halign="center",
+                        size_hint_x=None, width=dp(44), color=hex_color(theme["text"]))
+        x.bind(on_release=lambda *_: self.dismiss())
+        head.add_widget(x)
+        panel.add_widget(head)
+        panel.add_widget(Hair())
+        panel.add_widget(body)
+        self._body = body
+        self.add_widget(panel)
+        self.opacity = 0
+
+    def _layout(self, *_):
+        self._scrim.pos = self.pos
+        self._scrim.size = self.size
+        size = max(self.width, self.height) * 1.2
+        self._glow.size = (size, size)
+        self._glow.pos = (self.right - size * 0.7, self.top - size * 0.6)
+
+    def open(self):
+        Window.add_widget(self)
+        self.app.sheet_opened(self)
+        Animation(opacity=1, d=0.22, t="out_quad").start(self)
+        if self._fit[1]:
+            Animation(size_hint=self._fit, d=0.28, t="out_cubic").start(self.panel)
+        body = getattr(self, "_body", None)
+        if body is not None:                      # the rows float in one after another
+            for i, row in enumerate(list(body.children)[::-1][:8]):
+                row.opacity = 0
+                Clock.schedule_once(lambda dt, w=row: Animation(opacity=1, d=0.24, t="out_quad").start(w),
+                                    0.06 + 0.05 * i)
+
+    def dismiss(self, *args, **kwargs):
+        if self.closing:
+            return
+        self.closing = True
+        self.app.sheet_closed(self)
+
+        def remove(*_):
+            if self.parent is not None:
+                self.parent.remove_widget(self)
+
+        anim = Animation(opacity=0, d=0.16, t="in_quad")
+        anim.bind(on_complete=remove)
+        anim.start(self)
+
+    def on_touch_down(self, touch):
+        if self.closing:
+            return True
+        if super().on_touch_down(touch):
+            return True
+        if not self.panel.collide_point(*touch.pos):
+            self.dismiss()
+        return True
+
+    def on_touch_move(self, touch):
+        super().on_touch_move(touch)
+        return True
+
+    def on_touch_up(self, touch):
+        super().on_touch_up(touch)
+        return True
+
+
+class GlassDialog(GlassSheet):
+    """Small frosted dialog (rename, confirm, emoji panel...): same look as the sheets."""
+
+    def __init__(self, app, content, size_hint=(0.92, None), height=None, pos_hint=None, auto_dismiss=True, **kwargs):
+        FloatLayout.__init__(self, size_hint=(1, 1))
+        self.app = app
+        self.closing = False
+        self.auto_dismiss = auto_dismiss
+        self._body = None
+        theme = THEMES[app.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        with self.canvas.before:
+            Color(*((0.86, 0.92, 1.0, 0.62) if UI_LIGHT else (0.0, 0.01, 0.05, 0.66)))
+            self._scrim = Rectangle(pos=self.pos, size=self.size)
+            self._glow_c = Color(1, 1, 1, 0.30 if UI_LIGHT else 0.55)
+            self._glow = Rectangle(texture=glow_texture(tint), pos=(0, 0), size=(10, 10))
+        self.bind(pos=self._layout, size=self._layout)
+        sh = (size_hint[0], size_hint[1]) if size_hint else (0.92, None)
+        self._fit = sh if sh[1] is not None else (sh[0], None)
+        panel = BoxLayout(orientation="vertical")
+        if sh[1] is not None:
+            panel.size_hint = (sh[0] * 0.94, sh[1] * 0.94)
+        else:
+            panel.size_hint = (sh[0], None)
+            panel.height = height or dp(240)
+        panel.pos_hint = pos_hint or {"center_x": 0.5, "center_y": 0.5}
+        frost(panel, 28, tint, 0.15, 0.45)
+        panel.add_widget(content)
+        self.panel = panel
+        self.add_widget(panel)
+        self.opacity = 0
+
+    def on_touch_down(self, touch):
+        if self.closing:
+            return True
+        if FloatLayout.on_touch_down(self, touch):
+            return True
+        if self.auto_dismiss and not self.panel.collide_point(*touch.pos):
+            self.dismiss()
+        return True
+
+
+class AuroraScreen(FloatLayout):
+    """First-run screen: moving glows, a living orb, a dotted wordmark and a frosted card per step."""
+
+    def __init__(self, app, **kwargs):
+        super().__init__(size_hint=(1, 1), **kwargs)
+        self.app = app
+        theme = THEMES[app.theme_index]
+        self.acc = hex_color(theme["accent"])[:3]
+        self.acc2 = hex_color(theme["accent2"])[:3]
+        self.step = 0
+        self._t = 0.0
+        self._kick = 0.0
+        with self.canvas.before:
+            Color(1, 1, 1, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size,
+                                 texture=(vertical_gradient((0.78, 0.84, 0.93), (0.86, 0.90, 0.95)) if UI_LIGHT
+                                          else vertical_gradient((0.05, 0.11, 0.25), (0.008, 0.015, 0.05))))
+            self._blobs = []
+            for rgb, alpha in ((self.acc, 0.50), (self.acc2, 0.55), ((0.55, 0.35, 1.0), 0.42)):
+                alpha = alpha * (0.55 if UI_LIGHT else 1.0)
+                Color(1, 1, 1, alpha)
+                self._blobs.append(Rectangle(texture=glow_texture(rgb), pos=(0, 0), size=(10, 10)))
+            Color(1, 1, 1, 0.9)
+            self._orb_glow = Rectangle(texture=glow_texture(self.acc), pos=(0, 0), size=(10, 10))
+            Color(self.acc[0] * 0.3 + 0.7, self.acc[1] * 0.3 + 0.7, self.acc[2] * 0.3 + 0.7, 0.95)
+            self._orb_core = Ellipse(pos=(0, 0), size=(10, 10))
+            self._ring_c1 = Color(self.acc[0], self.acc[1], self.acc[2], 0.35)
+            self._ring1 = Line(circle=(0, 0, 10), width=dp(1))
+            self._ring_c2 = Color(self.acc[0], self.acc[1], self.acc[2], 0.18)
+            self._ring2 = Line(circle=(0, 0, 10), width=dp(1))
+            self._particles = []
+            rnd = random.Random(7)
+            for _i in range(22):
+                Color(*((0.2, 0.4, 0.9, 0.45) if UI_LIGHT else (0.75, 0.9, 1.0, 0.55)))
+                size = dp(rnd.uniform(5, 13))
+                self._particles.append([Rectangle(texture=glow_texture((0.8, 0.92, 1.0)), pos=(0, 0), size=(size, size)),
+                                        rnd.random(), rnd.random(), rnd.uniform(0.012, 0.04), rnd.uniform(0, 6.28), size])
+            self._dim = (0.1, 0.2, 0.4, 0.2) if UI_LIGHT else (1, 1, 1, 0.18)
+            self._dot_cols, self._dots = [], []
+            for _i in range(3):
+                self._dot_cols.append(Color(*self._dim))
+                self._dots.append(RoundedRectangle(pos=(0, 0), size=(dp(26), dp(4)), radius=[dp(2)]))
+        self.wordmark = make_label(dotted_name(app.assistant_name or "S.A.I"), 34, theme["accent"], True,
+                                   size_hint=(1, None), height=dp(52), pos_hint={"center_x": 0.5, "top": 0.80})
+        self.add_widget(self.wordmark)
+        self.stage = FloatLayout(size_hint=(1, 1))
+        self.add_widget(self.stage)
+        self.bind(pos=self._layout, size=self._layout)
+        self._layout()
+        self._ev = Clock.schedule_interval(self._tick, 1 / 30.0)
+
+    # -- geometry ---------------------------------------------------------------------------
+    def _orb_center(self):
+        return self.center_x, self.y + self.height * 0.885
+
+    def _layout(self, *_):
+        self._bg.pos = self.pos
+        self._bg.size = self.size
+        self._place(0)
+
+    def _place(self, t):
+        w, h = self.width, self.height
+        base = max(w, h)
+        for i, blob in enumerate(self._blobs):
+            size = base * (0.95 - 0.12 * i)
+            ox = math.sin(t * (0.23 + 0.07 * i) + i * 2.1) * w * 0.18
+            oy = math.cos(t * (0.19 + 0.05 * i) + i * 1.3) * h * 0.08
+            anchors = ((0.05, 0.92), (0.95, 0.35), (0.25, 0.08))
+            cx = self.x + w * anchors[i][0] + ox
+            cy = self.y + h * anchors[i][1] + oy
+            blob.size = (size, size)
+            blob.pos = (cx - size / 2, cy - size / 2)
+        cx, cy = self._orb_center()
+        pulse = (1.0 + 0.045 * math.sin(t * 1.7)) * (1.0 + 0.14 * self._kick)
+        for part in self._particles:
+            rect, px, py, speed, phase, psize = part
+            yy = (py + t * speed) % 1.0
+            rect.pos = (self.x + w * px + math.sin(t * 0.6 + phase) * dp(16), self.y + h * yy)
+        r = dp(40) * pulse
+        gsize = r * 5.2
+        self._orb_glow.size = (gsize, gsize)
+        self._orb_glow.pos = (cx - gsize / 2, cy - gsize / 2)
+        self._orb_core.size = (r * 2, r * 2)
+        self._orb_core.pos = (cx - r, cy - r)
+        self._ring1.circle = (cx, cy, r * (1.35 + 0.05 * math.sin(t * 1.1)))
+        self._ring2.circle = (cx, cy, r * (1.75 + 0.08 * math.sin(t * 0.8 + 1.0)))
+        for i, rect in enumerate(self._dots):
+            total = 3 * dp(26) + 2 * dp(8)
+            rect.pos = (self.center_x - total / 2 + i * (dp(26) + dp(8)), self.top - dp(26))
+            if i <= self.step:
+                self._dot_cols[i].rgba = (self.acc[0], self.acc[1], self.acc[2], 0.95)
+            else:
+                self._dot_cols[i].rgba = self._dim
+
+    def _tick(self, dt):
+        if getattr(self.app, "app_paused", False):
+            return
+        self._t += dt
+        self._kick = max(0.0, self._kick - dt * 2.2)
+        self._place(self._t)
+
+    def kick(self):
+        """The orb answers every key the user types."""
+        self._kick = 1.0
+
+    # -- steps ------------------------------------------------------------------------------
+    def set_step(self, index):
+        self.step = index
+        self._place(self._t)
+
+    def set_wordmark(self, name):
+        shown = dotted_name(name or "S.A.I")
+        self.wordmark.text = shown
+        self.wordmark.font_size = dp(34 if len(shown) <= 9 else 24 if len(shown) <= 16 else 17)
+
+    def new_panel(self, height):
+        """A fresh frosted card; the previous one fades out."""
+        for old in list(self.stage.children):
+            Animation(opacity=0, d=0.12).start(old)
+            Clock.schedule_once(lambda dt, o=old: self.stage.remove_widget(o) if o.parent else None, 0.14)
+        panel = BoxLayout(orientation="vertical", padding=dp(18), spacing=dp(10), size_hint=(0.86, None),
+                          height=dp(min(height, max(300, Window.height / dp(1) * 0.70))),
+                          pos_hint={"center_x": 0.5, "top": 0.72}, opacity=0)
+        frost(panel, 30, self.acc, 0.15, 0.45)
+        self.stage.add_widget(panel)
+        Animation(opacity=1, size_hint_x=0.92, d=0.3, t="out_cubic").start(panel)
+        return panel
+
+    def dismiss(self, *args, **kwargs):
+        try:
+            self._ev.cancel()
+        except Exception:
+            pass
+        self.app.sheet_closed(self)
+        if getattr(self.app, "_ob_screen", None) is self:
+            self.app._ob_screen = None
+        if self.parent is not None:
+            self.parent.remove_widget(self)
+
+    def on_touch_down(self, touch):
+        super().on_touch_down(touch)
+        return True
+
+    def on_touch_move(self, touch):
+        super().on_touch_move(touch)
+        return True
+
+    def on_touch_up(self, touch):
+        super().on_touch_up(touch)
+        return True
+
+
+def glass_input(app, hint, text="", password=False, center=False, size=15):
+    theme = THEMES[app.theme_index]
+    wrap = BoxLayout(size_hint_y=None, height=dp(50), padding=(dp(14), 0))
+    frost(wrap, 16, (1, 1, 1), 0.08, 0.28)
+    ti = TextInput(text=text, hint_text=hint, password=password, multiline=False,
+                   background_normal="", background_active="", background_color=(0, 0, 0, 0),
+                   foreground_color=hex_color(theme["text"]), hint_text_color=(1, 1, 1, 0.38),
+                   cursor_color=hex_color(theme["accent"]), font_size=dp(size),
+                   padding=[0, dp(14.5), 0, 0], write_tab=False, input_type="text")
+    if center:
+        ti.halign = "center"
+    wrap.add_widget(ti)
+    return wrap, ti
+
+
 class JarvisApp(App):
     def build(self):
         self.title = "S.A.I"
@@ -3814,6 +4301,7 @@ class JarvisApp(App):
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
+        self.ui_mode = "dark"
         self.speak_enabled = True
         self.server_token = ""
         self.assistant_name = "S.A.I"
@@ -3892,7 +4380,7 @@ class JarvisApp(App):
         data = bytearray()
         for i in range(rows):
             t = i / (rows - 1.0)  # bottom -> top
-            strength = (1.0 - t) ** 1.65
+            strength = (1.0 - t) ** 1.65 * (0.40 if UI_LIGHT else 1.0)
             r = int(max(0, min(255, rgb[0] * 255 * strength)))
             g = int(max(0, min(255, rgb[1] * 255 * strength)))
             b = int(max(0, min(255, rgb[2] * 255 * strength)))
@@ -3911,12 +4399,13 @@ class JarvisApp(App):
         self.grad_rect.size = (self.root_layout.width, self.root_layout.height * 0.44)
 
     def brand(self, text):
-        """The user chose the assistant's name: it replaces JARVIS in every text (also in old chats and AI replies)."""
+        """The user chose the assistant's name: it replaces JARVIS (any spelling, also Cyrillic) in every text,
+        in old chats and AI replies too. File paths, URLs and media markers are left alone."""
         name = getattr(self, "assistant_name", "") or "S.A.I"
         text = str(text)
-        if "JARVIS" in text or "Jarvis" in text:
-            text = text.replace("JARVIS", name).replace("Jarvis", name)
-        return text
+        if not OLD_NAME_RE.search(text):
+            return text
+        return OLD_NAME_RE.sub(lambda m: name, text)
 
     def t(self, key):
         return self.brand(TEXTS.get(self.language, TEXTS["tg"]).get(key, key))
@@ -3936,11 +4425,35 @@ class JarvisApp(App):
             self.tajik_tts_url = str(data.get("tajik_tts_url", ""))
             self.assistant_name = str(data.get("assistant_name", "S.A.I")) or "S.A.I"
             self.username = str(data.get("username", ""))
+            self.ui_mode = str(data.get("ui_mode", "dark"))
+            if self.ui_mode not in ("auto", "dark", "light"):
+                self.ui_mode = "auto"
             self.onboarded = bool(data.get("onboarded", False))
             if not self.onboarded:
                 self.server_token = ""      # an old shared token is no longer used
         if self.language not in ("tg", "ru", "en"):
             self.language = "tg"
+        self.apply_ui_mode()
+
+    def system_is_dark(self):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            return (activity.getResources().getConfiguration().uiMode & 0x30) == 0x20
+        except Exception:
+            return True
+
+    def apply_ui_mode(self):
+        light = self.ui_mode == "light" or (self.ui_mode == "auto" and not self.system_is_dark())
+        apply_mode(light)
+
+    def choose_mode(self, mode, popup):
+        self.ui_mode = mode
+        self.save_settings()
+        popup.dismiss()
+        self.apply_ui_mode()
+        self.update_colors()
+        Clock.schedule_once(lambda dt: self.build_interface(), 0.2)
 
     def save_settings(self):
         self.store.put("settings", language=self.language,
@@ -3952,6 +4465,7 @@ class JarvisApp(App):
                        tajik_tts_url=getattr(self, "tajik_tts_url", ""),
                        assistant_name=getattr(self, "assistant_name", "S.A.I"),
                        username=getattr(self, "username", ""),
+                       ui_mode=getattr(self, "ui_mode", "auto"),
                        onboarded=getattr(self, "onboarded", False))
 
     def update_colors(self):
@@ -3964,9 +4478,9 @@ class JarvisApp(App):
     def make_button(self, text, callback, color=None, height=44):
         theme = THEMES[self.theme_index]
         accent = color or theme["accent"]
-        btn = GlassButton(text=text, tint=hex_color(accent)[:3], active=True,
-                          size_hint_y=None, height=dp(height), font_size=dp(13),
-                          bold=True, color=hex_color(theme["text"]))
+        btn = FrostButton(tint=hex_color(accent)[:3], alpha=0.40, edge=0.55, radius=20,
+                          text="[b]" + mk(text) + "[/b]", size_hint_y=None, height=dp(height), font_size=dp(14),
+                          halign="center", color=(1, 1, 1, 1) if UI_LIGHT else hex_color(theme["text"]))
         btn.bind(on_release=callback)
         return btn
 
@@ -4635,10 +5149,18 @@ class JarvisApp(App):
                 key = "err_bad"
             elif c >= 500:
                 key = "err_busy"
+            try:                                    # short technical hint from the server (provider names only)
+                detail = json.loads(exc.read(400).decode("utf-8", "replace")).get("detail", "")
+                if isinstance(detail, str) and detail:
+                    code += "\n" + detail[:140]
+            except Exception:
+                pass
         elif isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
             key = "err_timeout"
         elif isinstance(exc, OSError) or str(exc) == "network":
             key = "err_network"
+        else:
+            code = " [" + type(exc).__name__[:30] + "]"      # which kind of internal error (helps to find the cause)
         return self.t(key) + code
 
     # ------------------------------------------------------------------ Tajik voice: short pieces, text first
@@ -4700,77 +5222,100 @@ class JarvisApp(App):
         else:
             self._ob_language_step()
 
-    def _ob_popup(self, box, height):
-        return self.make_popup(box, size_hint=(0.92, None), height=dp(height), auto_dismiss=False,
-                               pos_hint={"center_x": 0.5, "top": 0.97})
+    def _ob_screen_get(self):
+        screen = getattr(self, "_ob_screen", None)
+        if screen is None or screen.parent is None:
+            screen = AuroraScreen(self)
+            Window.add_widget(screen)
+            self._ob_screen = screen
+            self.sheet_opened(screen)
+        return screen
 
     def _ob_language_step(self):
         theme = THEMES[self.theme_index]
-        box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
-        box.add_widget(make_label("Choose your language", 18, theme["accent"], True, size_hint_y=None, height=dp(38)))
-        popup = self._ob_popup(box, 290)
+        screen = self._ob_screen_get()
+        screen.set_step(0)
+        panel = screen.new_panel(330)
+        panel.add_widget(make_label("Choose your language", 20, theme["text"], True, size_hint_y=None, height=dp(34)))
+        panel.add_widget(make_label("Тоҷикӣ  ·  Русский  ·  English", 12, muted(), False, size_hint_y=None, height=dp(22)))
+        panel.add_widget(Widget(size_hint_y=None, height=dp(4)))
 
         def pick(code):
             self.language = code
             self.save_settings()
-            popup.dismiss()
-            Clock.schedule_once(lambda dt: self._ob_name_step(), 0.15)
+            Clock.schedule_once(lambda dt: self._ob_name_step(), 0.12)
 
-        for label, code in (("Тоҷикӣ", "tg"), ("Русский", "ru"), ("English", "en")):
-            self.glass_option(box, label, False, lambda inst, c=code: pick(c), height=54)
-        popup.open()
+        for label, code, hello in (("Тоҷикӣ", "tg", "Салом"), ("Русский", "ru", "Привет"), ("English", "en", "Hello")):
+            btn = FrostButton(tint=screen.acc, alpha=0.12, radius=20, markup=True,
+                              text="[b]" + label + "[/b]\n[size=12sp][color=" + muted() + "]" + hello + "[/color][/size]",
+                              font_size=dp(18), halign="center", size_hint_y=None, height=dp(66),
+                              color=hex_color(theme["text"]))
+            btn.bind(on_release=lambda inst, c=code: pick(c))
+            panel.add_widget(btn)
 
     def _ob_name_step(self):
         theme = THEMES[self.theme_index]
-        box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
-        box.add_widget(make_label(self.t("ob_name_title"), 17, theme["accent"], True, size_hint_y=None, height=dp(40)))
-        name_input = TextInput(text=self.assistant_name or "S.A.I", hint_text=self.t("ob_name_hint"), multiline=False,
-                               size_hint_y=None, height=dp(48), font_size=dp(16), input_type="text", write_tab=False)
-        box.add_widget(name_input)
-        box.add_widget(make_label(self.t("ob_name_note"), 11, theme["accent2"], False, size_hint_y=None, height=dp(48)))
-        popup = self._ob_popup(box, 290)
+        screen = self._ob_screen_get()
+        screen.set_step(1)
+        panel = screen.new_panel(300)
+        panel.add_widget(make_label(self.t("ob_name_title"), 17, theme["text"], True, size_hint_y=None, height=dp(44)))
+        wrap, name_input = glass_input(self, self.t("ob_name_hint"), self.assistant_name or "S.A.I", center=True, size=18)
+        panel.add_widget(wrap)
+        screen.set_wordmark(name_input.text)
+        name_input.bind(text=lambda inst, value: (screen.set_wordmark(value), screen.kick()))
+        panel.add_widget(make_label(self.t("ob_name_note"), 11, muted(), False, size_hint_y=None, height=dp(52)))
+        panel.add_widget(Widget())
 
         def go(*_):
             name = " ".join(name_input.text.split())[:24] or "S.A.I"
             self.assistant_name = name
             self.title = name
             self.save_settings()
-            popup.dismiss()
-            Clock.schedule_once(lambda dt: self._ob_account_step("signup"), 0.15)
+            screen.set_wordmark(name)
+            Clock.schedule_once(lambda dt: self._ob_account_step("signup"), 0.12)
 
         name_input.bind(on_text_validate=go)
-        box.add_widget(self.make_button(self.t("ob_continue"), go, theme["accent"], 48))
-        popup.open()
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
+                                     font_size=dp(16), halign="center", size_hint_y=None, height=dp(54),
+                                     color=(1, 1, 1, 1), on_release=go))
 
     def _ob_account_step(self, mode="login", prefill="", note=""):
         theme = THEMES[self.theme_index]
         signup = mode == "signup"
-        box = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(8))
-        box.add_widget(make_label(self.t("ob_account_title"), 17, theme["accent"], True, size_hint_y=None, height=dp(32)))
-        popup = self._ob_popup(box, 480 if signup else 430)
-        tabs = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(6))
+        screen = self._ob_screen_get()
+        screen.set_step(2)
+        screen.set_wordmark(self.assistant_name or "S.A.I")
+        panel = screen.new_panel(500 if signup else 440)
+        panel.add_widget(make_label(self.t("ob_account_title"), 17, theme["text"], True, size_hint_y=None, height=dp(30)))
+        tabs = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(46), spacing=dp(6))
+        user_in_holder = {}
 
         def switch(new_mode):
             if new_mode != mode:
-                popup.dismiss()
-                Clock.schedule_once(lambda dt: self._ob_account_step(new_mode, user_in.text), 0.1)
+                text = user_in_holder["u"].text if "u" in user_in_holder else ""
+                self._ob_account_step(new_mode, text)
 
-        self.glass_option(tabs, self.t("ob_login_tab"), not signup, lambda inst: switch("login"), height=44)
-        self.glass_option(tabs, self.t("ob_signup_tab"), signup, lambda inst: switch("signup"), height=44)
-        box.add_widget(tabs)
-        user_in = TextInput(text=prefill, hint_text=self.t("ob_username"), multiline=False, size_hint_y=None,
-                            height=dp(46), font_size=dp(15), input_type="text", write_tab=False)
-        pass_in = TextInput(hint_text=self.t("ob_password"), password=True, multiline=False, size_hint_y=None,
-                            height=dp(46), font_size=dp(15), write_tab=False)
-        box.add_widget(user_in)
-        box.add_widget(pass_in)
+        for key, target in (("ob_login_tab", "login"), ("ob_signup_tab", "signup")):
+            on = target == mode
+            tab = FrostButton(tint=screen.acc2 if on else screen.acc, alpha=0.50 if on else 0.08, radius=16,
+                              text=("[b]" + mk(self.t(key)) + "[/b]") if on else mk(self.t(key)), font_size=dp(13),
+                              halign="center", color=hex_color(theme["text"]))
+            tab.bind(on_release=lambda inst, m=target: switch(m))
+            tabs.add_widget(tab)
+        panel.add_widget(tabs)
+        user_wrap, user_in = glass_input(self, self.t("ob_username"), prefill)
+        pass_wrap, pass_in = glass_input(self, self.t("ob_password"), password=True)
+        user_in_holder["u"] = user_in
+        user_in.bind(text=lambda *_: screen.kick())
+        pass_in.bind(text=lambda *_: screen.kick())
+        panel.add_widget(user_wrap)
+        panel.add_widget(pass_wrap)
         pass2_in = None
         if signup:
-            pass2_in = TextInput(hint_text=self.t("ob_password2"), password=True, multiline=False, size_hint_y=None,
-                                 height=dp(46), font_size=dp(15), write_tab=False)
-            box.add_widget(pass2_in)
-        status = make_label(note, 12, "#FFB4B4", False, size_hint_y=None, height=dp(54))
-        box.add_widget(status)
+            pass2_wrap, pass2_in = glass_input(self, self.t("ob_password2"), password=True)
+            panel.add_widget(pass2_wrap)
+        status = make_label(note, 12, "#FFB4B4", False, size_hint_y=None, height=dp(44))
+        panel.add_widget(status)
         state = {"busy": False}
 
         def submit(*_):
@@ -4792,13 +5337,22 @@ class JarvisApp(App):
                     return
             state["busy"] = True
             status.text = self.t("ob_wait")
-            threading.Thread(target=self._auth_job, args=(mode, username, password, popup, status, state), daemon=True).start()
+            threading.Thread(target=self._auth_job, args=(mode, username, password, screen, status, state), daemon=True).start()
 
         pass_in.bind(on_text_validate=submit)
-        box.add_widget(self.make_button(self.t("ob_signup_btn" if signup else "ob_login_btn"), submit, theme["accent"], 48))
-        self.glass_option(box, self.t("ob_google_btn"), False,
-                          lambda inst: setattr(status, "text", self.t("ob_google_soon")), height=46, tint=(1, 1, 1))
-        popup.open()
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22,
+                                     text="[b]" + mk(self.t("ob_signup_btn" if signup else "ob_login_btn")) + "[/b]",
+                                     font_size=dp(16), halign="center", size_hint_y=None, height=dp(54),
+                                     color=(1, 1, 1, 1), on_release=submit))
+        divider = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(18), spacing=dp(10))
+        divider.add_widget(Hair(pos_hint={"center_y": 0.5}))
+        divider.add_widget(make_label(self.t("ob_or"), 11, muted(), False, size_hint_x=None, width=dp(30)))
+        divider.add_widget(Hair(pos_hint={"center_y": 0.5}))
+        panel.add_widget(divider)
+        panel.add_widget(FrostButton(tint=(1, 1, 1), alpha=0.09, radius=20, text=mk(self.t("ob_google_btn")),
+                                     font_size=dp(14), halign="center", size_hint_y=None, height=dp(48),
+                                     color=hex_color(theme["text"]),
+                                     on_release=lambda inst: setattr(status, "text", self.t("ob_google_soon"))))
 
     def _auth_job(self, mode, username, password, popup, status, state):
         import ssl
@@ -4863,9 +5417,8 @@ class JarvisApp(App):
         theme = THEMES[self.theme_index]
         box = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(10))
         box.add_widget(make_label(self.t("ob_name_title"), 16, theme["accent"], True, size_hint_y=None, height=dp(38)))
-        name_input = TextInput(text=self.assistant_name, multiline=False, size_hint_y=None, height=dp(48),
-                               font_size=dp(16), input_type="text", write_tab=False)
-        box.add_widget(name_input)
+        name_wrap, name_input = glass_input(self, "", self.assistant_name, center=True, size=16)
+        box.add_widget(name_wrap)
         popup = self.make_popup(box, size_hint=(0.92, None), height=dp(220), pos_hint={"center_x": 0.5, "top": 0.97})
 
         def save(*_):
@@ -4939,7 +5492,7 @@ class JarvisApp(App):
         for item in chat.get("messages", [])[-12:]:
             role = "assistant" if item.get("role") == "jarvis" else item.get("role")
             if role in ("user", "assistant") and item.get("text"):
-                history.append({"role": role, "content": item["text"][:4000]})
+                history.append({"role": role, "content": self.brand(item["text"])[:4000]})
         history = self._with_memory(chat_id, history)
         self.add_chat_message(chat_id, "user", command_text)
         pending = getattr(self, "_pending_attachment", None)
@@ -5582,17 +6135,8 @@ class JarvisApp(App):
         self.animation_paused = bool(self.open_popups) or self.app_paused
 
     def make_popup(self, content, size_hint=(0.92, 0.88), **extra):
-        theme = THEMES[self.theme_index]
-        kwargs = dict(title="", content=content, size_hint=size_hint, auto_dismiss=True,
-                      separator_height=0)
-        kwargs.update(extra)
-        try:
-            popup = Popup(background="", background_color=(*hex_color(theme["background"])[:3], 0.96),
-                          overlay_color=(0, 0, 0, 0.6), **kwargs)
-        except Exception:
-            popup = Popup(**kwargs)
-        self.track_popup(popup)
-        return popup
+        return GlassDialog(self, content, size_hint=size_hint, height=extra.get("height"),
+                           pos_hint=extra.get("pos_hint"), auto_dismiss=extra.get("auto_dismiss", True))
 
     def glass_option(self, content, text, active, callback, height=54, tint=None):
         theme = THEMES[self.theme_index]
@@ -5603,49 +6147,82 @@ class JarvisApp(App):
         content.add_widget(btn)
         return btn
 
+    # ------------------------------------------------------------------ frosted sheets (menu and its sections)
+    def sheet_opened(self, sheet):
+        self.open_popups.add(sheet)
+        self.update_pause()
+
+    def sheet_closed(self, sheet):
+        self.open_popups.discard(sheet)
+        self.update_pause()
+
+    def _on_back_key(self, window, key, *args):
+        if key != 27:
+            return False
+        for widget in Window.children:          # the first child is the top one
+            if isinstance(widget, GlassSheet) and not widget.closing:
+                widget.dismiss()
+                return True
+            if isinstance(widget, AuroraScreen):
+                return True                     # no leaving the first-run screens with the back key
+        return False
+
+    def frost_row(self, content, text, active, callback, height=54, tint=None, center=False):
+        theme = THEMES[self.theme_index]
+        btn = FrostButton(tint=tint or hex_color(theme["accent"])[:3], alpha=0.26 if active else 0.10,
+                          marker=bool(active), text=("[b]" + mk(text) + "[/b]") if active else mk(text),
+                          size_hint_y=None, height=dp(height), font_size=dp(15),
+                          color=hex_color(theme["text"]), halign="center" if center else "left")
+        btn.bind(on_release=callback)
+        content.add_widget(btn)
+        return btn
+
     def show_menu(self, *_):
-        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
-        popup = self.make_popup(box, size_hint=(0.74, None), height=dp(4 * 50 + 3 * 8 + 24),
-                                pos_hint={"right": 0.97, "top": 0.92})
+        theme = THEMES[self.theme_index]
+        accent = theme["accent"].lstrip("#")
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        sheet = GlassSheet(self, dotted_name(self.assistant_name or "S.A.I"), body,
+                           anchor="menu", height=368)
         items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat),
                  ("menu_settings", self.show_settings), ("menu_about", self.show_about))
-        for key, action in items:
+        for i, (key, action) in enumerate(items, 1):
             def go(inst, f=action):
-                popup.dismiss()
-                Clock.schedule_once(lambda dt: f(), 0.12)
-            self.glass_option(box, self.t(key), False, go, height=50)
-        popup.open()
+                sheet.dismiss()
+                Clock.schedule_once(lambda dt: f(), 0.14)
+            btn = FrostButton(tint=hex_color(theme["accent"])[:3], alpha=0.11, size_hint_y=None, height=dp(60),
+                              font_size=dp(16), color=hex_color(theme["text"]),
+                              text="[color=#%s][b]%02d[/b][/color]   %s" % (accent, i, mk(self.t(key))))
+            btn.bind(on_release=go)
+            body.add_widget(btn)
+        sheet.open()
 
     def show_chats(self, *_):
         theme = THEMES[self.theme_index]
         tint = hex_color(theme["accent"])[:3]
-        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
-        content.add_widget(make_label(self.t("chats_title"), 17, theme["accent"], True,
-                                      size_hint_y=None, height=dp(30)))
-        chats = self.chats.sorted_chats()
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
         scroll = ScrollView(do_scroll_x=False)
         grid = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
+        chats = self.chats.sorted_chats()
         for chat in chats:
-            row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(62))
-            text = self.chat_title(chat) + "\n" + format_time(chat.get("created", ""))
-            open_btn = GlassButton(text=text, tint=tint, active=chat["id"] == self.chats.current_id,
-                                   font_size=dp(12), color=hex_color(theme["text"]), radius=16)
+            row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(64))
+            active = chat["id"] == self.chats.current_id
+            text = ("[b]" + mk(self.chat_title(chat)) + "[/b]" if active else mk(self.chat_title(chat))) + \
+                   "\n[size=11sp][color=" + muted() + "]" + mk(format_time(chat.get("created", ""))) + "[/color][/size]"
+            open_btn = FrostButton(tint=tint, alpha=0.24 if active else 0.10, marker=active, text=text,
+                                   font_size=dp(14), color=hex_color(theme["text"]))
             open_btn.bind(on_release=lambda inst, cid=chat["id"]: self.open_chat(cid))
-            del_btn = IconGlassButton(icon_kind="cross", icon_rgba=hex_color(theme["text"]), tint=tint,
-                                      size_hint_x=None, width=dp(56), radius=16)
+            del_btn = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, text="×", font_size=dp(26),
+                                  halign="center", size_hint_x=None, width=dp(56), color=hex_color(theme["text"]))
             del_btn.bind(on_release=lambda inst, cid=chat["id"]: self.confirm_delete(cid))
             row.add_widget(open_btn)
             row.add_widget(del_btn)
             grid.add_widget(row)
         if not chats:
-            grid.add_widget(make_label(self.t("chats_empty"), 13, theme["text"], False,
-                                       size_hint_y=None, height=dp(50)))
+            grid.add_widget(make_label(self.t("chats_empty"), 13, theme["text"], False, size_hint_y=None, height=dp(50)))
         scroll.add_widget(grid)
-        content.add_widget(scroll)
-        content.add_widget(self.make_button(self.t("close"), lambda *_: self.chats_popup.dismiss(),
-                                            theme["accent"], 44))
-        self.chats_popup = self.make_popup(content)
+        body.add_widget(scroll)
+        self.chats_popup = GlassSheet(self, self.t("chats_title"), body)
         self.chats_popup.open()
 
     def confirm_delete(self, chat_id):
@@ -5675,16 +6252,11 @@ class JarvisApp(App):
 
     def show_about(self, *_):
         theme = THEMES[self.theme_index]
-        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
-        content.add_widget(make_label(self.t("about_title"), 17, theme["accent"], True,
-                                      size_hint_y=None, height=dp(30)))
-        content.add_widget(make_label(self.t("about_body"), 13, theme["text"], False))
-        content.add_widget(make_label(self.t("about_chats").format(len(self.chats.chats)), 12,
-                                      theme["accent"], False, size_hint_y=None, height=dp(28)))
-        popup = self.make_popup(content, size_hint=(0.92, None), height=dp(360))
-        content.add_widget(self.make_button(self.t("close"), lambda *_: popup.dismiss(),
-                                            theme["accent"], 44))
-        popup.open()
+        body = BoxLayout(orientation="vertical", spacing=dp(10))
+        body.add_widget(make_label(self.t("about_body"), 13, theme["text"], False))
+        body.add_widget(make_label(self.t("about_chats").format(len(self.chats.chats)), 12, theme["accent"], False,
+                                   size_hint_y=None, height=dp(28)))
+        GlassSheet(self, self.t("about_title"), body, anchor="menu", height=330).open()
 
     def set_language(self, code):
         if code in TEXTS:
@@ -5709,19 +6281,22 @@ class JarvisApp(App):
         if old is not None:
             old.dismiss()
         theme = THEMES[self.theme_index]
-        content = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(9))
+        content = BoxLayout(orientation="vertical", spacing=dp(8))
         titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
-                  "voice": "title_voice", "account": "title_account"}
-        content.add_widget(make_label(self.t(titles[section]), 17, theme["accent"], True,
-                                      size_hint_y=None, height=dp(30)))
+                  "voice": "title_voice", "account": "title_account", "mode": "title_mode"}
 
         def option(text, active, callback, height=54):
-            self.glass_option(content, text, active, callback, height)
+            self.frost_row(content, text, active, callback, height)
 
         if section == "main":
-            for key, target in (("sec_theme", "theme"), ("sec_lang", "language"),
+            for key, target in (("sec_theme", "theme"), ("sec_mode", "mode"), ("sec_lang", "language"),
                                 ("sec_voice", "voice"), ("sec_account", "account")):
-                option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=58)
+                option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
+            content.add_widget(Widget())
+        elif section == "mode":
+            for key, code in (("mode_auto", "auto"), ("mode_dark", "dark"), ("mode_light", "light")):
+                option(self.t(key), self.ui_mode == code,
+                       lambda inst, c=code: self.choose_mode(c, self.settings_popup))
             content.add_widget(Widget())
         elif section == "theme":
             for i, item in enumerate(THEMES):
@@ -5745,19 +6320,13 @@ class JarvisApp(App):
         else:
             content.add_widget(make_label(self.t("acct_line").format(self.username or "-"), 15, theme["text"], True,
                                           size_hint_y=None, height=dp(36)))
-            content.add_widget(self.make_button(self.t("acct_rename"), self.rename_assistant, theme["accent"], 48))
-            content.add_widget(self.make_button(self.t("acct_logout"), self.logout_account, theme["accent2"], 48))
-            content.add_widget(self.make_button(self.t("acct_delete"), self.delete_account_ask, "#FF5C6C", 48))
+            self.frost_row(content, self.t("acct_rename"), False, self.rename_assistant, 52)
+            self.frost_row(content, self.t("acct_logout"), False, self.logout_account, 52)
+            self.frost_row(content, self.t("acct_delete"), False, self.delete_account_ask, 52, tint=(1.0, 0.36, 0.42))
             content.add_widget(Widget())
 
-        nav = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-        if section != "main":
-            nav.add_widget(self.make_button(self.t("back"), lambda *_: self.open_section("main"),
-                                            theme["accent2"], 44))
-        nav.add_widget(self.make_button(self.t("close"), lambda *_: self.settings_popup.dismiss(),
-                                        theme["accent"], 44))
-        content.add_widget(nav)
-        self.settings_popup = self.make_popup(content)
+        self.settings_popup = GlassSheet(self, self.t(titles[section]), content,
+                                         back=(lambda: self.open_section("main")) if section != "main" else None)
         self.settings_popup.open()
 
     def choose_theme(self, index, popup):
@@ -5778,6 +6347,10 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.show_response(self.t("voice_note")), 0.2)
 
     def on_start(self):
+        try:
+            Window.bind(on_keyboard=self._on_back_key)
+        except Exception:
+            pass
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
         if not self.onboarded or not self.server_token.strip():
             Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
@@ -5804,7 +6377,7 @@ class JarvisApp(App):
                                      foreground_color=(1, 0.85, 0.85, 1)))
             ok = Button(text="OK", size_hint_y=None, height=dp(44))
             box.add_widget(ok)
-            pop = Popup(title="JARVIS error log", content=box, size_hint=(0.96, 0.9))
+            pop = Popup(title=self.brand("JARVIS") + " error log", content=box, size_hint=(0.96, 0.9))
             ok.bind(on_release=pop.dismiss)
             pop.open()
         except Exception:
@@ -5819,6 +6392,12 @@ class JarvisApp(App):
     def on_resume(self):
         self.app_paused = False
         self.update_pause()
+        if getattr(self, "ui_mode", "auto") == "auto" and hasattr(self, "root_layout"):
+            before = UI_LIGHT
+            self.apply_ui_mode()
+            if UI_LIGHT != before:                  # the phone switched between light and dark
+                self.update_colors()
+                self.build_interface()
 
     def on_stop(self):
         self.save_settings()
