@@ -4809,6 +4809,7 @@ class JarvisApp(App):
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
             return
         self._attachment_pending = False
+        stage = "start"
         try:
             from jnius import autoclass
             Activity = autoclass("android.app.Activity")
@@ -4821,6 +4822,7 @@ class JarvisApp(App):
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             resolver = PythonActivity.mActivity.getContentResolver()
             mime = str(resolver.getType(uri) or "application/octet-stream")
+            stage = "read"
             limit = 20 * 1024 * 1024
             raw = b""
             try:
@@ -4845,6 +4847,7 @@ class JarvisApp(App):
                 raise LocalizedError(self.t("file_too_big"))
             if not raw:
                 raise LocalizedError(self.t("file_empty"))
+            stage = "name"
             name = str(uri.getLastPathSegment() or "attachment")
             try:
                 cursor = resolver.query(uri, None, None, None, None)
@@ -4860,20 +4863,24 @@ class JarvisApp(App):
             if hasattr(self, "command_input"):
                 self.command_input.text = ""
             chat_id = self.chats.current_id
+            stage = "save"
             path = self._save_private(raw, os.path.basename(name).replace("]", "_"))
             marker = ("[[img:" if mime.startswith("image/") else "[[file:") + path + "]]"
             att = {"chat_id": chat_id, "name": name, "mime": mime, "raw": raw}
+            stage = "show"
             if prompt:
-                self.add_chat_message(chat_id, "user", "📎 " + name + "\n" + prompt + "\n" + marker)
+                self.add_chat_message(chat_id, "user", name + "\n" + prompt + "\n" + marker)
+                stage = "send"
                 self._process_attachment(chat_id, att, prompt)
             else:
                 # Show the picture/file and wait for the user's instruction.
-                self.add_chat_message(chat_id, "user", "📎 " + name + "\n" + marker)
+                self.add_chat_message(chat_id, "user", name + "\n" + marker)
+                stage = "wait-note"
                 self._pending_attachment = att
                 self.add_chat_message(chat_id, "jarvis", self.t("file_waiting"))
         except Exception as exc:
-            save_crash("Attachment read failed:\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt, message=self.friendly_error(exc): self.show_response(self.t("file_read_failed").format(message)), 0)
+            save_crash("Attachment read failed at stage " + stage + ":\n" + traceback.format_exc())
+            Clock.schedule_once(lambda dt, message=self.friendly_error(exc) + " <" + stage + ">": self.show_response(self.t("file_read_failed").format(message)), 0)
 
     def _process_attachment(self, chat_id, att, prompt):
         name, mime, raw = att["name"], att["mime"], att["raw"]
@@ -5174,12 +5181,15 @@ class JarvisApp(App):
             key = "err_network"
         else:
             where = ""
-            try:                                             # where it happened: function name and line
+            try:                                             # where it happened: our last two code lines
                 tb = exc.__traceback__
-                while tb is not None and tb.tb_next is not None:
+                mine = []
+                while tb is not None:
+                    if str(tb.tb_frame.f_code.co_filename).endswith("main.py"):
+                        mine.append(tb.tb_frame.f_code.co_name[:22] + ":" + str(tb.tb_lineno))
                     tb = tb.tb_next
-                if tb is not None:
-                    where = " @" + tb.tb_frame.f_code.co_name[:24] + ":" + str(tb.tb_lineno)
+                if mine:
+                    where = " @" + ">".join(mine[-2:])
             except Exception:
                 pass
             code = " [" + type(exc).__name__[:30] + where + "]"
