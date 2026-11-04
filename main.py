@@ -522,6 +522,11 @@ TEXTS = {
         "file_created": "Файл сохта шуд: {}",
         "file_edited": "Файл таҳрир шуд: {}",
         "save_btn": "Захира",
+        "d_sending": "Фиристода истодааст…",
+        "d_ok": "Фиристода шуд",
+        "d_fail": "Фиристода нашуд",
+        "retry_btn": "Такрор",
+        "open_btn": "Кушодан",
         "remix_ready": "Акси нав омода шуд. Он аз рӯи акси шумо ва хостаи шумо сохта шудааст, на нусхаи айнан.",
         "view_copy": "Нусха",
         "view_download": "Зеркашӣ",
@@ -727,6 +732,11 @@ TEXTS = {
         "file_created": "Файл создан: {}",
         "file_edited": "Файл отредактирован: {}",
         "save_btn": "Сохранить",
+        "d_sending": "Отправляется…",
+        "d_ok": "Отправлено",
+        "d_fail": "Не отправлено",
+        "retry_btn": "Повторить",
+        "open_btn": "Открыть",
         "remix_ready": "Новое изображение готово. Оно создано по вашему снимку и описанию, это не точная копия.",
         "view_copy": "Копировать",
         "view_download": "Скачать",
@@ -932,6 +942,11 @@ TEXTS = {
         "file_created": "File created: {}",
         "file_edited": "File edited: {}",
         "save_btn": "Save",
+        "d_sending": "Sending…",
+        "d_ok": "Sent",
+        "d_fail": "Not sent",
+        "retry_btn": "Retry",
+        "open_btn": "Open",
         "remix_ready": "Your new picture is ready. It is made from your photo and your description, not an exact copy.",
         "view_copy": "Copy",
         "view_download": "Download",
@@ -3736,6 +3751,18 @@ def dotted_name(name):
 
 
 MEDIA_RE = re.compile(r"\[\[(img|file):([^\]]+)\]\]")
+RETRY_MARK = "[[retry]]"
+BUSY_PHRASES = {
+    "tg": {"think": ["Интизор шавед…", "Фикр мекунам…", "Ҷавобро омода мекунам…", "Лаҳзае сабр кунед…", "Тақрибан тайёр аст…"],
+           "image": ["Акс месозам…", "Интизор шавед, ин каме вақт мегирад…", "Рангҳоро мувофиқ мекунам…", "Лаҳзае сабр кунед…", "Тақрибан тайёр аст…"],
+           "answer": ["Ҷавоб нишон дода мешавад…", "Лаҳзае сабр кунед…", "Ҳамааш ҳозир омода мешавад…"]},
+    "ru": {"think": ["Подождите, пожалуйста…", "Думаю…", "Готовлю ответ…", "Минуточку…", "Почти готово…"],
+           "image": ["Создаю изображение…", "Подождите, это займёт немного времени…", "Подбираю цвета…", "Минуточку…", "Почти готово…"],
+           "answer": ["Ответ появляется…", "Минуточку…", "Сейчас всё будет готово…"]},
+    "en": {"think": ["Please wait…", "Thinking…", "Preparing the answer…", "Just a moment…", "Almost ready…"],
+           "image": ["Creating the picture…", "Please wait, this takes a little time…", "Matching the colours…", "Just a moment…", "Almost ready…"],
+           "answer": ["The answer is appearing…", "Just a moment…", "Everything will be ready shortly…"]},
+}
 TEXT_FILE_EXTS = (".txt", ".md", ".csv", ".json", ".log", ".py", ".html", ".css", ".js", ".xml", ".yaml", ".yml", ".ini", ".kv")
 
 MEDIA_PREFIXES = (
@@ -3804,7 +3831,7 @@ def is_text_file(name, mime):
 
 
 def strip_media(text):
-    return MEDIA_RE.sub("", str(text)).strip()
+    return MEDIA_RE.sub("", str(text)).replace(RETRY_MARK, "").strip()
 
 
 def copy_java_stream(stream, output, limit=None):
@@ -4831,6 +4858,12 @@ class JarvisApp(App):
         self.username = ""
         self.onboarded = False
         self.profile_done = False
+        self._delivery = {}
+        self._delivery_labels = {}
+        self._retry = None
+        self._busy = False
+        self._busy_ev = None
+        self._busy_safety = None
         self.tajik_tts_url = ""
         self.last_response = ""
         self.animation_paused = False
@@ -5103,6 +5136,7 @@ class JarvisApp(App):
         command_row.add_widget(self.attach_btn)
         command_row.add_widget(self.command_input)
         command_row.add_widget(self.stop_speech_btn)
+        command_row.add_widget(self.emoji_btn)
         command_row.add_widget(self.action_btn)
         self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
@@ -5183,7 +5217,9 @@ class JarvisApp(App):
         label.set_plain(strip_media(text) if media_items else text)
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
-        bubble.add_widget(label)
+        user_media = user and bool(media_items)
+        if not user_media:
+            bubble.add_widget(label)
         for kind_m, path_m in media_items:
             path_m = path_m.strip()
             if not os.path.isfile(path_m):
@@ -5204,12 +5240,39 @@ class JarvisApp(App):
                                            size_hint_y=None, height=dp(40), font_size=dp(13), color=hex_color(theme["text"]))
                     open_btn.bind(on_release=lambda btn, pth=path_m: self.open_media(pth))
                     bubble.add_widget(open_btn)
-                save_btn = GlassButton(text=self.t("save_btn"), tint=accent, active=False, radius=10, size_hint_y=None,
-                                       height=dp(38), font_size=dp(13), color=hex_color(theme["text"]))
+                btn_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(38), spacing=dp(6))
+                if kind_m == "img":
+                    view_btn = GlassButton(text=self.t("open_btn"), tint=accent, active=False, radius=10, font_size=dp(13),
+                                           color=hex_color(theme["text"]))
+                    view_btn.bind(on_release=lambda btn, pth=path_m: self.open_media(pth))
+                    btn_row.add_widget(view_btn)
+                save_btn = GlassButton(text=self.t("save_btn"), tint=accent, active=False, radius=10, font_size=dp(13),
+                                       color=hex_color(theme["text"]))
                 save_btn.bind(on_release=lambda btn, pth=path_m: self.save_media(pth))
-                bubble.add_widget(save_btn)
+                btn_row.add_widget(save_btn)
+                bubble.add_widget(btn_row)
+                state = getattr(self, "_delivery", {}).get(path_m)
+                if user and state:
+                    dl = make_label("", 11, "#8FA6C8", False, size_hint_y=None, height=dp(16), halign="right")
+                    dl.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+                    self._delivery_labels[path_m] = dl
+                    self._paint_delivery(dl, state)
+                    bubble.add_widget(dl)
             except Exception:
                 save_crash("Media bubble failed:\n" + traceback.format_exc())
+        if user_media and strip_media(text):
+            bubble.add_widget(label)
+        if RETRY_MARK in str(text) and getattr(self, "_retry", None) is not None:
+            retry_btn = GlassButton(text=self.t("retry_btn"), tint=accent, active=True, radius=12, size_hint_y=None,
+                                    height=dp(40), font_size=dp(14), color=hex_color(theme["text"]))
+
+            def do_retry(btn):
+                btn.disabled = True
+                btn.opacity = 0.4
+                self.retry_last()
+
+            retry_btn.bind(on_release=do_retry)
+            bubble.add_widget(retry_btn)
         message = strip_media(full_text if full_text is not None else text)
         if not user and message.strip():
             icon_color = (*hex_color(theme["text"])[:3], 0.8)
@@ -5311,6 +5374,8 @@ class JarvisApp(App):
     def add_chat_message(self, chat_id, role, text):
         text = self.brand(text)
         self.chats.add_message(chat_id, role, text)
+        if role == "jarvis":
+            self.busy_stop()
         if self.chats.current_id != chat_id:
             return
         if self.chat_placeholder:
@@ -5494,6 +5559,8 @@ class JarvisApp(App):
 
     def _process_attachment(self, chat_id, att, prompt):
         name, mime, raw = att["name"], att["mime"], att["raw"]
+        self._last_att = (chat_id, att, prompt)
+        self._set_delivery(att.get("path"), "sending")
         mode = "analyze"
         if mime.startswith("image/") and looks_like_remix(prompt):
             mode = "image_remix"
@@ -5504,9 +5571,18 @@ class JarvisApp(App):
         self._set_busy(self.t("media_image") if mode == "image_remix" else self.t("media_edit") if mode != "analyze" else self.t("server_thinking"))
         target = self._upload_attachment if mode == "analyze" else self._attachment_edit_job
         args = (chat_id, name, mime, raw, prompt) if mode == "analyze" else (chat_id, name, mime, raw, prompt, mode)
-        threading.Thread(target=target, args=args, daemon=True).start()
+        threading.Thread(target=target, args=args, kwargs={"path": att.get("path")}, daemon=True).start()
 
-    def _upload_attachment(self, chat_id, filename, mime, raw, prompt):
+    def _attachment_net_failed(self, chat_id, path, message):
+        """No connection: show the error with a Retry button below the sent file."""
+        def show(dt):
+            self._set_delivery(path, "failed")
+            last = getattr(self, "_last_att", None)
+            self._retry = (lambda: self._process_attachment(*last)) if last else None
+            self._attachment_answer(chat_id, message + ("\n" + RETRY_MARK if self._retry else ""))
+        Clock.schedule_once(show, 0)
+
+    def _upload_attachment(self, chat_id, filename, mime, raw, prompt, path=None):
         import ssl
         boundary = "----JARVIS" + uuid.uuid4().hex
         def field(name, value):
@@ -5526,14 +5602,16 @@ class JarvisApp(App):
             with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
                 result = json.loads(response.read().decode("utf-8"))
             answer = str(result.get("answer", self.t("file_no_answer")))
+            Clock.schedule_once(lambda dt: self._set_delivery(path, "sent"), 0)
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, answer), 0)
         except urllib.error.HTTPError as exc:
             save_crash("Attachment upload HTTP error: %s" % exc.code)
             detail = self.friendly_error(exc)
+            Clock.schedule_once(lambda dt: self._set_delivery(path, "sent"), 0)
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, detail), 0)
         except Exception as exc:
             save_crash("Attachment upload failed:\n" + traceback.format_exc())
-            Clock.schedule_once(lambda dt, message=self.friendly_error(exc): self._attachment_answer(chat_id, self.t("file_send_failed").format(message)), 0)
+            self._attachment_net_failed(chat_id, path, self.t("file_send_failed").format(self.friendly_error(exc)))
 
     def _attachment_answer(self, chat_id, answer):
         self._status_after_answer()
@@ -5545,10 +5623,42 @@ class JarvisApp(App):
         os.makedirs(path, exist_ok=True)
         return path
 
+    def busy_start(self, kind="think"):
+        """While an answer is not fully shown, the status line cycles through several waiting phrases."""
+        self._busy = True
+        phrases = BUSY_PHRASES.get(self.language, BUSY_PHRASES["tg"]).get(kind) or BUSY_PHRASES["tg"]["think"]
+        for ev in (self._busy_ev, self._busy_safety):
+            if ev is not None:
+                ev.cancel()
+        self._busy_i = 0
+
+        def tick(dt):
+            label = getattr(self, "status_label", None)
+            if label is None or not self._busy:
+                return False
+            label.text = phrases[self._busy_i % len(phrases)]
+            self._busy_i += 1
+            return True
+
+        tick(0)
+        self._busy_ev = Clock.schedule_interval(tick, 2.2)
+        self._busy_safety = Clock.schedule_once(lambda dt: self.busy_stop(), 150)
+
+    def busy_stop(self):
+        if not self._busy:
+            return
+        self._busy = False
+        for ev in (self._busy_ev, self._busy_safety):
+            if ev is not None:
+                ev.cancel()
+        self._busy_ev = self._busy_safety = None
+        label = getattr(self, "status_label", None)
+        if label is not None:
+            label.text = self.t("speaking" if getattr(self, "orb_state", "idle") == "speaking" else "ready")
+
     def _set_busy(self, message):
         self.set_orb_state("thinking")
-        if hasattr(self, "status_label"):
-            self.status_label.text = message
+        self.busy_start("image" if message == self.t("media_image") else "think")
 
     def _multipart(self, fields, file_part=None):
         boundary = "----JARVIS" + uuid.uuid4().hex
@@ -5683,13 +5793,14 @@ class JarvisApp(App):
             text, say = self.t("edit_failed").format(self.friendly_error(exc)), ""
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
-    def _attachment_edit_job(self, chat_id, name, mime, raw, prompt, mode):
+    def _attachment_edit_job(self, chat_id, name, mime, raw, prompt, mode, path=None):
+        saved = None
         try:
             if mode == "image_remix":
                 body, ctype = self._multipart({"prompt": prompt[:600], "language": self._lang_code()}, (name, mime, raw))
                 headers, data = self._server_call("/image/remix", body, ctype, timeout=200)
-                path = self._save_private(data, "sai_new" + headers.get("x-edit-ext", ".jpg"))
-                text = self.t("remix_ready") + "\n[[img:" + path + "]]"
+                saved = self._save_private(data, "sai_new" + headers.get("x-edit-ext", ".jpg"))
+                text = self.t("remix_ready") + "\n[[img:" + saved + "]]"
                 say = self.t("remix_ready")
             elif mode == "image_edit":
                 body, ctype = self._multipart({"prompt": prompt[:1000], "language": self._lang_code()}, (name, mime, raw))
@@ -5701,8 +5812,8 @@ class JarvisApp(App):
                 except Exception:
                     pass
                 ext = headers.get("x-edit-ext", ".jpg")
-                path = self._save_private(data, "jarvis_edited" + ext)
-                text = self.t("edit_ready").format(summary or "") + "\n[[img:" + path + "]]"
+                saved = self._save_private(data, "jarvis_edited" + ext)
+                text = self.t("edit_ready").format(summary or "") + "\n[[img:" + saved + "]]"
                 say = summary
             else:
                 fname = name if name.lower().endswith(TEXT_FILE_EXTS) else name + ".txt"
@@ -5712,21 +5823,48 @@ class JarvisApp(App):
                 content = str(result.get("text", ""))
                 base, ext = os.path.splitext(fname)
                 out_name = base + "_edited" + ext
-                path = self._save_private(content.encode("utf-8"), out_name)
+                saved = self._save_private(content.encode("utf-8"), out_name)
                 preview = content[:700] + ("\n…" if len(content) > 700 else "")
-                text = self.t("file_edited").format(out_name) + "\n\n" + preview + "\n[[file:" + path + "]]"
+                text = self.t("file_edited").format(out_name) + "\n\n" + preview + "\n[[file:" + saved + "]]"
                 say = self.t("file_edited").format(out_name)
+            Clock.schedule_once(lambda dt: self._set_delivery(path, "sent"), 0)
         except Exception as exc:
             save_crash("Attachment edit failed:\n" + traceback.format_exc())
             text, say = self.t("edit_failed").format(self.friendly_error(exc)), ""
+            if isinstance(exc, urllib.error.HTTPError):
+                Clock.schedule_once(lambda dt: self._set_delivery(path, "sent"), 0)
+            else:
+                self._attachment_net_failed(chat_id, path, text)
+                return
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
     def open_media(self, path):
         try:
             MediaViewer(self, path).open()
         except Exception:
-            save_crash("Open media failed:\n" + traceback.format_exc())
-            self.show_response(self.t("view_failed"))
+            detail = traceback.format_exc()
+            save_crash("Open media failed:\n" + detail)
+            self.show_error_popup("Open media failed:\n" + detail)
+
+    # ---- delivery state of a sent picture/file and the retry button
+    def _paint_delivery(self, label, state):
+        label.text = self.t({"sending": "d_sending", "sent": "d_ok", "failed": "d_fail"}[state])
+        label.color = {"sending": hex_color("#8FA6C8"), "sent": hex_color("#7CE0A0"), "failed": hex_color("#FFB4B4")}[state]
+
+    def _set_delivery(self, path, state):
+        if not path:
+            return
+        if not hasattr(self, "_delivery"):
+            self._delivery = {}
+        self._delivery[path] = state
+        label = getattr(self, "_delivery_labels", {}).get(path)
+        if label is not None:
+            self._paint_delivery(label, state)
+
+    def retry_last(self):
+        fn, self._retry = getattr(self, "_retry", None), None
+        if fn is not None:
+            fn()
 
     def _media_notice(self, text):
         for widget in Window.children:
@@ -6274,7 +6412,8 @@ class JarvisApp(App):
             self._refresh_attach_strip()
             self._sync_action_mode()
             marker = ("[[img:" if pending["mime"].startswith("image/") else "[[file:") + pending["path"] + "]]"
-            shown = pending["name"] + ("\n" + command_text if command_text else "") + "\n" + marker
+            shown = (command_text + "\n" if command_text else "") + marker
+            self._set_delivery(pending["path"], "sending")
             self.add_chat_message(chat_id, "user", shown)
             for fact in extract_facts(command_text):
                 self.profile.add(fact)
@@ -6298,8 +6437,7 @@ class JarvisApp(App):
         info_fn = find_info_command(command_text)
         if info_fn is not None:
             self.set_orb_state("thinking")
-            if hasattr(self, "status_label"):
-                self.status_label.text = self.t("server_thinking")
+            self.busy_start("think")
             threading.Thread(target=self._run_info, args=(chat_id, info_fn), daemon=True).start()
             return
         answer = run_command(self, command_text)
@@ -6309,8 +6447,7 @@ class JarvisApp(App):
                 self.deliver_answer(chat_id, answer)
                 return
             self.set_orb_state("thinking")
-            if hasattr(self, "status_label"):
-                self.status_label.text = self.t("server_thinking")
+            self.busy_start("think")
             threading.Thread(target=self._ask_server,
                              args=(chat_id, command_text, history), daemon=True).start()
             return
@@ -6421,10 +6558,14 @@ class JarvisApp(App):
             save_crash("Title job failed:\n" + traceback.format_exc())
 
     def _voice_ready(self):
+        if self._busy:
+            return
         if hasattr(self, "status_label"):
             self.status_label.text = self.t("ready")
 
     def _status_after_answer(self):
+        if self._busy:
+            return
         if hasattr(self, "status_label"):
             waiting = self.speak_enabled and self.server_token.strip()
             self.status_label.text = self.t("voice_preparing" if waiting else "ready")
@@ -6466,7 +6607,7 @@ class JarvisApp(App):
                         return value.strip()
             return ""
 
-        answer, last = "", ""
+        answer, last, net_failed = "", "", False
         for attempt in (1, 2):  # дафъаи дуюм барои Render-и хобида
             try:
                 req = urllib.request.Request(
@@ -6490,9 +6631,21 @@ class JarvisApp(App):
             except Exception as exc:
                 save_crash("Chat request failed:\n" + traceback.format_exc())
                 last = self.friendly_error(exc)
+                net_failed = True
         if not answer:
             answer = last or self.t("server_error")
+            if net_failed:
+                def offer(dt):
+                    self._retry = lambda: self._resend_text(chat_id, message, history)
+                    self._finish_server_answer(chat_id, answer + "\n" + RETRY_MARK)
+                Clock.schedule_once(offer, 0)
+                return
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
+
+    def _resend_text(self, chat_id, message, history):
+        self.set_orb_state("thinking")
+        self.busy_start("think")
+        threading.Thread(target=self._ask_server, args=(chat_id, message, history), daemon=True).start()
 
     def _finish_server_answer(self, chat_id, answer):
         self._status_after_answer()
@@ -6564,7 +6717,10 @@ class JarvisApp(App):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
         Clock.schedule_once(lambda dt: self._maybe_retitle(chat_id), 10)
         answer = self.brand(answer)
-        text = str(answer).strip()[:4000]
+        if RETRY_MARK in str(answer):
+            self.add_chat_message(chat_id, "jarvis", answer)       # an error with a Retry button: shown, not read aloud
+            return
+        text = strip_media(answer)[:4000]
         if self.speak_enabled and text and self.server_token.strip():
             threading.Thread(target=self._request_synced_speech,
                              args=(chat_id, answer, text), daemon=True).start()
@@ -6617,6 +6773,7 @@ class JarvisApp(App):
     def _start_synced_answer(self, chat_id, answer, text, path, words):
         """Start the audio, then reveal the answer word by word at the spoken positions."""
         self.chats.add_message(chat_id, "jarvis", answer)
+        self.busy_start("answer")
         label = None
         if self.chats.current_id == chat_id:
             if self.chat_placeholder:
@@ -6632,6 +6789,7 @@ class JarvisApp(App):
         if label is None or not words:
             if label is not None:
                 set_label_text(label, answer)
+            self.busy_stop()
             return
         begin = time.monotonic()
         state = {"shown": 0}
@@ -6639,6 +6797,7 @@ class JarvisApp(App):
         def finish():
             set_label_text(label, answer)
             self.scroll_chat_down()
+            self.busy_stop()
 
         def tick(dt):
             if player is None or getattr(self, "_server_speech_player", None) is not player:
@@ -6954,8 +7113,7 @@ class JarvisApp(App):
         try:
             self.speech.stop()
             self.set_orb_state("thinking")
-            if hasattr(self, "status_label"):
-                self.status_label.text = self.t("server_thinking")
+            self.busy_start("think")
         except Exception:
             self.set_orb_state("idle")
             save_crash("stop_listening failed:\n" + traceback.format_exc())
@@ -6984,7 +7142,7 @@ class JarvisApp(App):
             self._orb_event.cancel()
             self._orb_event = None
         label = getattr(self, "status_label", None)
-        if label is not None:
+        if label is not None and not (self._busy and state != "listening"):
             label.text = {"listening": self.t("listening"),
                           "speaking": self.t("speaking")}.get(state, self.t("ready"))
         if state != "idle" and seconds:
