@@ -478,7 +478,7 @@ TEXTS = {
         "ob_or": "ё",
         "file_waiting": "Файл қабул шуд. Бо он чӣ кор кунам? (масалан: таҳлил кун, матнро хон, таҳрир кун)",
         "online": "Система фаъол аст",
-        "welcome": "Салом! Ман JARVIS ҳастам. Чӣ кор кунам?",
+        "welcome": "Ассалому алайкум! Хуш омадед. Чӣ хизмате аз дастам меояд?",
         "input": "Фармонро нависед...",
         "settings": "Танзимоти JARVIS",
         "close": "Пӯшидан",
@@ -522,6 +522,24 @@ TEXTS = {
         "file_created": "Файл сохта шуд: {}",
         "file_edited": "Файл таҳрир шуд: {}",
         "save_btn": "Захира",
+        "remix_ready": "Акси нав омода шуд. Он аз рӯи акси шумо ва хостаи шумо сохта шудааст, на нусхаи айнан.",
+        "view_copy": "Нусха",
+        "view_download": "Зеркашӣ",
+        "view_copied": "Нусха гирифта шуд",
+        "view_size": "Андоза",
+        "view_type": "Навъ",
+        "view_nopreview": "Намоиши пешакӣ барои ин файл нест",
+        "view_actions": "Амалҳо",
+        "view_failed": "Кушодан натавонист",
+        "pf_title": "Бо шумо наздиктар шавем",
+        "pf_first": "Ном",
+        "pf_last": "Насаб",
+        "pf_age": "Сол ё синну сол (масалан 1998 ё 27)",
+        "pf_male": "Мард",
+        "pf_female": "Зан",
+        "pf_skip": "Баъдтар",
+        "pf_note": "Ин маълумот танҳо дар телефони шумо нигоҳ дошта мешавад.",
+        "pf_err": "Ном ва насабро нависед",
         "saved_to": "Захира шуд: {}",
         "save_failed": "Захира нашуд: {}",
         "err_network": "Интернет нест ё хеле суст аст. Пайвастшавиро санҷед.",
@@ -554,7 +572,7 @@ TEXTS = {
         "ob_err_mismatch": "Паролҳо мувофиқ нестанд.",
         "ob_err_wrong": "Ном ё парол нодуруст аст.",
         "ob_err_exists": "Ин ном аллакай гирифта шудааст. Номи дигар интихоб кунед.",
-        "ob_welcome": "Салом, {}! Ман {} ҳастам. Чӣ кӯмак кунам?",
+        "ob_welcome": "Хуш омадед, {}! Ҳисоби шумо омода аст. Чӣ хизмате аз дастам меояд?",
         "acct_line": "Аккаунт: {}",
         "acct_rename": "Тағйири номи ёрдамчӣ",
         "acct_logout": "Баромадан аз аккаунт",
@@ -665,7 +683,7 @@ TEXTS = {
         "ob_or": "или",
         "file_waiting": "Файл получен. Что с ним сделать? (например: проанализируй, прочитай текст, отредактируй)",
         "online": "Система активна",
-        "welcome": "Здравствуйте! Я JARVIS. Чем могу помочь?",
+        "welcome": "Здравствуйте! Рад вас видеть. Чем могу быть вам полезен?",
         "input": "Введите команду...",
         "settings": "Настройки JARVIS",
         "close": "Закрыть",
@@ -709,6 +727,24 @@ TEXTS = {
         "file_created": "Файл создан: {}",
         "file_edited": "Файл отредактирован: {}",
         "save_btn": "Сохранить",
+        "remix_ready": "Новое изображение готово. Оно создано по вашему снимку и описанию, это не точная копия.",
+        "view_copy": "Копировать",
+        "view_download": "Скачать",
+        "view_copied": "Скопировано",
+        "view_size": "Размер",
+        "view_type": "Тип",
+        "view_nopreview": "Для этого файла нет предпросмотра",
+        "view_actions": "Действия",
+        "view_failed": "Не удалось открыть",
+        "pf_title": "Давайте познакомимся",
+        "pf_first": "Имя",
+        "pf_last": "Фамилия",
+        "pf_age": "Год рождения или возраст (например 1998 или 27)",
+        "pf_male": "Мужской",
+        "pf_female": "Женский",
+        "pf_skip": "Позже",
+        "pf_note": "Эти данные хранятся только на вашем телефоне.",
+        "pf_err": "Введите имя и фамилию",
         "saved_to": "Сохранено: {}",
         "save_failed": "Не удалось сохранить: {}",
         "err_network": "Нет интернета или он очень медленный. Проверьте подключение.",
@@ -741,7 +777,7 @@ TEXTS = {
         "ob_err_mismatch": "Пароли не совпадают.",
         "ob_err_wrong": "Неверное имя или пароль.",
         "ob_err_exists": "Это имя уже занято. Выберите другое.",
-        "ob_welcome": "Здравствуйте, {}! Я {}. Чем помочь?",
+        "ob_welcome": "Добро пожаловать, {}! Ваш аккаунт готов. Чем могу быть полезен?",
         "acct_line": "Аккаунт: {}",
         "acct_rename": "Изменить имя помощника",
         "acct_logout": "Выйти из аккаунта",
@@ -852,7 +888,7 @@ TEXTS = {
         "ob_or": "or",
         "file_waiting": "File received. What should I do with it? (for example: analyze, read the text, edit)",
         "online": "System online",
-        "welcome": "Hello! I am JARVIS.",
+        "welcome": "Hello, and welcome! How may I assist you today?",
         "input": "Type a command...",
         "settings": "JARVIS Settings",
         "close": "Close",
@@ -896,6 +932,24 @@ TEXTS = {
         "file_created": "File created: {}",
         "file_edited": "File edited: {}",
         "save_btn": "Save",
+        "remix_ready": "Your new picture is ready. It is made from your photo and your description, not an exact copy.",
+        "view_copy": "Copy",
+        "view_download": "Download",
+        "view_copied": "Copied",
+        "view_size": "Size",
+        "view_type": "Type",
+        "view_nopreview": "No preview for this file",
+        "view_actions": "Actions",
+        "view_failed": "Could not open",
+        "pf_title": "Let us get acquainted",
+        "pf_first": "First name",
+        "pf_last": "Last name",
+        "pf_age": "Birth year or age (e.g. 1998 or 27)",
+        "pf_male": "Male",
+        "pf_female": "Female",
+        "pf_skip": "Later",
+        "pf_note": "This information stays on your phone only.",
+        "pf_err": "Enter first and last name",
         "saved_to": "Saved: {}",
         "save_failed": "Could not save: {}",
         "err_network": "No internet or it is very slow. Check your connection.",
@@ -928,7 +982,7 @@ TEXTS = {
         "ob_err_mismatch": "The passwords do not match.",
         "ob_err_wrong": "Wrong name or password.",
         "ob_err_exists": "This name is already taken. Choose another.",
-        "ob_welcome": "Hello, {}! I am {}. How can I help?",
+        "ob_welcome": "Welcome, {}! Your account is ready. How may I assist you today?",
         "acct_line": "Account: {}",
         "acct_rename": "Change the assistant's name",
         "acct_logout": "Sign out",
@@ -3319,6 +3373,60 @@ def extract_facts(text):
     return facts
 
 
+GREETINGS = {
+    "tg": {
+        "morning": ["Субҳатон бахайр{n}! Хуш омадед. Чӣ хизмате аз дастам меояд?",
+                    "Субҳатон бахайр{n}! Аз дидани шумо шодам. Бигӯед, чӣ тавр ёрӣ расонам?"],
+        "day": ["Рӯзатон бахайр{n}! Хуш омадед. Бигӯед, ба шумо чӣ тавр ёрӣ расонам?",
+                "Ассалому алайкум{n}! Хуш омадед. Чӣ хизмате аз дастам меояд?"],
+        "evening": ["Шоматон бахайр{n}! Хуш омадед. Чӣ хизмате барои шумо анҷом диҳам?",
+                    "Шоматон бахайр{n}! Аз дидани шумо шодам. Бигӯед, чӣ лозим аст?"],
+        "night": ["Шабатон бахайр{n}! Хуш омадед. Чӣ хизмате аз дастам меояд?",
+                  "Шабатон бахайр{n}! Бигӯед, ба шумо чӣ тавр ёрӣ расонам?"],
+    },
+    "ru": {
+        "morning": ["Доброе утро{n}! Рад вас видеть. Чем могу быть вам полезен?",
+                    "Доброе утро{n}! Добро пожаловать. Чем я могу вам помочь?"],
+        "day": ["Добрый день{n}! Рад вас видеть. Чем могу быть вам полезен?",
+                "Здравствуйте{n}! Добро пожаловать. Чем я могу вам помочь?"],
+        "evening": ["Добрый вечер{n}! Рад вас видеть. Чем могу быть вам полезен?",
+                    "Добрый вечер{n}! Добро пожаловать. Что я могу для вас сделать?"],
+        "night": ["Доброй ночи{n}! Рад вас видеть. Чем могу быть вам полезен?",
+                  "Доброй ночи{n}! Чем я могу вам помочь?"],
+    },
+    "en": {
+        "morning": ["Good morning{n}! Welcome back. How may I assist you today?",
+                    "Good morning{n}! It is a pleasure to see you. What can I do for you?"],
+        "day": ["Good afternoon{n}! Welcome back. How may I assist you today?",
+                "Hello{n}, and welcome. How may I be of help?"],
+        "evening": ["Good evening{n}! Welcome back. How may I assist you?",
+                    "Good evening{n}! It is a pleasure to see you. What can I do for you?"],
+        "night": ["Good evening{n}! Welcome back. How may I assist you?",
+                  "Hello{n}, and welcome. How may I be of help tonight?"],
+    },
+}
+
+NAME_PATTERNS = [re.compile(x, re.IGNORECASE) for x in (
+    r"номи ман\s+([A-Za-zА-Яа-яЁёҒғӢӣҚқӮӯҲҳҶҷ\-]{2,20})", r"меня зовут\s+([A-Za-zА-Яа-яЁё\-]{2,20})",
+    r"my name is\s+([A-Za-z\-]{2,20})")]
+
+
+def greeting_for(language, facts, hour):
+    """A respectful greeting for the time of day, with the user's first name when he has told it."""
+    name = ""
+    for fact in reversed(facts):
+        for rx in NAME_PATTERNS:
+            m = rx.search(fact)
+            if m:
+                name = m.group(1).strip().capitalize()
+                break
+        if name:
+            break
+    period = "morning" if 5 <= hour < 11 else "day" if 11 <= hour < 17 else "evening" if 17 <= hour < 22 else "night"
+    options = GREETINGS.get(language, GREETINGS["tg"])[period]
+    return random.choice(options).replace("{n}", (", " + name) if name else "")
+
+
 class ProfileStore(object):
     """The "about the user" folder: facts the user told the assistant. Stored only on this phone."""
 
@@ -3676,6 +3784,19 @@ def looks_like_edit(prompt, kind):
     if low.startswith(_QUESTION_STARTS) or low.endswith("?"):
         return False
     return any(v in low for v in (_IMAGE_VERBS if kind == "image" else _TEXT_VERBS))
+
+
+_REMIX_WORDS = ("бисоз", "созед", "сохта деҳ", "табдил", "мисли ин", "ҳамин гуна", "ба шакли", "мултфилм", "мультфильм", "аниме", "услуб", "стиль",
+                "сделай", "создай", "преврати", "нарисуй", "в стиле", "cartoon", "anime", "style", "turn it", "turn into", "convert", "create",
+                "make it", "make me", "make a", "paint", "draw")
+
+
+def looks_like_remix(prompt):
+    """A request for a NEW picture made from the photo (not a simple crop/rotate/filter)."""
+    low = " ".join(str(prompt).lower().split())
+    if not low or low.endswith("?") or low.startswith(_QUESTION_STARTS):
+        return False
+    return any(w in low for w in _REMIX_WORDS)
 
 
 def is_text_file(name, mime):
@@ -4448,6 +4569,182 @@ class AuroraScreen(FloatLayout):
         return True
 
 
+class DotsButton(FrostButton):
+    """A round button with three vertical dots (drawn, so it does not depend on a font glyph)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.after:
+            self._dc = Color(1, 1, 1, 0.92)
+            self._d = [Ellipse(pos=(0, 0), size=(0, 0)) for _ in range(3)]
+        self.bind(pos=self._place, size=self._place)
+        self._place()
+
+    def _place(self, *_):
+        r = dp(2.6)
+        cx, cy = self.center_x, self.center_y
+        for i, e in enumerate(self._d):
+            e.size = (2 * r, 2 * r)
+            e.pos = (cx - r, cy - r + (i - 1) * dp(7.5))
+
+
+def make_zoom_image(path):
+    from kivy.uix.scatter import Scatter
+    from kivy.uix.image import Image as KivyImage
+
+    class ZoomImage(Scatter):
+        def on_touch_down(self, touch):
+            if self.collide_point(*touch.pos) and getattr(touch, "is_double_tap", False):
+                self.reset()
+                return True
+            return super().on_touch_down(touch)
+
+        def reset(self):
+            self.scale = 1
+            self.pos = (0, 0)
+
+        def on_touch_up(self, touch):
+            result = super().on_touch_up(touch)
+            if self.scale <= 1.02:
+                self.reset()
+            return result
+
+    zoom = ZoomImage(do_rotation=False, do_translation=True, do_scale=True, scale_min=1.0, scale_max=8.0,
+                     auto_bring_to_front=False, size_hint=(None, None))
+    zoom.add_widget(KivyImage(source=path, fit_mode="contain", nocache=True, size_hint=(1, 1)))
+    zoom.bind(size=lambda inst, sz: [setattr(c, "size", sz) for c in inst.children])
+    return zoom
+
+
+class MediaViewer(FloatLayout):
+    """Full-screen picture/file viewer: back, title and a three-dot menu (copy / download)."""
+
+    def __init__(self, app, path, **kwargs):
+        super().__init__(size_hint=(1, 1), **kwargs)
+        self.app = app
+        self.path = path
+        self.closing = False
+        theme = THEMES[app.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        bg = hex_color(theme["background"])
+        with self.canvas.before:
+            Color(bg[0] * 0.6, bg[1] * 0.6, bg[2] * 0.6, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=lambda *_: setattr(self._bg, "pos", self.pos), size=lambda *_: setattr(self._bg, "size", self.size))
+        self.name = os.path.basename(path).split("__", 1)[-1]
+        import mimetypes
+        self.mime = mimetypes.guess_type(self.name)[0] or "application/octet-stream"
+        bar = BoxLayout(orientation="horizontal", size_hint=(1, None), height=dp(56), padding=(dp(8), dp(6)), spacing=dp(8),
+                        pos_hint={"top": 1})
+        back = FrostButton(tint=tint, alpha=0.14, radius=18, text="‹", font_size=dp(28), halign="center",
+                           size_hint=(None, 1), width=dp(46), color=hex_color(theme["text"]))
+        back.bind(on_release=lambda *_: self.dismiss())
+        bar.add_widget(back)
+        bar.add_widget(make_label(self.name, 15, theme["text"], True, halign="left"))
+        menu = DotsButton(tint=tint, alpha=0.14, radius=18, size_hint=(None, 1), width=dp(46))
+        menu.bind(on_release=lambda *_: self.show_menu())
+        bar.add_widget(menu)
+        self.area = FloatLayout(size_hint=(1, None))
+        self.area.bind(size=self._fit_zoom)
+        self.add_widget(self.area)
+        self.add_widget(bar)
+        self.bind(height=lambda *_: setattr(self.area, "height", max(1, self.height - dp(56))))
+        self.zoom = None
+        try:
+            self._fill()
+        except Exception:
+            save_crash("Viewer failed:\n" + traceback.format_exc())
+            self.area.add_widget(make_label(app.t("view_failed"), 15, theme["text"], False))
+        self.toast_label = make_label("", 13, theme["text"], True, size_hint=(None, None), size=(dp(240), dp(38)),
+                                      pos_hint={"center_x": 0.5, "y": 0.06}, opacity=0)
+        frost(self.toast_label, 16, tint, 0.30, 0.5)
+        self.add_widget(self.toast_label)
+
+    def _fit_zoom(self, *_):
+        if self.zoom is not None:
+            self.zoom.size = self.area.size
+            self.zoom.reset()
+
+    def _fill(self):
+        app = self.app
+        theme = THEMES[app.theme_index]
+        size = os.path.getsize(self.path)
+        if self.mime.startswith("image/"):
+            self.zoom = make_zoom_image(self.path)
+            self.area.add_widget(self.zoom)
+            self._fit_zoom()
+            return
+        if is_text_file(self.name, self.mime):
+            with open(self.path, "rb") as handle:
+                data = handle.read(30000)
+            text = data.decode("utf-8", "replace")
+            if size > 30000:
+                text += "\n…"
+            from kivy.uix.scrollview import ScrollView
+            scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False, bar_width=dp(3))
+            label = EmojiLabel(text="", font_size=dp(14), color=hex_color(theme["text"]), halign="left", valign="top",
+                               size_hint_y=None)
+            label.set_plain(text)
+            label.bind(width=lambda inst, w: setattr(inst, "text_size", (w - dp(24), None)))
+            label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1] + dp(24)))
+            scroll.add_widget(label)
+            self.area.add_widget(scroll)
+            return
+        ext = (os.path.splitext(self.name)[1][1:6] or "FILE").upper()
+        card = BoxLayout(orientation="vertical", size_hint=(0.8, None), height=dp(190), padding=dp(16), spacing=dp(6),
+                         pos_hint={"center_x": 0.5, "center_y": 0.55})
+        frost(card, 26, hex_color(theme["accent"])[:3], 0.14, 0.4)
+        card.add_widget(make_label(ext, 34, theme["accent"], True))
+        card.add_widget(make_label(self.name, 14, theme["text"], True, size_hint_y=None, height=dp(34)))
+        card.add_widget(make_label(app.t("view_type") + ": " + self.mime + "   ·   " + app.t("view_size") + ": " + human_size(size),
+                                   11, muted(), False, size_hint_y=None, height=dp(34)))
+        card.add_widget(make_label(app.t("view_nopreview"), 11, muted(), False, size_hint_y=None, height=dp(22)))
+        self.area.add_widget(card)
+
+    def show_menu(self):
+        app = self.app
+        theme = THEMES[app.theme_index]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=170)
+
+        def act(fn):
+            def run(*_):
+                sheet.dismiss()
+                fn()
+            return run
+
+        app.frost_row(body, app.t("view_copy"), False, act(lambda: app.copy_media(self.path)), height=52)
+        app.frost_row(body, app.t("view_download"), False, act(lambda: app.save_media(self.path)), height=52)
+        sheet.open()
+
+    def toast(self, text):
+        self.toast_label.text = text
+        self.toast_label.width = min(Window.width - dp(24), max(dp(160), len(text) * dp(9) + dp(32)))
+        Animation.cancel_all(self.toast_label)
+        anim = Animation(opacity=1, d=0.15) + Animation(opacity=1, d=1.8) + Animation(opacity=0, d=0.3)
+        anim.start(self.toast_label)
+
+    def open(self):
+        Window.add_widget(self)
+        self.app.sheet_opened(self)
+
+    def dismiss(self, *args, **kwargs):
+        if self.closing:
+            return
+        self.closing = True
+        self.app.sheet_closed(self)
+        if self.parent is not None:
+            self.parent.remove_widget(self)
+
+
+def human_size(n):
+    n = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return ("%d %s" % (n, unit)) if unit == "B" else ("%.1f %s" % (n, unit))
+        n /= 1024.0
+
+
 def glass_input(app, hint, text="", password=False, center=False, size=15):
     theme = THEMES[app.theme_index]
     wrap = BoxLayout(size_hint_y=None, height=dp(50), padding=(dp(14), 0))
@@ -4456,7 +4753,7 @@ def glass_input(app, hint, text="", password=False, center=False, size=15):
                    background_normal="", background_active="", background_color=(0, 0, 0, 0),
                    foreground_color=hex_color(theme["text"]), hint_text_color=(1, 1, 1, 0.38),
                    cursor_color=hex_color(theme["accent"]), font_size=dp(size),
-                   padding=[0, dp(14.5), 0, 0], write_tab=False, input_type="text")
+                   padding=[0, dp(14.5), 0, 0], write_tab=False, input_type="null")
     if center:
         ti.halign = "center"
     wrap.add_widget(ti)
@@ -4533,6 +4830,7 @@ class JarvisApp(App):
         self.assistant_name = "S.A.I"
         self.username = ""
         self.onboarded = False
+        self.profile_done = False
         self.tajik_tts_url = ""
         self.last_response = ""
         self.animation_paused = False
@@ -4655,6 +4953,7 @@ class JarvisApp(App):
             if self.ui_mode not in ("auto", "dark", "light"):
                 self.ui_mode = "auto"
             self.onboarded = bool(data.get("onboarded", False))
+            self.profile_done = bool(data.get("profile_done", self.onboarded))   # existing users are not asked again
             if not self.onboarded:
                 self.server_token = ""      # an old shared token is no longer used
         if self.language not in ("tg", "ru", "en"):
@@ -4692,7 +4991,8 @@ class JarvisApp(App):
                        assistant_name=getattr(self, "assistant_name", "S.A.I"),
                        username=getattr(self, "username", ""),
                        ui_mode=getattr(self, "ui_mode", "auto"),
-                       onboarded=getattr(self, "onboarded", False))
+                       onboarded=getattr(self, "onboarded", False),
+                       profile_done=getattr(self, "profile_done", False))
 
     def update_colors(self):
         theme = THEMES[self.theme_index]
@@ -4771,7 +5071,7 @@ class JarvisApp(App):
             background_normal="", background_active="",
             background_color=(0, 0, 0, 0),
             padding=[dp(8), dp(15), dp(4), dp(10)],
-            input_type="text", keyboard_suggestions=False,
+            input_type="null", keyboard_suggestions=False,
         )
         # Enter starts a new paragraph (multiline); a message is sent only with the send button.
         self.command_input.bind(text=self.on_text_change)
@@ -4891,7 +5191,19 @@ class JarvisApp(App):
             try:
                 if kind_m == "img":
                     from kivy.uix.image import Image as KivyImage
-                    bubble.add_widget(KivyImage(source=path_m, size_hint_y=None, height=dp(230), fit_mode="contain", nocache=True))
+                    from kivy.uix.behaviors import ButtonBehavior
+
+                    class TapImage(ButtonBehavior, KivyImage):
+                        pass
+
+                    thumb = TapImage(source=path_m, size_hint_y=None, height=dp(230), fit_mode="contain", nocache=True)
+                    thumb.bind(on_release=lambda inst, pth=path_m: self.open_media(pth))
+                    bubble.add_widget(thumb)
+                else:
+                    open_btn = GlassButton(text=os.path.basename(path_m).split("__", 1)[-1], tint=accent, active=False, radius=10,
+                                           size_hint_y=None, height=dp(40), font_size=dp(13), color=hex_color(theme["text"]))
+                    open_btn.bind(on_release=lambda btn, pth=path_m: self.open_media(pth))
+                    bubble.add_widget(open_btn)
                 save_btn = GlassButton(text=self.t("save_btn"), tint=accent, active=False, radius=10, size_hint_y=None,
                                        height=dp(38), font_size=dp(13), color=hex_color(theme["text"]))
                 save_btn.bind(on_release=lambda btn, pth=path_m: self.save_media(pth))
@@ -5183,11 +5495,13 @@ class JarvisApp(App):
     def _process_attachment(self, chat_id, att, prompt):
         name, mime, raw = att["name"], att["mime"], att["raw"]
         mode = "analyze"
-        if mime.startswith("image/") and looks_like_edit(prompt, "image"):
+        if mime.startswith("image/") and looks_like_remix(prompt):
+            mode = "image_remix"
+        elif mime.startswith("image/") and looks_like_edit(prompt, "image"):
             mode = "image_edit"
         elif is_text_file(name, mime) and looks_like_edit(prompt, "text"):
             mode = "text_edit"
-        self._set_busy(self.t("media_edit") if mode != "analyze" else self.t("server_thinking"))
+        self._set_busy(self.t("media_image") if mode == "image_remix" else self.t("media_edit") if mode != "analyze" else self.t("server_thinking"))
         target = self._upload_attachment if mode == "analyze" else self._attachment_edit_job
         args = (chat_id, name, mime, raw, prompt) if mode == "analyze" else (chat_id, name, mime, raw, prompt, mode)
         threading.Thread(target=target, args=args, daemon=True).start()
@@ -5371,7 +5685,13 @@ class JarvisApp(App):
 
     def _attachment_edit_job(self, chat_id, name, mime, raw, prompt, mode):
         try:
-            if mode == "image_edit":
+            if mode == "image_remix":
+                body, ctype = self._multipart({"prompt": prompt[:600], "language": self._lang_code()}, (name, mime, raw))
+                headers, data = self._server_call("/image/remix", body, ctype, timeout=200)
+                path = self._save_private(data, "sai_new" + headers.get("x-edit-ext", ".jpg"))
+                text = self.t("remix_ready") + "\n[[img:" + path + "]]"
+                say = self.t("remix_ready")
+            elif mode == "image_edit":
                 body, ctype = self._multipart({"prompt": prompt[:1000], "language": self._lang_code()}, (name, mime, raw))
                 headers, data = self._server_call("/image/edit", body, ctype, timeout=150)
                 import base64
@@ -5400,6 +5720,64 @@ class JarvisApp(App):
             save_crash("Attachment edit failed:\n" + traceback.format_exc())
             text, say = self.t("edit_failed").format(self.friendly_error(exc)), ""
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
+
+    def open_media(self, path):
+        try:
+            MediaViewer(self, path).open()
+        except Exception:
+            save_crash("Open media failed:\n" + traceback.format_exc())
+            self.show_response(self.t("view_failed"))
+
+    def _media_notice(self, text):
+        for widget in Window.children:
+            if isinstance(widget, MediaViewer) and not widget.closing:
+                widget.toast(text)
+                return
+        self.show_response(text)
+
+    def copy_media(self, path):
+        """Text files: the text goes to the clipboard. Pictures/other files: a content link that other apps can paste."""
+        import mimetypes
+        name = os.path.basename(path).split("__", 1)[-1]
+        mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        try:
+            if is_text_file(name, mime):
+                from kivy.core.clipboard import Clipboard
+                with open(path, "rb") as handle:
+                    Clipboard.copy(handle.read(200000).decode("utf-8", "replace"))
+            else:
+                from jnius import autoclass
+                cache = getattr(self, "_clip_uris", None)
+                if cache is None:
+                    cache = self._clip_uris = {}
+                activity = autoclass("org.kivy.android.PythonActivity").mActivity
+                resolver = activity.getContentResolver()
+                uri = cache.get(path)
+                if uri is None:
+                    ContentValues = autoclass("android.content.ContentValues")
+                    values = ContentValues()
+                    values.put("_display_name", name)
+                    values.put("mime_type", mime)
+                    is_image = mime.startswith("image/")
+                    values.put("relative_path", "Pictures/SAI" if is_image else "Download/SAI")
+                    collection = (autoclass("android.provider.MediaStore$Images$Media") if is_image
+                                  else autoclass("android.provider.MediaStore$Downloads")).EXTERNAL_CONTENT_URI
+                    uri = resolver.insert(collection, values)
+                    if uri is None:
+                        raise RuntimeError("MediaStore refused the file")
+                    out = resolver.openOutputStream(uri)
+                    inp = autoclass("java.io.FileInputStream")(path)
+                    copy_java_stream(inp, out)
+                    inp.close()
+                    out.close()
+                    cache[path] = uri
+                clip = autoclass("android.content.ClipData").newUri(resolver, name, uri)
+                service = activity.getSystemService("clipboard")
+                service.setPrimaryClip(clip)
+            self._media_notice(self.t("view_copied"))
+        except Exception as exc:
+            save_crash("Copy media failed:\n" + traceback.format_exc())
+            self._media_notice(self.t("copy_failed"))
 
     def save_media(self, path):
         """Copy a generated picture/file to the phone's gallery (Pictures/JARVIS) or Downloads (Download/JARVIS)."""
@@ -5430,7 +5808,7 @@ class JarvisApp(App):
             copy_java_stream(inp, out)
             inp.close()
             out.close()
-            self.show_response(self.t("saved_to").format(rel + "/" + name))
+            self._media_notice(self.t("saved_to").format(rel + "/" + name))
         except Exception as exc:
             save_crash("Saving media failed:\n" + traceback.format_exc())
             try:
@@ -5439,9 +5817,9 @@ class JarvisApp(App):
                 if not os.path.isdir(target):
                     raise RuntimeError(str(exc))
                 shutil.copy(path, os.path.join(target, name))
-                self.show_response(self.t("saved_to").format(os.path.join(target, name)))
+                self._media_notice(self.t("saved_to").format(os.path.join(target, name)))
             except Exception:
-                self.show_response(self.t("save_failed").format(self.friendly_error(exc)))
+                self._media_notice(self.t("save_failed").format(self.friendly_error(exc)))
 
     def friendly_error(self, exc):
         """A short, non-technical error text in the app language. Details go to the crash log only."""
@@ -5727,13 +6105,87 @@ class JarvisApp(App):
                 self.onboarded = True
                 self._ob_active = False
                 self.save_settings()
-                popup.dismiss()
-                self.build_interface()
-                self.show_response(self.t("ob_welcome").format(self.username, self.assistant_name))
+                if not self.profile_done:
+                    self._ob_profile_step(popup)
+                    return
+                self._ob_finish(popup)
             else:
                 status.text = message or self.t("err_generic")
 
         Clock.schedule_once(done, 0)
+
+    def _ob_finish(self, popup):
+        popup.dismiss()
+        self.build_interface()
+        welcome = self.t("ob_welcome").format(self.username, self.assistant_name)
+        self.show_response(welcome)
+        self.speak_answer(welcome)
+
+    def _ob_profile_step(self, screen):
+        """After sign-in: first name, last name, birth year/age and gender (can be skipped)."""
+        theme = THEMES[self.theme_index]
+        screen.set_step(2)
+        panel = screen.new_panel(470)
+        panel.add_widget(make_label(self.t("pf_title"), 18, theme["text"], True, size_hint_y=None, height=dp(30)))
+        first_w, first_in = glass_input(self, self.t("pf_first"))
+        last_w, last_in = glass_input(self, self.t("pf_last"))
+        age_w, age_in = glass_input(self, self.t("pf_age"))
+        for w in (first_w, last_w, age_w):
+            panel.add_widget(w)
+        chosen = {"g": ""}
+        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
+        buttons = {}
+
+        def pick(code):
+            chosen["g"] = code
+            for key, b in buttons.items():
+                on = key == code
+                b._fr_a0 = 0.50 if on else 0.10
+                b._fr_body_c.a = b._fr_a0
+                b.text = ("[b]" + mk(self.t("pf_male" if key == "m" else "pf_female")) + "[/b]") if on else mk(self.t("pf_male" if key == "m" else "pf_female"))
+
+        for key, label in (("m", "pf_male"), ("f", "pf_female")):
+            b = FrostButton(tint=screen.acc2, alpha=0.10, radius=16, text=mk(self.t(label)), font_size=dp(14), halign="center",
+                            color=hex_color(theme["text"]))
+            b.bind(on_release=lambda inst, k=key: pick(k))
+            buttons[key] = b
+            row.add_widget(b)
+        panel.add_widget(row)
+        status = make_label("", 12, "#FFB4B4", False, size_hint_y=None, height=dp(22))
+        panel.add_widget(status)
+        panel.add_widget(make_label(self.t("pf_note"), 11, muted(), False, size_hint_y=None, height=dp(30)))
+
+        def finish(skip=False):
+            first = " ".join(first_in.text.split())[:24]
+            last = " ".join(last_in.text.split())[:30]
+            if not skip:
+                if not first or not last:
+                    status.text = self.t("pf_err")
+                    return
+                facts = ["Номи ман " + first, "Насаби ман " + last]
+                digits = re.sub(r"\D", "", age_in.text)
+                if digits:
+                    n = int(digits)
+                    year = datetime.now().year
+                    if 1900 <= n <= year:
+                        facts.append("Соли таваллуди ман %d (синну сол: %d)" % (n, year - n))
+                    elif 3 <= n <= 110:
+                        facts.append("Синну соли ман %d" % n)
+                if chosen["g"]:
+                    facts.append("Ҷинси ман: " + ("мард" if chosen["g"] == "m" else "зан"))
+                for fact in facts:
+                    self.profile.add(fact)
+            self.profile_done = True
+            self.save_settings()
+            self._ob_finish(screen)
+
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
+                                     font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
+                                     color=(1, 1, 1, 1), on_release=lambda *_: finish(False)))
+        skip = FrostButton(tint=(1, 1, 1), alpha=0.06, radius=18, text=mk(self.t("pf_skip")), font_size=dp(13), halign="center",
+                           size_hint_y=None, height=dp(38), color=hex_color(theme["text"]))
+        skip.bind(on_release=lambda *_: finish(True))
+        panel.add_widget(skip)
 
     def _session_expired(self):
         if getattr(self, "_ob_active", False):
@@ -6576,7 +7028,7 @@ class JarvisApp(App):
         if key != 27:
             return False
         for widget in Window.children:          # the first child is the top one
-            if isinstance(widget, GlassSheet) and not widget.closing:
+            if isinstance(widget, (GlassSheet, MediaViewer)) and not widget.closing:
                 widget.dismiss()
                 return True
             if isinstance(widget, AuroraScreen):
@@ -6799,6 +7251,23 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
         if not self.onboarded or not self.server_token.strip():
             Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
+        else:
+            Clock.schedule_once(lambda dt: self.greet_user(), 1.8)
+
+    def greet_user(self):
+        """The assistant welcomes the user when the app opens: shown in the chat (not saved) and read aloud."""
+        try:
+            if getattr(self, "_ob_active", False):
+                return
+            text = greeting_for(self.language, [f["text"] for f in self.profile.facts], datetime.now().hour)
+            if self.chat_placeholder:
+                self.notice = text
+                self.render_chat()
+            else:
+                self.append_bubble("jarvis", text)
+            self.speak_answer(text)
+        except Exception:
+            save_crash("Greeting failed:\n" + traceback.format_exc())
 
     def show_pending_errors(self):
         text = self.startup_error or read_last_crash()
