@@ -719,6 +719,11 @@ async def analyze_attachment(http_request: Request, x_jarvis_token: str | None =
         "ru": "Отвечай по-русски. Проанализируй файл, не выдумывай факты и сообщи, если данные прочитать нельзя.",
         "en": "Answer in English. Analyze the file, do not invent facts, and say if its contents cannot be read.",
     }[language]
+    instructions += {
+        "tg": " Ҳеҷ гоҳ ба корбар нагӯ, ки ба барномаи дигари AI (масалан Meta AI) муроҷиат кунад ва барои онҳо матни дархост (prompt) нанавис. Агар ӯ сохтан ё тағйири акс хоҳад, бигӯ, ки ин барнома худаш акси нав месозад: ӯ бояд навишт, ки чӣ гуна акс мехоҳад.",
+        "ru": " Никогда не предлагай пользователю обратиться к другим ИИ-сервисам (например Meta AI) и не пиши для них промпты. Если он хочет создать или изменить картинку, скажи, что приложение само создаёт новое изображение по описанию.",
+        "en": " Never tell the user to use other AI services (such as Meta AI) and never write prompts for them. If he wants a picture created or changed, say that this app creates the new picture itself from his description.",
+    }[language]
     is_image = mime.startswith("image/")
     if not ai_tools.provider_chain(vision=is_image, language=language):
         raise HTTPException(status_code=503, detail="No AI provider key is configured" + (" for images (Groq or Gemini)" if is_image else ""))
@@ -925,6 +930,56 @@ async def image_edit(http_request: Request, x_jarvis_token: str | None = Header(
         print("Image edit failed:", type(exc).__name__, str(exc)[:200])
         raise HTTPException(status_code=415, detail="This image could not be edited (JPEG/PNG/WEBP expected)")
     safe_summary = base64.b64encode(summary.encode("utf-8")).decode("ascii")
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
+
+
+@app.post("/image/remix")
+async def image_remix(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """A NEW picture from a photo and an instruction: a vision model writes the image prompt, a free generator draws it."""
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "image")
+    check_rate_limit(rate_key(user, http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    if len(body) > 20 * 1024 * 1024 + 64 * 1024:
+        raise HTTPException(status_code=413, detail="File is too large (20 MB maximum)")
+    fields = _read_form(content_type, body)
+    raw = fields.get("file", (b"",))[0]
+    if not raw:
+        raise HTTPException(status_code=400, detail="Image is missing")
+    language = _lang(_form_text(fields, "language", "tg"))
+    instruction = _form_text(fields, "prompt")[:600]
+    if not instruction:
+        raise HTTPException(status_code=400, detail="Describe the new picture")
+    try:
+        small, mime = await asyncio.to_thread(prepare_image, raw)
+    except Exception:
+        raise HTTPException(status_code=415, detail="This image could not be read (JPEG/PNG/WEBP expected)")
+    data_url = "data:" + mime + ";base64," + base64.b64encode(small).decode("ascii")
+    messages = [
+        {"role": "system", "content": "You write prompts for an image generator. Look at the user's picture and his instruction (it may be in any language). "
+                                       "Write ONE detailed English prompt (at most 80 words) that makes the generator draw the picture he wants, keeping the main subject, composition and colours of the original as far as the instruction allows. "
+                                       "Output only the prompt, nothing else."},
+        {"role": "user", "content": [
+            {"type": "text", "text": "Instruction: " + instruction},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]},
+    ]
+    try:
+        result = await asyncio.to_thread(ai_tools.complete, messages, True, 300, 60.0, language)
+    except Exception as exc:
+        print("Remix prompt failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
+    prompt_en = result["answer"].strip().strip('"')[:480]
+    try:
+        data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, 1024, 1024)
+    except Exception as exc:
+        print("Remix generation failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The free image service is unavailable now (" + type(exc).__name__ + ")")
+    ext = ".png" if "png" in ctype else ".webp" if "webp" in ctype else ".jpg"
+    safe_summary = base64.b64encode(prompt_en[:200].encode("utf-8")).decode("ascii")
     return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
 
 
