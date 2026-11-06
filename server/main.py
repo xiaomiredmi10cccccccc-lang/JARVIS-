@@ -960,8 +960,9 @@ async def image_remix(http_request: Request, x_jarvis_token: str | None = Header
     data_url = "data:" + mime + ";base64," + base64.b64encode(small).decode("ascii")
     messages = [
         {"role": "system", "content": "You write prompts for an image generator. Look at the user's picture and his instruction (it may be in any language). "
-                                       "Write ONE detailed English prompt (at most 80 words) that makes the generator draw the picture he wants, keeping the main subject, composition and colours of the original as far as the instruction allows. "
-                                       "Output only the prompt, nothing else."},
+                                       "Output EXACTLY two lines. Line 1: one short polite sentence in " + {"tg": "Tajik", "ru": "Russian", "en": "English"}[language] + " telling the user what picture you are going to draw. "
+                                       "Line 2: ONE detailed English prompt (at most 80 words) that makes the generator draw the picture he wants, keeping the main subject, composition and colours of the original as far as the instruction allows. "
+                                       "No labels, no quotes, nothing else."},
         {"role": "user", "content": [
             {"type": "text", "text": "Instruction: " + instruction},
             {"type": "image_url", "image_url": {"url": data_url}},
@@ -972,14 +973,18 @@ async def image_remix(http_request: Request, x_jarvis_token: str | None = Header
     except Exception as exc:
         print("Remix prompt failed:", type(exc).__name__, str(exc)[:200])
         raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
-    prompt_en = result["answer"].strip().strip('"')[:480]
+    lines = [ln.strip().strip('"') for ln in result["answer"].strip().splitlines() if ln.strip()]
+    if len(lines) >= 2:
+        plan, prompt_en = lines[0][:240], " ".join(lines[1:])[:480]
+    else:
+        plan, prompt_en = "", (lines[0] if lines else instruction)[:480]
     try:
         data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, 1024, 1024)
     except Exception as exc:
         print("Remix generation failed:", type(exc).__name__, str(exc)[:200])
         raise HTTPException(status_code=502, detail="The free image service is unavailable now (" + type(exc).__name__ + ")")
     ext = ".png" if "png" in ctype else ".webp" if "webp" in ctype else ".jpg"
-    safe_summary = base64.b64encode(prompt_en[:200].encode("utf-8")).decode("ascii")
+    safe_summary = base64.b64encode(plan.encode("utf-8")).decode("ascii")
     return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
 
 
