@@ -3752,6 +3752,11 @@ def dotted_name(name):
 
 MEDIA_RE = re.compile(r"\[\[(img|file):([^\]]+)\]\]")
 RETRY_MARK = "[[retry]]"
+BASE_WORDS = {
+    "tg": "Салом Ташаккур Лутфан Мехоҳам Метавонед Метавонам Фармон Барнома Кӯмак Хотира Забон Имрӯз Фардо Дирӯз Ҳоло Чаро Куҷо Ҳамеша Хуб Бале Ҳаво Курс Нақша Тарҷума Нависед Бигӯед Бисоз Бикаш Ёбед Кушоед Зеркашӣ Паёмнависӣ Сомонӣ Доллар Рубл Шаҳр Душанбе Хуҷанд Тоҷикистон Тоҷикӣ Русӣ Англисӣ Маълумот Пурсиш Ҷавоб Саволи Мактаб Донишгоҳ Кор Оила Дӯст Ғизо Муҳаббат Сафар Мусиқӣ Филм Китоб Хондан Навиштан Шунидан Гуфтан Фаҳмондан Кӯтоҳ Пурра Тафсилот Мисол".split(),
+    "ru": "Привет Здравствуйте Спасибо Пожалуйста Хочу Можете Можно Команда Приложение Помощь Память Язык Сегодня Завтра Вчера Сейчас Почему Где Всегда Хорошо Да Нет Погода Курс План Перевод Напиши Расскажи Нарисуй Найди Открой Скачать Сообщение Сомони Доллар Рубль Город Душанбе Таджикистан Таджикский Русский Английский Информация Вопрос Ответ Школа Университет Работа Семья Друг Еда Любовь Путешествие Музыка Фильм Книга Читать Писать Слушать Говорить Объясни Коротко Подробно Пример".split(),
+    "en": "Hello Thanks Please Want Could Would Command Application Help Memory Language Today Tomorrow Yesterday Now Why Where Always Good Yes No Weather Rate Plan Translate Write Tell Draw Find Open Download Message Dollar City Tajikistan Tajik Russian English Information Question Answer School University Work Family Friend Food Love Travel Music Movie Book Read Listen Speak Explain Short Detailed Example".split(),
+}
 BUSY_PHRASES = {
     "tg": {"think": ["Интизор шавед…", "Фикр мекунам…", "Ҷавобро омода мекунам…", "Лаҳзае сабр кунед…", "Тақрибан тайёр аст…"],
            "image": ["Акс месозам…", "Интизор шавед, ин каме вақт мегирад…", "Рангҳоро мувофиқ мекунам…", "Лаҳзае сабр кунед…", "Тақрибан тайёр аст…"],
@@ -4682,7 +4687,7 @@ class MediaViewer(FloatLayout):
         except Exception:
             save_crash("Viewer failed:\n" + traceback.format_exc())
             self.area.add_widget(make_label(app.t("view_failed"), 15, theme["text"], False))
-        self.toast_label = make_label("", 13, theme["text"], True, size_hint=(None, None), size=(dp(240), dp(38)),
+        self.toast_label = make_label("", 13, theme["text"], True, size_hint=(None, None), width=dp(240), height=dp(38),
                                       pos_hint={"center_x": 0.5, "y": 0.06}, opacity=0)
         frost(self.toast_label, 16, tint, 0.30, 0.5)
         self.add_widget(self.toast_label)
@@ -4787,6 +4792,9 @@ def glass_input(app, hint, text="", password=False, center=False, size=15):
     return wrap, ti
 
 
+EMOJI_OVERLAY = False     # the coloured overlay did not line up with the plain glyphs on the phone: off
+
+
 class EmojiInput(TextInput):
     """Text field that paints typed emoji as full-colour pictures (the same ones the chat shows).
     The text itself is untouched; the pictures are drawn over the plain glyphs. If anything about the
@@ -4806,7 +4814,7 @@ class EmojiInput(TextInput):
     def _emoji_draw(self, *_):
         self.canvas.after.clear()
         try:
-            if not self.text or not emoji_pack()[0]:
+            if not EMOJI_OVERLAY or not self.text or not emoji_pack()[0]:
                 return
             label = self._label_cached
             line_h = self.line_height + self.line_spacing
@@ -5142,6 +5150,9 @@ class JarvisApp(App):
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
         frost(self.attach_strip, 20, tint, 0.10, 0.30)
         main.add_widget(self.attach_strip)
+        self.sugg_strip = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=0, opacity=0,
+                                    padding=(dp(6), 0))
+        main.add_widget(self.sugg_strip)
         main.add_widget(command_row)
         self._refresh_attach_strip()
         self._sync_action_mode()
@@ -5800,8 +5811,14 @@ class JarvisApp(App):
                 body, ctype = self._multipart({"prompt": prompt[:600], "language": self._lang_code()}, (name, mime, raw))
                 headers, data = self._server_call("/image/remix", body, ctype, timeout=200)
                 saved = self._save_private(data, "sai_new" + headers.get("x-edit-ext", ".jpg"))
-                text = self.t("remix_ready") + "\n[[img:" + saved + "]]"
-                say = self.t("remix_ready")
+                plan = ""
+                try:
+                    import base64
+                    plan = base64.b64decode(headers.get("x-edit-summary-b64", "")).decode("utf-8").strip()
+                except Exception:
+                    pass
+                say = plan or self.t("remix_ready")
+                text = say + "\n[[img:" + saved + "]]"
             elif mode == "image_edit":
                 body, ctype = self._multipart({"prompt": prompt[:1000], "language": self._lang_code()}, (name, mime, raw))
                 headers, data = self._server_call("/image/edit", body, ctype, timeout=150)
@@ -7006,6 +7023,65 @@ class JarvisApp(App):
 
     def on_text_change(self, instance, value):
         self._sync_action_mode()
+        self._update_suggestions(value)
+
+    def _vocab(self):
+        """Word -> weight: words from the user's chats (weighted) plus a small built-in list. Cached for a while."""
+        now = time.monotonic()
+        cache = getattr(self, "_vocab_cache", None)
+        if cache is not None and now - cache[0] < 20:
+            return cache[1]
+        vocab = {}
+        for w in BASE_WORDS.get(self.language, []) + BASE_WORDS["tg"]:
+            vocab[w] = vocab.get(w, 0) + 1
+        try:
+            for chat in self.chats.chats[-30:]:
+                for m in chat.get("messages", [])[-60:]:
+                    for w in re.findall(r"[A-Za-zА-Яа-яЁёҒғӢӣҚқӮӯҲҳҶҷ]{4,24}", strip_media(m.get("text", ""))[:1500]):
+                        key = w[0].upper() + w[1:].lower() if w[0].isupper() else w.lower()
+                        vocab[key] = vocab.get(key, 0) + 3
+        except Exception:
+            pass
+        self._vocab_cache = (now, vocab)
+        return vocab
+
+    def _update_suggestions(self, value):
+        strip = getattr(self, "sugg_strip", None)
+        if strip is None:
+            return
+        strip.clear_widgets()
+        m = re.search(r"([A-Za-zА-Яа-яЁёҒғӢӣҚқӮӯҲҳҶҷ]{2,})$", value or "")
+        found = []
+        if m:
+            prefix = m.group(1).lower()
+            ranked = sorted(self._vocab().items(), key=lambda kv: (-kv[1], len(kv[0])))
+            for word, _w in ranked:
+                if word.lower().startswith(prefix) and word.lower() != prefix and word not in found:
+                    found.append(word)
+                if len(found) == 3:
+                    break
+        if not found:
+            strip.height = 0
+            strip.opacity = 0
+            return
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        strip.height = dp(38)
+        strip.opacity = 1
+        for word in found:
+            b = FrostButton(tint=tint, alpha=0.14, radius=14, text=mk(word), font_size=dp(14), halign="center",
+                            color=hex_color(theme["text"]))
+            b.bind(on_release=lambda inst, w=word, pre=m.group(1): self._apply_suggestion(w, pre))
+            strip.add_widget(b)
+
+    def _apply_suggestion(self, word, prefix):
+        text = self.command_input.text
+        if text.endswith(prefix):
+            if prefix[:1].isupper() and not word[:1].isupper():
+                word = word[:1].upper() + word[1:]
+            self.command_input.text = text[:len(text) - len(prefix)] + word + " "
+            self.command_input.cursor = self.command_input.get_cursor_from_index(len(self.command_input.text))
+        self.command_input.focus = True
 
     def on_action(self, *_):
         if self.command_input.text.strip() or getattr(self, "_pending_attachment", None):
