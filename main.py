@@ -472,10 +472,15 @@ TEXTS = {
         "attach_ready": "Фармон нависед ва тугмаи фиристоданро зер кунед",
         "sec_profile": "Дар бораи ман",
         "title_profile": "Дар бораи ман",
-        "profile_note": "Ман ҳар чизеро, ки дар бораи худатон нависед (ном, шаҳр, кор, дӯстдоштаҳо), дар хотир дорам. Ин танҳо дар телефони шумо захира мешавад.",
-        "profile_empty": "Ҳоло чизе нест. Нависед «Номи ман …» ё «Ман дар … зиндагӣ мекунам», ё дар поён илова кунед.",
-        "profile_hint": "Чизе дар бораи худатон нависед",
-        "profile_add": "Илова кардан",
+        "profile_note": "Ин ёддошти ҳамкорӣ аст: ман чӣ медонам, ки шумо кистед ва чӣ тавр беҳтар ҳамкорӣ кунем. Ман онро аз суҳбатҳои мо менависам ва он танҳо дар телефони шумо мемонад.",
+        "profile_empty": "Ҳоло ман дар бораи шумо кам медонам. Бо ман суҳбат кунед ё дар поён чизе дар бораи худатон нависед — ман ёддошти кӯтоҳ менависам.",
+        "profile_hint": "Чизе дар бораи худатон нависед (кор, шавқ, ҳадаф)",
+        "profile_add": "Илова ва навсозӣ",
+        "profile_refresh": "Навсозии ёддошт",
+        "profile_clear": "Тоза кардан",
+        "profile_busy": "Ёддошт навсозӣ мешавад…",
+        "profile_fail": "Навсозӣ нашуд: ",
+        "profile_updated": "Навсозӣ: ",
         "sec_mode": "Равшан / торик",
         "title_mode": "Намуд",
         "mode_auto": "Мувофиқи система",
@@ -687,10 +692,15 @@ TEXTS = {
         "attach_ready": "Напишите, что сделать, и нажмите «Отправить»",
         "sec_profile": "Обо мне",
         "title_profile": "Обо мне",
-        "profile_note": "Я запоминаю всё, что вы пишете о себе (имя, город, работа, увлечения). Это хранится только на вашем телефоне.",
-        "profile_empty": "Пока пусто. Напишите «Меня зовут …» или «Я живу в …», либо добавьте ниже.",
-        "profile_hint": "Напишите что-нибудь о себе",
-        "profile_add": "Добавить",
+        "profile_note": "Это заметка о сотрудничестве: что я знаю о вас и как нам лучше работать вместе. Я пишу её по нашим беседам, и она хранится только на вашем телефоне.",
+        "profile_empty": "Пока я знаю о вас мало. Пообщайтесь со мной или напишите о себе ниже — я составлю краткую заметку.",
+        "profile_hint": "Напишите о себе (работа, увлечения, цели)",
+        "profile_add": "Добавить и обновить",
+        "profile_refresh": "Обновить заметку",
+        "profile_clear": "Очистить",
+        "profile_busy": "Обновляю заметку…",
+        "profile_fail": "Не удалось обновить: ",
+        "profile_updated": "Обновлено: ",
         "sec_mode": "Светлая / тёмная",
         "title_mode": "Режим",
         "mode_auto": "Как в системе",
@@ -902,10 +912,15 @@ TEXTS = {
         "attach_ready": "Write what to do and press Send",
         "sec_profile": "About me",
         "title_profile": "About me",
-        "profile_note": "I remember what you tell me about yourself (name, city, work, interests). It is stored only on your phone.",
-        "profile_empty": "Nothing yet. Write: My name is … or I live in …, or add below.",
-        "profile_hint": "Write something about yourself",
-        "profile_add": "Add",
+        "profile_note": "This is a collaboration note: what I know about you and how we can work together best. I write it from our conversations and it stays only on your phone.",
+        "profile_empty": "I know little about you yet. Chat with me or write something about yourself below, and I will write a short note.",
+        "profile_hint": "Write about yourself (work, interests, goals)",
+        "profile_add": "Add and update",
+        "profile_refresh": "Refresh note",
+        "profile_clear": "Clear",
+        "profile_busy": "Updating the note…",
+        "profile_fail": "Could not update: ",
+        "profile_updated": "Updated: ",
         "sec_mode": "Light / dark",
         "title_mode": "Mode",
         "mode_auto": "Same as system",
@@ -3534,9 +3549,16 @@ class ProfileStore(object):
     def __init__(self, path):
         self.path = path
         self.facts = []
+        self.note = ""            # short biography / collaboration note written by the AI
+        self.note_time = ""
+        self.note_count = 0       # how many facts the note was written from
         try:
             with open(path, "r", encoding="utf-8") as handle:
-                self.facts = [f for f in json.load(handle).get("facts", []) if isinstance(f, dict) and f.get("text")]
+                data = json.load(handle)
+            self.facts = [f for f in data.get("facts", []) if isinstance(f, dict) and f.get("text")]
+            self.note = str(data.get("note", ""))
+            self.note_time = str(data.get("note_time", ""))
+            self.note_count = int(data.get("note_count", 0) or 0)
         except Exception:
             self.facts = []
 
@@ -3544,7 +3566,7 @@ class ProfileStore(object):
         try:
             tmp = self.path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as handle:
-                json.dump({"facts": self.facts}, handle, ensure_ascii=False)
+                json.dump({"facts": self.facts, "note": self.note, "note_time": self.note_time, "note_count": self.note_count}, handle, ensure_ascii=False)
             os.replace(tmp, self.path)
         except Exception:
             pass
@@ -3562,6 +3584,16 @@ class ProfileStore(object):
         if 0 <= index < len(self.facts):
             del self.facts[index]
             self.save()
+
+    def set_note(self, note):
+        self.note = str(note).strip()
+        self.note_time = datetime.now().strftime("%Y-%m-%d")
+        self.note_count = len(self.facts)
+        self.save()
+
+    def clear_note(self):
+        self.note, self.note_time, self.note_count = "", "", 0
+        self.save()
 
 
 class ChatStore(object):
@@ -5196,7 +5228,7 @@ def glass_input(app, hint, text="", password=False, center=False, size=15):
     return wrap, ti
 
 
-EMOJI_OVERLAY = True      # coloured pictures over the field's text; the plain (single-colour) glyphs underneath are blanked
+EMOJI_OVERLAY = False     # coloured pictures over the field's text; the plain (single-colour) glyphs underneath are blanked
 
 
 class EmojiInput(TextInput):
@@ -5519,7 +5551,7 @@ class JarvisApp(App):
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=dp(52))
         glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
-        self.command_input = EmojiInput(
+        self.command_input = TextInput(
             hint_text=self.t("input"), multiline=True, size_hint_x=1,
             font_size=dp(15), foreground_color=hex_color(theme["text"]),
             hint_text_color=(*hex_color(theme["accent"])[:3], 0.52),
@@ -5549,18 +5581,12 @@ class JarvisApp(App):
                                       background_normal="", background_color=(0, 0, 0, 0),
                                       color=hex_color(theme["text"]))
         self.stop_speech_btn.bind(on_release=self.stop_speaking)
-        self.emoji_btn = emoji_cell("\U0001F600", {"size_hint_x": None, "width": dp(34)}, self.open_emoji_panel)
-        if self.emoji_btn is None:
-            self.emoji_btn = Button(text=":)", font_size=dp(22), size_hint_x=None, width=dp(34), background_normal="",
-                                    background_color=(0, 0, 0, 0), color=hex_color(theme["accent"]))
-            self.emoji_btn.bind(on_release=self.open_emoji_panel)
         self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
                                        size_hint_x=None, width=dp(52))
         self.action_btn.bind(on_release=self.on_action)
         command_row.add_widget(self.attach_btn)
         command_row.add_widget(self.command_input)
         command_row.add_widget(self.stop_speech_btn)
-        command_row.add_widget(self.emoji_btn)
         command_row.add_widget(self.action_btn)
         self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
@@ -8149,6 +8175,52 @@ class JarvisApp(App):
     def show_settings(self, *_):
         self.open_section("main")
 
+    def refresh_profile_note(self):
+        """Ask the server to write / update the short biography from the facts and the user's recent messages."""
+        if getattr(self, "_bio_busy", False) or not self.server_token.strip():
+            return
+        if not self.profile.facts and not any(c.get("messages") for c in self.chats.chats):
+            return
+        facts = [f["text"] for f in self.profile.facts][-60:]
+        messages = []
+        for chat in self.chats.sorted_chats()[:12]:
+            for m in chat.get("messages", [])[-12:]:
+                if m.get("role") == "user":
+                    text = " ".join(MEDIA_RE.sub("", str(m.get("text", ""))).replace(RETRY_MARK, "").split())
+                    if len(text) >= 12 and not text.endswith("?"):
+                        messages.append(text[:240])
+        messages = messages[-30:]
+        previous = self.profile.note
+        self._bio_busy = True
+        status = getattr(self, "_bio_status", None)
+        if status is not None:
+            status.text = self.t("profile_busy")
+
+        def job():
+            try:
+                result = self._json_call("POST", "/profile/summarize", {
+                    "facts": facts, "messages": messages, "previous": previous, "language": self._lang_code()}, timeout=90)
+                note = str(result.get("note", "")).strip()
+                error = ""
+            except Exception as exc:
+                note, error = "", self.friendly_error(exc)
+
+            def done(dt):
+                self._bio_busy = False
+                if note:
+                    self.profile.set_note(note)
+                label = getattr(self, "_bio_label", None)
+                status_label = getattr(self, "_bio_status", None)
+                if label is not None and label.parent is not None:
+                    if note:
+                        label.text = note
+                        label.color = hex_color(THEMES[self.theme_index]["text"])
+                    if status_label is not None:
+                        status_label.text = (self.t("profile_updated") + self.profile.note_time) if note else (self.t("profile_fail") + error)[:90]
+            Clock.schedule_once(done, 0)
+
+        threading.Thread(target=job, daemon=True).start()
+
     def open_section(self, section):
         old = getattr(self, "settings_popup", None)
         if old is not None:
@@ -8168,33 +8240,36 @@ class JarvisApp(App):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
             content.add_widget(Widget())
         elif section == "profile":
-            content.add_widget(make_label(self.t("profile_note"), 11, muted(), False, size_hint_y=None, height=dp(44)))
+            content.add_widget(make_label(self.t("profile_note"), 11, muted(), False, size_hint_y=None, height=dp(60)))
             scroll = ScrollView(do_scroll_x=False)
-            grid = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
-            grid.bind(minimum_height=grid.setter("height"))
-            if not self.profile.facts:
-                grid.add_widget(make_label(self.t("profile_empty"), 13, theme["text"], False, size_hint_y=None, height=dp(60)))
-            for index, fact in enumerate(self.profile.facts):
-                row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(52))
-                chip = FrostButton(tint=hex_color(theme["accent"])[:3], alpha=0.10, text=mk(fact["text"]), font_size=dp(13),
-                                   color=hex_color(theme["text"]))
-                gone = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, text="×", font_size=dp(24),
-                                   halign="center", size_hint_x=None, width=dp(48), color=hex_color(theme["text"]))
-                gone.bind(on_release=lambda inst, i=index: (self.profile.remove(i), self.open_section("profile")))
-                row.add_widget(chip)
-                row.add_widget(gone)
-                grid.add_widget(row)
-            scroll.add_widget(grid)
+            note_label = make_label(self.profile.note or self.t("profile_empty"), 14,
+                                    theme["text"] if self.profile.note else muted(), False,
+                                    halign="left", valign="top", size_hint_y=None, padding=(dp(6), dp(6)))
+            note_label.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+            note_label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1] + dp(16)))
+            self._bio_label = note_label
+            scroll.add_widget(note_label)
             content.add_widget(scroll)
+            self._bio_status = make_label("", 11, muted(), False, size_hint_y=None, height=dp(20))
+            if self.profile.note_time:
+                self._bio_status.text = self.t("profile_updated") + self.profile.note_time
+            content.add_widget(self._bio_status)
             wrap, fact_in = glass_input(self, self.t("profile_hint"), "", size=14)
             content.add_widget(wrap)
 
             def add_fact(*_):
                 if fact_in.text.strip():
                     self.profile.add(fact_in.text)
-                    self.open_section("profile")
+                    fact_in.text = ""
+                self.refresh_profile_note()
             fact_in.bind(on_text_validate=add_fact)
             self.frost_row(content, self.t("profile_add"), True, add_fact, 48, center=True)
+            self.frost_row(content, self.t("profile_refresh"), False, lambda *_: self.refresh_profile_note(), 44, center=True)
+            if self.profile.note:
+                self.frost_row(content, self.t("profile_clear"), False,
+                               lambda *_: (self.profile.clear_note(), self.open_section("profile")), 44, center=True)
+            if self.server_token.strip() and (not self.profile.note or len(self.profile.facts) != self.profile.note_count):
+                Clock.schedule_once(lambda dt: self.refresh_profile_note(), 0.4)
         elif section == "mode":
             for key, code in (("mode_auto", "auto"), ("mode_dark", "dark"), ("mode_light", "light")):
                 option(self.t(key), self.ui_mode == code,
