@@ -4625,7 +4625,7 @@ class StepBar(FloatLayout):
 
     def __init__(self, acc, text_color, labels, **kwargs):
         super().__init__(size_hint=(0.88, None), height=dp(52), pos_hint={"center_x": 0.5, "top": 0.985}, **kwargs)
-        self.acc = acc
+        self.acc = tuple(acc)[:3]
         self.step = 0
         self.labels = []
         for text in labels:
@@ -4649,8 +4649,8 @@ class StepBar(FloatLayout):
         r = dp(11)
         cy = self.top - dp(16)
         a = self.acc
-        self.canvas.clear()
-        with self.canvas:
+        self.canvas.before.clear()          # (not self.canvas: that would also drop the labels' canvases)
+        with self.canvas.before:
             for i in range(n):
                 cx = self.x + gap * (i + 0.5)
                 if i < n - 1:
