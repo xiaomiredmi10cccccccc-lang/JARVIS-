@@ -528,6 +528,11 @@ TEXTS = {
         "file_created": "Файл сохта шуд: {}",
         "file_edited": "Файл таҳрир шуд: {}",
         "save_btn": "Захира",
+        "pf_day": "Рӯз",
+        "pf_month": "Моҳ",
+        "pf_year": "Сол",
+        "pf_birth_title": "Санаи таваллуд ва ҷинс",
+        "pf_bad_date": "Санаи интихобшуда вуҷуд надорад",
         "d_sending": "Фиристода истодааст…",
         "d_ok": "Фиристода шуд",
         "d_fail": "Фиристода нашуд",
@@ -738,6 +743,11 @@ TEXTS = {
         "file_created": "Файл создан: {}",
         "file_edited": "Файл отредактирован: {}",
         "save_btn": "Сохранить",
+        "pf_day": "День",
+        "pf_month": "Месяц",
+        "pf_year": "Год",
+        "pf_birth_title": "Дата рождения и пол",
+        "pf_bad_date": "Такой даты не существует",
         "d_sending": "Отправляется…",
         "d_ok": "Отправлено",
         "d_fail": "Не отправлено",
@@ -948,6 +958,11 @@ TEXTS = {
         "file_created": "File created: {}",
         "file_edited": "File edited: {}",
         "save_btn": "Save",
+        "pf_day": "Day",
+        "pf_month": "Month",
+        "pf_year": "Year",
+        "pf_birth_title": "Date of birth and gender",
+        "pf_bad_date": "This date does not exist",
         "d_sending": "Sending…",
         "d_ok": "Sent",
         "d_fail": "Not sent",
@@ -4563,6 +4578,45 @@ class GlassDialog(GlassSheet):
         return True
 
 
+MONTHS = {
+    "tg": ("Январ", "Феврал", "Март", "Апрел", "Май", "Июн", "Июл", "Август", "Сентябр", "Октябр", "Ноябр", "Декабр"),
+    "ru": ("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"),
+    "en": ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"),
+}
+
+
+class ListPicker(BoxLayout):
+    """A short scrollable list: tap one value (day, month or year)."""
+
+    def __init__(self, title, items, acc, text_color, **kwargs):
+        super().__init__(orientation="vertical", spacing=dp(4), **kwargs)
+        self.value = None
+        self.buttons = []
+        self.acc = acc
+        self.add_widget(make_label(title, 11, "#8FA6C8", False, size_hint_y=None, height=dp(18)))
+        from kivy.uix.scrollview import ScrollView
+        self.scroll = ScrollView(do_scroll_x=False, bar_width=dp(2))
+        box = BoxLayout(orientation="vertical", spacing=dp(4), size_hint_y=None)
+        box.bind(minimum_height=box.setter("height"))
+        for i, label in enumerate(items):
+            b = FrostButton(tint=acc, alpha=0.07, radius=12, text=mk(str(label)), font_size=dp(14), halign="center",
+                            size_hint_y=None, height=dp(38), color=hex_color(text_color))
+            b.bind(on_release=lambda inst, k=i: self.select(k))
+            self.buttons.append(b)
+            box.add_widget(b)
+        self.scroll.add_widget(box)
+        self.add_widget(self.scroll)
+
+    def select(self, index):
+        for i, b in enumerate(self.buttons):
+            b._fr_a0 = 0.55 if i == index else 0.07
+            b._fr_body_c.a = b._fr_a0
+        self.value = index
+
+    def show(self, index):
+        Clock.schedule_once(lambda dt: self.scroll.scroll_to(self.buttons[index], padding=dp(60)), 0.15)
+
+
 STEP_LABELS = {"tg": ("Забон", "Ном", "Ҳисоб", "Профил"), "ru": ("Язык", "Имя", "Аккаунт", "Профиль"), "en": ("Language", "Name", "Account", "Profile")}
 
 
@@ -5525,10 +5579,48 @@ class JarvisApp(App):
         main.add_widget(footer)
         self.footer_label = footer
 
+    def hide_intro(self):
+        """After the first command: the greeting under the orb fades and slides away, and the chat grows up to the orb."""
+        if getattr(self, "_intro_hidden", False) or not hasattr(self, "visual_area"):
+            return
+        self._intro_hidden = True
+        labels = [k for k in self.visual_area.children if getattr(k, "size_hint_y", 1) is None and not isinstance(k, AnimatedCore)]
+        if not labels:
+            return
+        h0 = [k.height for k in labels]
+        total = float(sum(h0))
+        start_h = self.visual_area.height
+        spacing = self.visual_area.spacing
+        t0 = time.monotonic()
+        duration = 1.4
+
+        def step(dt):
+            p = min(1.0, (time.monotonic() - t0) / duration)
+            e = 0.5 - 0.5 * math.cos(math.pi * p)
+            for k, h in zip(labels, h0):
+                k.height = max(0.0, h * (1 - e))
+                k.opacity = max(0.0, 1 - e * 1.6)
+            self.visual_area.height = start_h - total * e
+            if p >= 1.0:
+                for k in labels:
+                    if k.parent is not None:
+                        k.parent.remove_widget(k)
+                self.visual_area.height = start_h - total - spacing * len(labels)
+                self._visual_compact_h = self.visual_area.height
+                return False
+            return True
+
+        Clock.schedule_interval(step, 1 / 60.0)
+
     def build_theme_layout(self):
         self.visual_area.clear_widgets()
         theme = THEMES[self.theme_index]
         index = self.theme_index
+        if getattr(self, "_intro_hidden", False):
+            core_hint = (1.5, 1.6, 1.7)[min(index, 2)]
+            self.visual_area.add_widget(AnimatedCore(index, size_hint_y=core_hint))
+            self.visual_area.height = getattr(self, "_visual_compact_h", self.visual_area.height)
+            return
         if index == 0:
             self.visual_area.add_widget(Widget(size_hint_y=0.05))
             self.visual_area.add_widget(AnimatedCore(index, size_hint_y=1.5))
@@ -5967,6 +6059,8 @@ class JarvisApp(App):
     def add_chat_message(self, chat_id, role, text):
         text = self.brand(text)
         self.chats.add_message(chat_id, role, text)
+        if role == "user":
+            self.hide_intro()
         if role == "jarvis":
             self.busy_stop()
             self._remove_skeleton()
@@ -6900,62 +6994,93 @@ class JarvisApp(App):
         self.cover_transition(go, 1.5)
 
     def _ob_profile_step(self, screen):
-        """After sign-in: first name, last name, birth year/age and gender (can be skipped)."""
+        """After sign-in, part 1: first name and last name (can be skipped)."""
         theme = THEMES[self.theme_index]
         screen.set_step(3)
-        panel = screen.new_panel(470)
+        screen.stepbar_labels(self.language)
+        panel = screen.new_panel(330)
         panel.add_widget(make_label(self.t("pf_title"), 18, theme["text"], True, size_hint_y=None, height=dp(30)))
         first_w, first_in = glass_input(self, self.t("pf_first"))
         last_w, last_in = glass_input(self, self.t("pf_last"))
-        age_w, age_in = glass_input(self, self.t("pf_age"))
-        for w in (first_w, last_w, age_w):
-            panel.add_widget(w)
+        panel.add_widget(first_w)
+        panel.add_widget(last_w)
+        status = make_label("", 12, "#FFB4B4", False, size_hint_y=None, height=dp(22))
+        panel.add_widget(status)
+        panel.add_widget(Widget())
+
+        def go(skip=False):
+            first = " ".join(first_in.text.split())[:24]
+            last = " ".join(last_in.text.split())[:30]
+            if skip:
+                self._ob_profile_done(screen, [])
+                return
+            if not first or not last:
+                status.text = self.t("pf_err")
+                return
+            self.cover_transition(lambda: self._ob_birth_step(screen, first, last), 0.9)
+
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
+                                     font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
+                                     color=(1, 1, 1, 1), on_release=lambda *_: go(False)))
+        skip = FrostButton(tint=(1, 1, 1), alpha=0.06, radius=18, text=mk(self.t("pf_skip")), font_size=dp(13), halign="center",
+                           size_hint_y=None, height=dp(38), color=hex_color(theme["text"]))
+        skip.bind(on_release=lambda *_: go(True))
+        panel.add_widget(skip)
+
+    def _ob_birth_step(self, screen, first, last):
+        """Part 2: day, month (12) and year are chosen from lists; the app works out the age itself."""
+        theme = THEMES[self.theme_index]
+        screen.set_step(3)
+        panel = screen.new_panel(480)
+        panel.add_widget(make_label(self.t("pf_birth_title"), 17, theme["text"], True, size_hint_y=None, height=dp(30)))
+        this_year = datetime.now().year
+        years = list(range(this_year - 5, this_year - 101, -1))
+        months = MONTHS.get(self.language, MONTHS["tg"])
+        acc = screen.acc
+        day_p = ListPicker(self.t("pf_day"), list(range(1, 32)), acc, theme["text"], size_hint_x=0.26)
+        month_p = ListPicker(self.t("pf_month"), months, acc, theme["text"], size_hint_x=0.44)
+        year_p = ListPicker(self.t("pf_year"), years, acc, theme["text"], size_hint_x=0.30)
+        row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(170))
+        for picker in (day_p, month_p, year_p):
+            row.add_widget(picker)
+        panel.add_widget(row)
+        year_p.show(years.index(2000) if 2000 in years else 0)
         chosen = {"g": ""}
-        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
+        grow = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(46), spacing=dp(8))
         buttons = {}
 
         def pick(code):
             chosen["g"] = code
             for key, b in buttons.items():
-                on = key == code
-                b._fr_a0 = 0.50 if on else 0.10
+                b._fr_a0 = 0.50 if key == code else 0.10
                 b._fr_body_c.a = b._fr_a0
-                b.text = ("[b]" + mk(self.t("pf_male" if key == "m" else "pf_female")) + "[/b]") if on else mk(self.t("pf_male" if key == "m" else "pf_female"))
 
         for key, label in (("m", "pf_male"), ("f", "pf_female")):
             b = FrostButton(tint=screen.acc2, alpha=0.10, radius=16, text=mk(self.t(label)), font_size=dp(14), halign="center",
                             color=hex_color(theme["text"]))
             b.bind(on_release=lambda inst, k=key: pick(k))
             buttons[key] = b
-            row.add_widget(b)
-        panel.add_widget(row)
-        status = make_label("", 12, "#FFB4B4", False, size_hint_y=None, height=dp(22))
+            grow.add_widget(b)
+        panel.add_widget(grow)
+        status = make_label("", 12, "#FFB4B4", False, size_hint_y=None, height=dp(20))
         panel.add_widget(status)
-        panel.add_widget(make_label(self.t("pf_note"), 11, muted(), False, size_hint_y=None, height=dp(30)))
+        panel.add_widget(make_label(self.t("pf_note"), 11, muted(), False, size_hint_y=None, height=dp(28)))
 
         def finish(skip=False):
-            first = " ".join(first_in.text.split())[:24]
-            last = " ".join(last_in.text.split())[:30]
+            facts = ["Номи ман " + first, "Насаби ман " + last]
             if not skip:
-                if not first or not last:
-                    status.text = self.t("pf_err")
-                    return
-                facts = ["Номи ман " + first, "Насаби ман " + last]
-                digits = re.sub(r"\D", "", age_in.text)
-                if digits:
-                    n = int(digits)
-                    year = datetime.now().year
-                    if 1900 <= n <= year:
-                        facts.append("Соли таваллуди ман %d (синну сол: %d)" % (n, year - n))
-                    elif 3 <= n <= 110:
-                        facts.append("Синну соли ман %d" % n)
+                if day_p.value is not None and month_p.value is not None and year_p.value is not None:
+                    import calendar
+                    day, month, year = day_p.value + 1, month_p.value + 1, years[year_p.value]
+                    if day > calendar.monthrange(year, month)[1]:
+                        status.text = self.t("pf_bad_date")
+                        return
+                    today = datetime.now()
+                    age = today.year - year - ((today.month, today.day) < (month, day))
+                    facts.append("Санаи таваллуди ман %02d.%02d.%d (синну сол: %d)" % (day, month, year, age))
                 if chosen["g"]:
                     facts.append("Ҷинси ман: " + ("мард" if chosen["g"] == "m" else "зан"))
-                for fact in facts:
-                    self.profile.add(fact)
-            self.profile_done = True
-            self.save_settings()
-            self._ob_finish(screen)
+            self._ob_profile_done(screen, facts)
 
         panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
                                      font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
@@ -6964,6 +7089,14 @@ class JarvisApp(App):
                            size_hint_y=None, height=dp(38), color=hex_color(theme["text"]))
         skip.bind(on_release=lambda *_: finish(True))
         panel.add_widget(skip)
+
+    def _ob_profile_done(self, screen, facts):
+        for fact in facts:
+            self.profile.add(fact)
+        self.profile_done = True
+        self.save_settings()
+        screen.spin(True)
+        self._ob_finish(screen)
 
     def _session_expired(self):
         if getattr(self, "_ob_active", False):
