@@ -332,7 +332,12 @@ class SpeechSynthesizer(object):
                         break
             if code < 0:
                 raise VoiceUnavailable("no voice data installed (%s)" % ", ".join(codes))
-            speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, None, "jarvis")
+            try:
+                speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, autoclass("android.os.Bundle")(), "jarvis")
+            except Exception:
+                params = autoclass("java.util.HashMap")()
+                params.put("utteranceId", "jarvis")
+                speak_code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, params)
             if speak_code != 0:
                 return "starting"
             return result
@@ -1318,6 +1323,64 @@ def markup_escape(s):
     return s.replace("&", "&amp;").replace("[", "&bl;").replace("]", "&br;")
 
 
+_TLDS = "com|org|net|io|ru|tj|uz|kz|kg|info|me|app|dev|ai|edu|gov|co|ly|tv|xyz|site|online|store|shop|by|ua|de|uk|fr|eu|us|cc|pro|biz"
+LINK_RE = re.compile(
+    r"\[([^\]\n]{1,120})\]\((https?://[^)\s]+)\)"                                   # [text](https://…)
+    r"|((?:https?://|www\.)[^\s<>\"'«»]+)"                                              # https://… , www.…
+    r"|([\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})"                       # e-mail
+    r"|(\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:" + _TLDS + r")\b(?:/[^\s<>\"'«»]*)?)")   # site.com/path
+
+
+def open_url(url):
+    """Open a link in the phone's browser / mail app."""
+    url = url.strip()
+    if "@" in url and not url.lower().startswith(("http", "mailto:")) and "/" not in url:
+        url = "mailto:" + url
+    elif not re.match(r"^[a-z]+:", url, re.I):
+        url = "https://" + url
+    try:
+        from jnius import autoclass
+        Intent = autoclass("android.content.Intent")
+        Uri = autoclass("android.net.Uri")
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        activity.startActivity(intent)
+    except Exception:
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception:
+            save_crash("Open link failed:\n" + traceback.format_exc())
+
+
+def link_markup(text, links):
+    """Escape text for markup and turn links into coloured, underlined, tappable [ref] pieces."""
+    try:
+        acc = THEMES[App.get_running_app().theme_index]["accent"].lstrip("#")
+    except Exception:
+        acc = "5CB8FF"
+    out, last = [], 0
+    for m in LINK_RE.finditer(text):
+        shown, url = m.group(0), None
+        if m.group(1):
+            shown, url = m.group(1), m.group(2)
+        else:
+            shown = m.group(0)
+            trail = ""
+            while shown and shown[-1] in ".,;:!?)]}»\"'":
+                trail = shown[-1] + trail
+                shown = shown[:-1]
+            url = shown
+            if not shown:
+                continue
+        out.append(markup_escape(text[last:m.start()]))
+        out.append("[color=%s][u][ref=l%d]%s[/ref][/u][/color]" % (acc, len(links), markup_escape(shown)))
+        links.append(url)
+        last = m.start() + len(m.group(0)) - (len(trail) if not m.group(1) else 0)
+    out.append(markup_escape(text[last:]))
+    return "".join(out)
+
+
 class EmojiLabel(Label):
     """A Label whose emoji are shown as full-colour pictures. Set the text with set_plain()."""
 
@@ -1327,8 +1390,14 @@ class EmojiLabel(Label):
         self._emoji = []
         self._plain = ""
         self._nb = None
+        self._links = []
         self.bind(texture=self._draw_emoji, texture_size=self._draw_emoji, pos=self._draw_emoji,
                   size=self._draw_emoji)
+        self.bind(on_ref_press=self._ref_pressed)
+
+    def _ref_pressed(self, label, ref):
+        if ref.startswith("l") and ref[1:].isdigit() and int(ref[1:]) < len(self._links):
+            open_url(self._links[int(ref[1:])])
 
     def _nbsp_count(self):
         if self._nb is None:
@@ -1342,15 +1411,16 @@ class EmojiLabel(Label):
 
     def set_plain(self, text):
         self._plain = str(text)
+        self._links = []
         index, _data = emoji_pack()
         if not index:
             self._emoji = []
-            self.text = markup_escape(self._plain)
+            self.text = link_markup(self._plain, self._links)
             return
         parts, keys = [], []
         for kind, value in split_emoji(self._plain):
             if kind == "t":
-                parts.append(markup_escape(value))
+                parts.append(link_markup(value, self._links))
             else:
                 parts.append("[ref=e%d]%s[/ref]" % (len(keys), NBSP * self._nbsp_count()))
                 keys.append(value)
@@ -3484,6 +3554,8 @@ class ChatStore(object):
         self.path = path
         self.chats = []
         self.current_id = None
+        self.deleted = []         # ids removed on this phone, still to be removed from the account
+        self.synced = {}          # chat id -> signature last saved to the account
         self.load()
 
     @staticmethod
@@ -3513,6 +3585,10 @@ class ChatStore(object):
                                  and m.get("role") in ("user", "jarvis") and isinstance(m.get("text"), str)]
                 self.chats.append(c)
             self.current_id = data.get("current")
+            if isinstance(data.get("deleted"), list):
+                self.deleted = [str(x) for x in data["deleted"]][:500]
+            if isinstance(data.get("synced"), dict):
+                self.synced = {str(k): str(v) for k, v in data["synced"].items()}
         if self.get(self.current_id) is None:
             ordered = self.sorted_chats()
             self.current_id = ordered[0]["id"] if ordered else None
@@ -3528,7 +3604,7 @@ class ChatStore(object):
                 os.makedirs(folder, exist_ok=True)
             tmp = self.path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"version": 1, "current": self.current_id, "chats": self.chats},
+                json.dump({"version": 1, "current": self.current_id, "chats": self.chats, "deleted": self.deleted, "synced": self.synced},
                           f, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())
@@ -3576,7 +3652,14 @@ class ChatStore(object):
         self.save()
         return chat
 
+    @staticmethod
+    def signature(chat):
+        return "%s|%d|%s" % (chat.get("updated", ""), len(chat.get("messages", [])), chat.get("title", ""))
+
     def delete_chat(self, chat_id):
+        if chat_id not in self.deleted:
+            self.deleted.append(chat_id)
+        self.synced.pop(chat_id, None)
         self.chats = [c for c in self.chats if c["id"] != chat_id]
         if self.current_id == chat_id:
             ordered = self.sorted_chats()
@@ -3792,6 +3875,20 @@ _DRAW_VERBS = ("нарисуй", "сгенерируй", "создай карт�
                "generate a picture", "create an image", "create a picture", "make a picture")
 
 
+_PIC_WORDS = ("акс", "расм", "тасвир", "фото", "картин", "изображен", "рисунок", "photo", "picture", "image")
+_GIVE_WORDS = ("деҳ", "дихед", "диҳед", "фирист", "нишон деҳ", "нишон диҳед", "хоҳам", "мехоҳам", "лозим", "дай", "дайте", "пришли", "отправь",
+               "покажи", "хочу", "нужн", "give me", "send me", "show me", "i want", "i need", "need a", "want a")
+
+
+_CHAT_WORDS = ("чатҳо", "чатҳои", "чатҳоро", "суҳбатҳо", "чатов", "чаты", "чатах", "переписк", "разговоры", "chats", "conversations")
+_ANALYSIS_WORDS = ("таҳлил", "анализ", "analy", "ҷамъбаст", "итог", "резюм", "summar", "хулоса", "бозбинӣ", "ёд дорӣ", "помнишь", "review")
+
+
+def parse_chats_analysis(text):
+    low = " ".join(str(text).lower().split())
+    return any(c in low for c in _CHAT_WORDS) and any(a in low for a in _ANALYSIS_WORDS)
+
+
 def parse_media_intent(text):
     """('image'|'search'|'file', request) when the message starts with a media command, else None."""
     low = " ".join(str(text).lower().split())
@@ -3806,6 +3903,8 @@ def parse_media_intent(text):
         if low.startswith(_PICTURE_NOUNS) and len(low.split()) >= 2:
             return "image", plain
         if any(v in low for v in _DRAW_VERBS):
+            return "image", plain
+        if any(n in low for n in _PIC_WORDS) and any(v in low for v in _GIVE_WORDS):
             return "image", plain
     return None
 
@@ -5575,6 +5674,161 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.2)
         self.scroll_chat_down()
 
+    # ---------------------------------------------------------------- chats saved in the account
+    def _json_call(self, method, path, obj=None, timeout=40):
+        """Quiet JSON request to the server (background sync must not fill the error log when the phone is offline)."""
+        import ssl
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            ctx = None
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8") if obj is not None else None
+        headers = {"Authorization": "Bearer " + self.server_token}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(SERVER_BASE + path, data=body, method=method, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    @staticmethod
+    def _chat_for_sync(chat):
+        messages = []
+        for m in chat.get("messages", [])[-600:]:
+            text = MEDIA_RE.sub("[акс/файл]", str(m.get("text", ""))).replace(RETRY_MARK, "").strip()
+            if text:
+                messages.append({"role": m.get("role", "user"), "text": text[:8000], "time": str(m.get("time", ""))[:32]})
+        return {"id": chat["id"], "title": str(chat.get("title", ""))[:120], "created": str(chat.get("created", ""))[:32],
+                "updated": str(chat.get("updated", ""))[:32], "messages": messages}
+
+    def _sync_snapshot(self):
+        """(payload chats with their signatures, ids to delete) – taken on the Kivy thread."""
+        dirty = []
+        for chat in self.chats.chats:
+            sig = ChatStore.signature(chat)
+            if chat.get("messages") and self.chats.synced.get(chat["id"]) != sig:
+                dirty.append((self._chat_for_sync(chat), sig))
+        return dirty, list(self.chats.deleted)
+
+    def _sync_send(self, dirty, deleted):
+        """Runs in a worker thread. Returns the (id, signature) pairs saved and the ids deleted."""
+        done, gone = [], []
+        for i in range(0, len(dirty), 20):
+            part = dirty[i:i + 20]
+            self._json_call("POST", "/chats/upsert", {"chats": [c for c, _ in part]}, timeout=60)
+            done.extend((c["id"], sig) for c, sig in part)
+        if deleted:
+            self._json_call("POST", "/chats/delete", {"ids": deleted[:200]}, timeout=30)
+            gone = deleted[:200]
+        return done, gone
+
+    def _sync_applied(self, done, gone):
+        for chat_id, sig in done:
+            self.chats.synced[chat_id] = sig
+        self.chats.deleted = [x for x in self.chats.deleted if x not in gone]
+        self.chats.save()
+
+    def chat_sync_tick(self, dt=None):
+        if not self.server_token.strip() or getattr(self, "_sync_busy", False) or not getattr(self, "_chats_pulled", False):
+            return
+        dirty, deleted = self._sync_snapshot()
+        if not dirty and not deleted:
+            return
+        self._sync_busy = True
+
+        def job():
+            try:
+                done, gone = self._sync_send(dirty, deleted)
+                Clock.schedule_once(lambda d: self._sync_applied(done, gone), 0)
+            except Exception:
+                pass                                   # offline or server asleep: the next tick tries again
+            finally:
+                self._sync_busy = False
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def pull_chats(self):
+        """Bring the account's chats to this phone (after sign-in, and when the app starts)."""
+        if not self.server_token.strip():
+            return
+
+        def job():
+            try:
+                data = self._json_call("GET", "/chats", None, timeout=60)
+                chats = data.get("chats", []) if isinstance(data, dict) else []
+                Clock.schedule_once(lambda d: self._merge_chats(chats), 0)
+            except Exception:
+                pass
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def _merge_chats(self, remote):
+        changed = False
+        for item in remote:
+            try:
+                chat_id = str(item["id"])
+                messages = [{"role": m["role"], "text": str(m["text"]), "time": str(m.get("time", ""))}
+                            for m in item.get("messages", []) if m.get("role") in ("user", "jarvis")]
+                local = self.chats.get(chat_id)
+                if chat_id in self.chats.deleted:
+                    continue
+                if local is None:
+                    self.chats.chats.append({"id": chat_id, "title": str(item.get("title", "")), "created": str(item.get("created", "")) or ChatStore.now(),
+                                             "updated": str(item.get("updated", "")) or ChatStore.now(), "messages": messages})
+                    local = self.chats.get(chat_id)
+                    changed = True
+                elif str(item.get("updated", "")) > str(local.get("updated", "")) and len(messages) >= len(local.get("messages", [])):
+                    local["messages"], local["title"], local["updated"] = messages, str(item.get("title", "")), str(item["updated"])
+                    changed = True
+                else:
+                    continue
+                self.chats.synced[chat_id] = ChatStore.signature(local)
+            except Exception:
+                continue
+        self._chats_pulled = True
+        if changed:
+            self.chats.save()
+            try:
+                self.render_chat()
+            except Exception:
+                pass
+
+    def _switch_chat_owner(self):
+        """A different account signed in on this phone: its chats must not be mixed with the previous person's."""
+        try:
+            owner = self.store.get("chats_owner")["name"] if self.store.exists("chats_owner") else ""
+        except Exception:
+            owner = ""
+        if owner and owner.lower() != self.username.lower():
+            self.chats.chats, self.chats.deleted, self.chats.synced, self.chats.current_id = [], [], {}, None
+            self.chats.new_chat()
+        try:
+            self.store.put("chats_owner", name=self.username)
+        except Exception:
+            pass
+        self._chats_pulled = False
+
+    def _start_chat_analysis(self, chat_id, question):
+        if not self.server_token.strip():
+            self._media_done(chat_id, self.t("server_missing"))
+            return
+        self.set_orb_state("thinking")
+        self.busy_start("think")
+        dirty, deleted = self._sync_snapshot()
+
+        def job():
+            try:
+                done, gone = self._sync_send(dirty, deleted)          # the account must hold the latest chats first
+                Clock.schedule_once(lambda d: self._sync_applied(done, gone), 0)
+                result = self._json_call("POST", "/chats/analyze", {"question": question[:1000], "language": self._lang_code()}, timeout=170)
+                answer = str(result.get("answer", "")) or self.t("file_no_answer")
+                Clock.schedule_once(lambda d: self._finish_server_answer(chat_id, answer), 0)
+            except Exception as exc:
+                message = self.friendly_error(exc)
+                Clock.schedule_once(lambda d: self._media_done(chat_id, message), 0)
+
+        threading.Thread(target=job, daemon=True).start()
+
     def cover_transition(self, action, hold=1.3):
         """Logo cover over the whole screen; the next screen is built underneath and the cover leaves calmly."""
         cover = TransitionCover(self)
@@ -6534,6 +6788,8 @@ class JarvisApp(App):
                 self._ob_active = False
                 self.save_settings()
                 popup.spin(False)
+                self._switch_chat_owner()
+                self.pull_chats()
                 if not self.profile_done:
                     self.cover_transition(lambda: self._ob_profile_step(popup), 1.3)
                     return
@@ -6724,6 +6980,9 @@ class JarvisApp(App):
         for fact in extract_facts(command_text):
             self.profile.add(fact)
         self.add_chat_message(chat_id, "user", command_text)
+        if parse_chats_analysis(command_text):
+            self._start_chat_analysis(chat_id, command_text)
+            return
         media = parse_media_intent(command_text)
         if media is not None:
             self._start_media_job(chat_id, media[0], media[1])
@@ -7772,6 +8031,9 @@ class JarvisApp(App):
         except Exception:
             pass
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
+        Clock.schedule_interval(self.chat_sync_tick, 10)
+        if self.server_token.strip():
+            Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
         if not self.onboarded or not self.server_token.strip():
             Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
         else:
