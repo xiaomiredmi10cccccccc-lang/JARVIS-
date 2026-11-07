@@ -3784,6 +3784,13 @@ MEDIA_PREFIXES = (
 )
 
 
+_PICTURE_NOUNS = ("фотография ", "фото ", "картинка ", "картинку ", "изображение ", "рисунок ", "акси ", "расми ", "тасвири ",
+                  "photo of ", "picture of ", "image of ")
+_DRAW_VERBS = ("нарисуй", "сгенерируй", "создай картинку", "создай изображение", "создай фото", "сделай картинку", "сделай фото",
+               "акс бисоз", "аксе бисоз", "расм бикаш", "расме бикаш", "тасвир бисоз", "акс созед", "draw me", "generate an image",
+               "generate a picture", "create an image", "create a picture", "make a picture")
+
+
 def parse_media_intent(text):
     """('image'|'search'|'file', request) when the message starts with a media command, else None."""
     low = " ".join(str(text).lower().split())
@@ -3792,6 +3799,13 @@ def parse_media_intent(text):
             if low.startswith(prefix) and (len(low) == len(prefix) or not low[len(prefix)].isalnum()):
                 rest = " ".join(str(text).split())[len(prefix):].lstrip(" :,;-–—")
                 return kind, rest.strip()
+    # a bare description of a picture ("photo of high mountains ...") or a drawing verb anywhere in the sentence
+    plain = " ".join(str(text).split())
+    if plain and not plain.endswith("?") and not low.startswith(_QUESTION_STARTS):
+        if low.startswith(_PICTURE_NOUNS) and len(low.split()) >= 2:
+            return "image", plain
+        if any(v in low for v in _DRAW_VERBS):
+            return "image", plain
     return None
 
 
@@ -6665,6 +6679,20 @@ class JarvisApp(App):
         threading.Thread(target=self._ask_server, args=(chat_id, message, history), daemon=True).start()
 
     def _finish_server_answer(self, chat_id, answer):
+        m = re.search(r"!\[([^\]]*)\]\(([^)\s]+)[^)]*\)", str(answer))
+        if m:
+            # the AI wrote a picture link that cannot be shown: make the picture itself from its description
+            from urllib.parse import urlparse, parse_qs
+            try:
+                prompt = (parse_qs(urlparse(m.group(2)).query).get("prompt") or [""])[0]
+            except Exception:
+                prompt = ""
+            prompt = (prompt or m.group(1)).replace("+", " ").strip()
+            rest = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", str(answer)).strip()
+            if prompt and not rest:
+                self._start_media_job(chat_id, "image", prompt)
+                return
+            answer = rest or answer
         self._status_after_answer()
         self.set_orb_state("speaking", min(4.0, 0.8 + len(answer) * 0.02))
         self.deliver_answer(chat_id, answer)
