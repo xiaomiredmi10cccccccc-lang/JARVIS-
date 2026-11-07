@@ -6692,7 +6692,7 @@ class JarvisApp(App):
             try:                                    # short technical hint from the server (provider names only)
                 detail = json.loads(exc.read(400).decode("utf-8", "replace")).get("detail", "")
                 if isinstance(detail, str) and detail:
-                    code += "\n" + detail[:140]
+                    code += "\n" + detail[:300]
             except Exception:
                 pass
         elif isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
