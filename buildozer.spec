@@ -12,6 +12,8 @@ version = 0.1
 requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,pyjnius,requests,certifi,urllib3,idna,chardet
 
 icon.filename = %(source.dir)s/assets/icon.png
+icon.adaptive_foreground.filename = %(source.dir)s/assets/adaptive_fg.png
+icon.adaptive_background.filename = %(source.dir)s/assets/adaptive_bg.png
 presplash.filename = %(source.dir)s/assets/presplash.png
 android.presplash_color = #000000
 
