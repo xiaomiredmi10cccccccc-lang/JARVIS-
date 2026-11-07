@@ -24,6 +24,7 @@ from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp
+from kivy.properties import NumericProperty
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
@@ -4578,6 +4579,17 @@ class AuroraScreen(FloatLayout):
         self.wordmark.text = shown
         self.wordmark.font_size = dp(34 if len(shown) <= 9 else 24 if len(shown) <= 16 else 17)
 
+    def spin(self, on):
+        sp = getattr(self, "_spin", None)
+        if on and sp is None:
+            sp = Spinner(color=self.acc2, size_hint=(None, None), size=(dp(38), dp(38)), pos_hint={"center_x": 0.5, "y": 0.09})
+            self.add_widget(sp)
+            self._spin = sp
+        elif not on and sp is not None:
+            if sp.parent is not None:
+                sp.parent.remove_widget(sp)
+            self._spin = None
+
     def new_panel(self, height):
         """A fresh frosted card; the previous one fades out."""
         for old in list(self.stage.children):
@@ -4615,6 +4627,145 @@ class AuroraScreen(FloatLayout):
         return True
 
 
+_ASSET_TEX = {}
+
+
+def asset_texture(name):
+    """A texture from the assets folder (same search places as the orb pictures), or None."""
+    if name in _ASSET_TEX:
+        return _ASSET_TEX[name]
+    tex = None
+    folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]
+    try:
+        app = App.get_running_app()
+        if app is not None and getattr(app, "directory", None):
+            folders.append(app.directory)
+    except Exception:
+        pass
+    for folder in folders:
+        for path in (os.path.join(folder, "assets", name), os.path.join(folder, name)):
+            try:
+                if os.path.exists(path):
+                    from kivy.core.image import Image as CoreImage
+                    tex = CoreImage(path).texture
+                    break
+            except Exception:
+                tex = None
+        if tex is not None:
+            break
+    _ASSET_TEX[name] = tex
+    return tex
+
+
+class Spinner(Widget):
+    """A turning arc. Stops by itself when it is removed from the screen."""
+
+    def __init__(self, color=(0.4, 0.7, 1), **kwargs):
+        super().__init__(**kwargs)
+        self._angle = 0
+        with self.canvas:
+            self._c = Color(color[0], color[1], color[2], 0.95)
+            self._line = Line(circle=(0, 0, 10, 0, 270), width=dp(2.4), cap="round")
+        self._ev = Clock.schedule_interval(self._tick, 1 / 40.0)
+
+    def _tick(self, dt):
+        if self.parent is None and self.get_root_window() is None:
+            if getattr(self, "_seen", False):
+                self._ev.cancel()
+                return False
+            return True
+        self._seen = True
+        self._angle = (self._angle + 330 * dt) % 360
+        r = min(self.width, self.height) / 2 - dp(3)
+        self._line.circle = (self.center_x, self.center_y, max(r, 1), self._angle, self._angle + 260)
+        return True
+
+
+class IndeterminateBar(Widget):
+    """A thin bar with a sliding highlight: something is being sent."""
+
+    def __init__(self, color=(0.4, 0.7, 1), **kwargs):
+        super().__init__(size_hint_y=None, height=dp(4), **kwargs)
+        self._t = 0.0
+        with self.canvas:
+            Color(color[0], color[1], color[2], 0.22)
+            self._track = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(2)])
+            Color(color[0], color[1], color[2], 0.95)
+            self._seg = RoundedRectangle(pos=self.pos, size=(0, 0), radius=[dp(2)])
+        self.bind(pos=self._draw, size=self._draw)
+        self._ev = Clock.schedule_interval(self._tick, 1 / 40.0)
+
+    def _tick(self, dt):
+        self._t = (self._t + dt * 0.9) % 1.0
+        self._draw()
+        return True
+
+    def _draw(self, *_):
+        self._track.pos, self._track.size = self.pos, self.size
+        w = self.width * 0.32
+        x = self.x + (self.width + w) * self._t - w
+        left, right = max(x, self.x), min(x + w, self.x + self.width)
+        self._seg.pos = (left, self.y)
+        self._seg.size = (max(right - left, 0), self.height)
+
+    def stop(self):
+        self._ev.cancel()
+
+
+class SkeletonRect(Widget):
+    alpha = NumericProperty(0.10)
+
+    def __init__(self, color=(0.4, 0.7, 1), **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas:
+            self._c = Color(color[0], color[1], color[2], self.alpha)
+            self._r = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(14)])
+        self.bind(pos=self._draw, size=self._draw, alpha=self._draw)
+        anim = Animation(alpha=0.30, d=0.9, t="in_out_sine") + Animation(alpha=0.08, d=0.9, t="in_out_sine")
+        anim.repeat = True
+        anim.start(self)
+
+    def _draw(self, *_):
+        self._c.a = self.alpha
+        self._r.pos, self._r.size = self.pos, self.size
+
+
+class TransitionCover(FloatLayout):
+    """Full-screen cover with the logo, shown while one screen is swapped for the next."""
+
+    def __init__(self, app, **kwargs):
+        super().__init__(size_hint=(1, 1), opacity=0, **kwargs)
+        theme = THEMES[app.theme_index]
+        bg = hex_color(theme["background"])
+        with self.canvas.before:
+            Color(bg[0] * 0.55, bg[1] * 0.55, bg[2] * 0.55, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=lambda *_: setattr(self._bg, "pos", self.pos), size=lambda *_: setattr(self._bg, "size", self.size))
+        from kivy.uix.image import Image as KivyImage
+        tex = asset_texture("adaptive_fg.png")
+        if tex is not None:
+            logo = KivyImage(texture=tex, size_hint=(None, None), size=(dp(190), dp(190)), fit_mode="contain",
+                             pos_hint={"center_x": 0.5, "center_y": 0.56})
+        else:
+            logo = make_label("S.A.I", 40, theme["accent"], True, size_hint=(None, None), width=dp(190), height=dp(80),
+                              pos_hint={"center_x": 0.5, "center_y": 0.56})
+        pulse = Animation(opacity=0.65, d=0.8, t="in_out_sine") + Animation(opacity=1, d=0.8, t="in_out_sine")
+        pulse.repeat = True
+        pulse.start(logo)
+        self.add_widget(logo)
+        self.add_widget(Spinner(color=hex_color(theme["accent"])[:3], size_hint=(None, None), size=(dp(34), dp(34)),
+                                pos_hint={"center_x": 0.5, "center_y": 0.38}))
+
+    def on_touch_down(self, touch):
+        return True
+
+    def on_touch_move(self, touch):
+        return True
+
+    def on_touch_up(self, touch):
+        return True
+
+
 class DotsButton(FrostButton):
     """A round button with three vertical dots (drawn, so it does not depend on a font glyph)."""
 
@@ -4632,6 +4783,23 @@ class DotsButton(FrostButton):
         for i, e in enumerate(self._d):
             e.size = (2 * r, 2 * r)
             e.pos = (cx - r, cy - r + (i - 1) * dp(7.5))
+
+
+def emoji_cell(ch, size, on_release):
+    """A tappable full-colour emoji picture (None when the colour pack or this emoji is missing)."""
+    from kivy.uix.behaviors import ButtonBehavior
+    from kivy.uix.image import Image as KivyImage
+    parts = [v for k, v in split_emoji(ch) if k == "e"]
+    tex = emoji_texture(parts[0]) if parts else None
+    if tex is None:
+        return None
+
+    class Cell(ButtonBehavior, KivyImage):
+        pass
+
+    cell = Cell(texture=tex, fit_mode="contain", **size)
+    cell.bind(on_release=on_release)
+    return cell
 
 
 def make_zoom_image(path):
@@ -4806,7 +4974,7 @@ def glass_input(app, hint, text="", password=False, center=False, size=15):
     return wrap, ti
 
 
-EMOJI_OVERLAY = False     # the coloured overlay did not line up with the plain glyphs on the phone: off
+EMOJI_OVERLAY = True      # coloured pictures over the field's text; the plain (single-colour) glyphs underneath are blanked
 
 
 class EmojiInput(TextInput):
@@ -4819,6 +4987,15 @@ class EmojiInput(TextInput):
         self._emoji_ev = None
         for prop in ("text", "pos", "size", "scroll_x", "scroll_y", "font_size", "padding"):
             self.bind(**{prop: self._emoji_later})
+
+    def _create_line_label(self, text, hint=False):
+        """Draw the plain glyph of every emoji as blank space: only the coloured picture is visible."""
+        try:
+            if EMOJI_OVERLAY and emoji_pack()[0] and any(ord(ch) >= 0x203C for ch in text):
+                text = "".join("\u2007" * len(v) if k == "e" else v for k, v in split_emoji(text))
+        except Exception:
+            pass
+        return super()._create_line_label(text, hint)
 
     def _emoji_later(self, *_):
         if self._emoji_ev is not None:
@@ -4882,6 +5059,8 @@ class JarvisApp(App):
         self.profile_done = False
         self._delivery = {}
         self._delivery_labels = {}
+        self._delivery_bars = {}
+        self._skeleton = None
         self._retry = None
         self._busy = False
         self._busy_ev = None
@@ -5126,7 +5305,7 @@ class JarvisApp(App):
             background_normal="", background_active="",
             background_color=(0, 0, 0, 0),
             padding=[dp(8), dp(15), dp(4), dp(10)],
-            input_type="null", keyboard_suggestions=False,
+            input_type="text", keyboard_suggestions=True,
         )
         # Enter starts a new paragraph (multiline); a message is sent only with the send button.
         self.command_input.bind(text=self.on_text_change)
@@ -5148,10 +5327,11 @@ class JarvisApp(App):
                                       background_normal="", background_color=(0, 0, 0, 0),
                                       color=hex_color(theme["text"]))
         self.stop_speech_btn.bind(on_release=self.stop_speaking)
-        self.emoji_btn = Button(text="\u263a" if FONT_OK else ":)", font_size=dp(24), size_hint_x=None,
-                                width=dp(34), background_normal="", background_color=(0, 0, 0, 0),
-                                color=hex_color(theme["accent"]))
-        self.emoji_btn.bind(on_release=self.open_emoji_panel)
+        self.emoji_btn = emoji_cell("\U0001F600", {"size_hint_x": None, "width": dp(34)}, self.open_emoji_panel)
+        if self.emoji_btn is None:
+            self.emoji_btn = Button(text=":)", font_size=dp(22), size_hint_x=None, width=dp(34), background_normal="",
+                                    background_color=(0, 0, 0, 0), color=hex_color(theme["accent"]))
+            self.emoji_btn.bind(on_release=self.open_emoji_panel)
         self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
                                        size_hint_x=None, width=dp(52))
         self.action_btn.bind(on_release=self.on_action)
@@ -5282,6 +5462,10 @@ class JarvisApp(App):
                     dl.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
                     self._delivery_labels[path_m] = dl
                     self._paint_delivery(dl, state)
+                    if state == "sending":
+                        bar = IndeterminateBar(color=accent)
+                        self._delivery_bars[path_m] = bar
+                        bubble.add_widget(bar)
                     bubble.add_widget(dl)
             except Exception:
                 save_crash("Media bubble failed:\n" + traceback.format_exc())
@@ -5391,6 +5575,67 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.2)
         self.scroll_chat_down()
 
+    def cover_transition(self, action, hold=1.3):
+        """Logo cover over the whole screen; the next screen is built underneath and the cover leaves calmly."""
+        cover = TransitionCover(self)
+        Window.add_widget(cover)
+
+        def leave(dt):
+            anim = Animation(opacity=0, d=0.5, t="in_out_sine")
+            anim.bind(on_complete=lambda *a: cover.parent.remove_widget(cover) if cover.parent else None)
+            anim.start(cover)
+
+        def covered(*_):
+            try:
+                action()
+            except Exception:
+                save_crash("Transition action failed:\n" + traceback.format_exc())
+            if cover.parent is not None:          # keep the cover above anything the action added to the window
+                Window.remove_widget(cover)
+                Window.add_widget(cover)
+            Clock.schedule_once(leave, hold)
+
+        anim = Animation(opacity=1, d=0.22)
+        anim.bind(on_complete=covered)
+        anim.start(cover)
+
+    def _show_skeleton(self):
+        self._remove_skeleton()
+        theme = THEMES[self.theme_index]
+        accent = hex_color(theme["accent"])[:3]
+        card = BoxLayout(orientation="vertical", size_hint=(0.82, None), height=dp(268), padding=dp(12), spacing=dp(8))
+        frost(card, 18, (0.05, 0.07, 0.14), 0.55, 0.30)
+        card.add_widget(make_label(self.assistant_name, 11, theme["accent"], True, size_hint_y=None, height=dp(16), halign="left"))
+        card.add_widget(SkeletonRect(color=accent))
+        card.add_widget(SkeletonRect(color=accent, size_hint_y=None, height=dp(12)))
+        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(276), padding=(dp(6), dp(4)))
+        row.add_widget(card)
+        row.add_widget(Widget())
+        self._skeleton = row
+        self.chat_box.add_widget(row)
+        self.scroll_chat_down()
+
+    def _remove_skeleton(self):
+        row = getattr(self, "_skeleton", None)
+        if row is not None and row.parent is not None:
+            row.parent.remove_widget(row)
+        self._skeleton = None
+
+    def _pulse_start(self):
+        label = getattr(self, "status_label", None)
+        if label is None:
+            return
+        Animation.cancel_all(label, "opacity")
+        anim = Animation(opacity=0.35, d=0.75, t="in_out_sine") + Animation(opacity=1, d=0.75, t="in_out_sine")
+        anim.repeat = True
+        anim.start(label)
+
+    def _pulse_stop(self):
+        label = getattr(self, "status_label", None)
+        if label is not None:
+            Animation.cancel_all(label, "opacity")
+            label.opacity = 1
+
     def append_bubble(self, role, text):
         self.chat_box.add_widget(self.make_bubble(role, text))
         Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.1)
@@ -5401,6 +5646,7 @@ class JarvisApp(App):
         self.chats.add_message(chat_id, role, text)
         if role == "jarvis":
             self.busy_stop()
+            self._remove_skeleton()
         if self.chats.current_id != chat_id:
             return
         if self.chat_placeholder:
@@ -5593,6 +5839,8 @@ class JarvisApp(App):
             mode = "image_edit"
         elif is_text_file(name, mime) and looks_like_edit(prompt, "text"):
             mode = "text_edit"
+        if mode in ("image_remix", "image_edit"):
+            self._show_skeleton()
         self._set_busy(self.t("media_image") if mode == "image_remix" else self.t("media_edit") if mode != "analyze" else self.t("server_thinking"))
         target = self._upload_attachment if mode == "analyze" else self._attachment_edit_job
         args = (chat_id, name, mime, raw, prompt) if mode == "analyze" else (chat_id, name, mime, raw, prompt, mode)
@@ -5666,6 +5914,7 @@ class JarvisApp(App):
             return True
 
         tick(0)
+        self._pulse_start()
         self._busy_ev = Clock.schedule_interval(tick, 2.2)
         self._busy_safety = Clock.schedule_once(lambda dt: self.busy_stop(), 150)
 
@@ -5673,6 +5922,7 @@ class JarvisApp(App):
         if not self._busy:
             return
         self._busy = False
+        self._pulse_stop()
         for ev in (self._busy_ev, self._busy_safety):
             if ev is not None:
                 ev.cancel()
@@ -5753,6 +6003,8 @@ class JarvisApp(App):
             self.add_chat_message(chat_id, "jarvis", self.t("need_prompt"))
             return
         self._set_busy(self.t({"image": "media_image", "search": "media_search", "file": "media_file"}[kind]))
+        if kind == "image":
+            self._show_skeleton()
         target = {"image": self._job_generate, "search": self._job_search, "file": self._job_create_file}[kind]
         threading.Thread(target=target, args=(chat_id, request), daemon=True).start()
 
@@ -5885,6 +6137,12 @@ class JarvisApp(App):
     def _set_delivery(self, path, state):
         if not path:
             return
+        if state != "sending":
+            bar = self._delivery_bars.pop(path, None)
+            if bar is not None:
+                bar.stop()
+                if bar.parent is not None:
+                    bar.parent.remove_widget(bar)
         if not hasattr(self, "_delivery"):
             self._delivery = {}
         self._delivery[path] = state
@@ -6120,7 +6378,7 @@ class JarvisApp(App):
         def pick(code):
             self.language = code
             self.save_settings()
-            Clock.schedule_once(lambda dt: self._ob_name_step(), 0.12)
+            self.cover_transition(self._ob_name_step, 1.2)
 
         for label, code, hello in (("Тоҷикӣ", "tg", "Салом"), ("Русский", "ru", "Привет"), ("English", "en", "Hello")):
             btn = FrostButton(tint=screen.acc, alpha=0.12, radius=20, markup=True,
@@ -6149,7 +6407,7 @@ class JarvisApp(App):
             self.title = name
             self.save_settings()
             screen.set_wordmark(name)
-            Clock.schedule_once(lambda dt: self._ob_account_step("signup"), 0.12)
+            self.cover_transition(lambda: self._ob_account_step("signup"), 1.2)
 
         name_input.bind(on_text_validate=go)
         panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
@@ -6214,6 +6472,7 @@ class JarvisApp(App):
                     return
             state["busy"] = True
             status.text = self.t("ob_wait")
+            screen.spin(True)
             threading.Thread(target=self._auth_job, args=(mode, username, password, screen, status, state), daemon=True).start()
 
         pass_in.bind(on_text_validate=submit)
@@ -6274,21 +6533,25 @@ class JarvisApp(App):
                 self.onboarded = True
                 self._ob_active = False
                 self.save_settings()
+                popup.spin(False)
                 if not self.profile_done:
-                    self._ob_profile_step(popup)
+                    self.cover_transition(lambda: self._ob_profile_step(popup), 1.3)
                     return
                 self._ob_finish(popup)
             else:
+                popup.spin(False)
                 status.text = message or self.t("err_generic")
 
         Clock.schedule_once(done, 0)
 
     def _ob_finish(self, popup):
-        popup.dismiss()
-        self.build_interface()
-        welcome = self.t("ob_welcome").format(self.username, self.assistant_name)
-        self.show_response(welcome)
-        self.speak_answer(welcome)
+        def go():
+            popup.dismiss()
+            self.build_interface()
+            welcome = self.t("ob_welcome").format(self.username, self.assistant_name)
+            self.show_response(welcome)
+            self.speak_answer(welcome)
+        self.cover_transition(go, 1.5)
 
     def _ob_profile_step(self, screen):
         """After sign-in: first name, last name, birth year/age and gender (can be skipped)."""
@@ -7051,7 +7314,6 @@ class JarvisApp(App):
 
     def on_text_change(self, instance, value):
         self._sync_action_mode()
-        self._update_suggestions(value)
 
     def _vocab(self):
         """Word -> weight: words from the user's chats (weighted) plus a small built-in list. Cached for a while."""
@@ -7138,16 +7400,15 @@ class JarvisApp(App):
         def fill(index, *_):
             grid.clear_widgets()
             for ch in EMOJI_GROUPS[index][1]:
-                b = GlassButton(text=ch, tint=tint, active=False, radius=10, size_hint_y=None,
-                                height=dp(44), font_size=dp(24), color=hex_color(theme["text"]))
-                b.bind(on_release=lambda inst, c=ch: put(c))
-                grid.add_widget(b)
+                cell = emoji_cell(ch, {"size_hint_y": None, "height": dp(44)}, lambda inst, c=ch: put(c))
+                if cell is not None:           # only full-colour emoji are offered
+                    grid.add_widget(cell)
             scroll.scroll_y = 1
 
         for i, (label, _chars) in enumerate(EMOJI_GROUPS):
-            t = GlassButton(text=label, tint=tint, active=True, radius=12, font_size=dp(22),
-                            color=hex_color(theme["text"]))
-            t.bind(on_release=lambda inst, k=i: fill(k))
+            t = emoji_cell(label, {}, lambda inst, k=i: fill(k))
+            if t is None:
+                continue
             tabs.add_widget(t)
         back = GlassButton(text="\u232b", tint=tint, active=False, radius=12, font_size=dp(22),
                            color=hex_color(theme["text"]), size_hint_x=None, width=dp(52))
