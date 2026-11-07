@@ -121,6 +121,17 @@ def init_database() -> None:
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS chats (
+                    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    chat_id VARCHAR(40) NOT NULL,
+                    title TEXT NOT NULL DEFAULT '',
+                    created VARCHAR(32) NOT NULL DEFAULT '',
+                    updated VARCHAR(32) NOT NULL DEFAULT '',
+                    messages TEXT NOT NULL DEFAULT '[]',
+                    PRIMARY KEY (user_id, chat_id)
+                )
+            """)
             for statement in (
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(40)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64)",
@@ -480,6 +491,179 @@ def delete_account(authorization: str | None = Header(default=None)):
 def me(authorization: str | None = Header(default=None)):
     user = get_current_user(authorization)
     return {"id": user["id"], "email": user["email"], "created_at": user["created_at"]}
+
+
+MAX_CHATS_PER_USER = 500
+MAX_CHAT_BYTES = 600 * 1024
+
+
+class SyncMessage(BaseModel):
+    role: Literal["user", "jarvis"]
+    text: str = Field(max_length=8000)
+    time: str = Field(default="", max_length=32)
+
+
+class SyncChat(BaseModel):
+    id: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
+    title: str = Field(default="", max_length=120)
+    created: str = Field(default="", max_length=32)
+    updated: str = Field(default="", max_length=32)
+    messages: list[SyncMessage] = Field(max_length=600)
+
+
+class SyncRequest(BaseModel):
+    chats: list[SyncChat] = Field(max_length=40)
+
+
+class DeleteChatsRequest(BaseModel):
+    ids: list[str] = Field(max_length=200)
+
+
+class AnalyzeChatsRequest(BaseModel):
+    question: str = Field(default="", max_length=1000)
+    language: Literal["tg", "ru", "en"] = "tg"
+
+
+def _chat_user(authorization, x_jarvis_token, http_request) -> dict:
+    user = require_auth(authorization, x_jarvis_token)
+    if not user.get("id"):
+        raise HTTPException(status_code=403, detail="Personal account required")
+    check_rate_limit(rate_key(user, http_request))
+    return user
+
+
+@app.post("/chats/upsert")
+def chats_upsert(data: SyncRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Save (or update) the signed-in user's chats, so they come back after a reinstall or on another phone."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    saved = 0
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM chats WHERE user_id = %s", (user["id"],)).fetchone()[0]
+            for chat_item in data.chats:
+                payload = json.dumps([m.model_dump() for m in chat_item.messages], ensure_ascii=False)
+                if len(payload.encode("utf-8")) > MAX_CHAT_BYTES:
+                    continue
+                exists = conn.execute("SELECT 1 FROM chats WHERE user_id = %s AND chat_id = %s", (user["id"], chat_item.id)).fetchone()
+                if not exists and count >= MAX_CHATS_PER_USER:
+                    continue
+                conn.execute(
+                    """INSERT INTO chats (user_id, chat_id, title, created, updated, messages)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (user_id, chat_id) DO UPDATE
+                       SET title = EXCLUDED.title, updated = EXCLUDED.updated, messages = EXCLUDED.messages""",
+                    (user["id"], chat_item.id, chat_item.title, chat_item.created, chat_item.updated, payload))
+                if not exists:
+                    count += 1
+                saved += 1
+    except Exception as exc:
+        print("Chat upsert failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is temporarily unavailable")
+    return {"saved": saved}
+
+
+@app.get("/chats")
+def chats_list(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10, row_factory=dict_row) as conn:
+            rows = conn.execute("SELECT chat_id, title, created, updated, messages FROM chats WHERE user_id = %s ORDER BY updated DESC LIMIT %s",
+                                (user["id"], MAX_CHATS_PER_USER)).fetchall()
+    except Exception as exc:
+        print("Chat list failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is temporarily unavailable")
+    out = []
+    for row in rows:
+        try:
+            messages = json.loads(row["messages"])
+        except Exception:
+            messages = []
+        out.append({"id": row["chat_id"], "title": row["title"], "created": row["created"], "updated": row["updated"], "messages": messages})
+    return {"chats": out}
+
+
+@app.post("/chats/delete")
+def chats_delete(data: DeleteChatsRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            for chat_id in data.ids:
+                conn.execute("DELETE FROM chats WHERE user_id = %s AND chat_id = %s", (user["id"], chat_id[:40]))
+    except Exception as exc:
+        print("Chat delete failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is temporarily unavailable")
+    return {"deleted": len(data.ids)}
+
+
+def _chat_transcripts(user_id: int) -> list[str]:
+    with psycopg.connect(database_url(), connect_timeout=10, row_factory=dict_row) as conn:
+        rows = conn.execute("SELECT title, created, updated, messages FROM chats WHERE user_id = %s ORDER BY updated ASC LIMIT %s",
+                            (user_id, MAX_CHATS_PER_USER)).fetchall()
+    blocks = []
+    for row in rows:
+        try:
+            messages = json.loads(row["messages"])
+        except Exception:
+            continue
+        if not messages:
+            continue
+        lines = ["### " + (row["title"] or "Chat") + " (" + (row["updated"] or row["created"])[:10] + ")"]
+        for m in messages:
+            who = "User" if m.get("role") == "user" else "AI"
+            lines.append(who + ": " + " ".join(str(m.get("text", "")).split())[:700])
+        blocks.append("\n".join(lines))
+    return blocks
+
+
+@app.post("/chats/analyze")
+def chats_analyze(data: AnalyzeChatsRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Answer a question about ALL of the user's saved chats (long histories are condensed piece by piece first)."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    check_quota(user, "chat")
+    if not ai_tools.provider_chain(language=data.language):
+        raise HTTPException(status_code=503, detail="No AI provider key is configured")
+    try:
+        blocks = _chat_transcripts(user["id"])
+    except Exception as exc:
+        print("Chat transcripts failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is temporarily unavailable")
+    if not blocks:
+        return {"answer": {"tg": "Ҳоло чатҳои захирашуда нест.", "ru": "Сохранённых чатов пока нет.", "en": "There are no saved chats yet."}[data.language], "chats": 0}
+    lang_name = {"tg": "Tajik (Cyrillic)", "ru": "Russian", "en": "English"}[data.language]
+    question = data.question.strip() or "Analyze all my chats: main topics, what I ask most, my interests, unfinished tasks, useful conclusions."
+    base = ("You analyse the user's own saved chat history with an AI assistant. Be accurate and concrete, do not invent anything that is not in the chats, "
+            "and write the answer in " + lang_name + ". Keep it well structured and not too long.")
+    # split into chunks of about 22k characters
+    chunks, current, size = [], [], 0
+    for block in blocks:
+        if size + len(block) > 22000 and current:
+            chunks.append("\n\n".join(current))
+            current, size = [], 0
+        current.append(block[:22000])
+        size += min(len(block), 22000)
+    if current:
+        chunks.append("\n\n".join(current))
+    try:
+        if len(chunks) == 1:
+            material = chunks[0]
+        else:
+            notes = []
+            for i, chunk in enumerate(chunks[:8]):
+                part = ai_tools.complete([
+                    {"role": "system", "content": base + " Write compact notes (at most 220 words) about this part of the history that will help answer the question: " + question},
+                    {"role": "user", "content": chunk}], timeout=60.0, language=data.language)
+                notes.append("Part %d notes:\n%s" % (i + 1, part["answer"].strip()))
+            material = "\n\n".join(notes)
+        result = ai_tools.complete([
+            {"role": "system", "content": base},
+            {"role": "user", "content": "Chat history (" + str(len(blocks)) + " chats):\n\n" + material + "\n\nQuestion: " + question}],
+            timeout=75.0, language=data.language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Chat analysis failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
+    return {"answer": result["answer"], "chats": len(blocks)}
 
 
 @app.post("/chat")
