@@ -4,13 +4,16 @@ All keys come from environment variables on Render (never from code):
   GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY   (any subset; missing ones are skipped)
   GROQ_MODEL, GROQ_VISION_MODEL, GEMINI_MODEL, OPENROUTER_MODEL, OPENROUTER_VISION_MODEL, AI_PROVIDER_ORDER
   (GEMINI_MODEL and GROQ_VISION_MODEL may hold several model ids separated by commas: they are tried in turn)
-  IMAGE_GEN_URL   optional template with {prompt} {w} {h} {seed}  (default: Pollinations, no key)
+  IMAGE_GEN_URL   optional template with {prompt} {w} {h} {seed}
+  POLLINATIONS_KEY  optional key for gen.pollinations.ai (enter.pollinations.ai)
+  HF_TOKEN        optional Hugging Face token (free credits) for FLUX.1-schnell
 """
 import io
 import json
 import os
 import random
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -96,18 +99,52 @@ def to_english(text, language):
 
 
 # ------------------------------------------------------------------ image generation
-def generate_image(prompt_en, width=1024, height=1024):
-    """Fetch an image for the prompt from a free keyless service. Returns (bytes, content_type)."""
-    template = os.environ.get("IMAGE_GEN_URL", "").strip() or \
-        "https://image.pollinations.ai/prompt/{prompt}?width={w}&height={h}&nologo=true&seed={seed}"
-    url = template.format(prompt=urllib.parse.quote(prompt_en[:500]), w=width, h=height, seed=random.randint(1, 10 ** 6))
-    req = urllib.request.Request(url, headers={"User-Agent": "JARVIS-server/1.0"})
-    with urllib.request.urlopen(req, timeout=90) as response:
+def _fetch_image(req, timeout=90):
+    with urllib.request.urlopen(req, timeout=timeout) as response:
         ctype = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
         data = response.read(12 * 1024 * 1024)
     if not ctype.startswith("image/") or len(data) < 1000:
-        raise RuntimeError("the image service returned no image")
+        raise RuntimeError("no image in the answer (%s, %d bytes)" % (ctype or "?", len(data)))
     return data, ctype
+
+
+def generate_image(prompt_en, width=1024, height=1024):
+    """Make a picture. Tries, in order: IMAGE_GEN_URL (your own template), Pollinations with POLLINATIONS_KEY,
+    Hugging Face (HF_TOKEN), then the keyless Pollinations addresses. Returns (bytes, content_type).
+    When every service fails the error lists each reason, so the real cause is visible in the app and in the Render log."""
+    quoted = urllib.parse.quote(prompt_en[:500])
+    seed = random.randint(1, 10 ** 6)
+    attempts = []          # (name, function)
+    custom = os.environ.get("IMAGE_GEN_URL", "").strip()
+    if custom:
+        url = custom.format(prompt=quoted, w=width, h=height, seed=seed)
+        attempts.append(("custom", lambda: _fetch_image(urllib.request.Request(url, headers={"User-Agent": "JARVIS-server/1.0"}))))
+    poll_key = os.environ.get("POLLINATIONS_KEY", "").strip()
+    if poll_key:
+        url = "https://gen.pollinations.ai/image/%s?width=%d&height=%d&nologo=true&seed=%d" % (quoted, width, height, seed)
+        attempts.append(("pollinations-key", lambda: _fetch_image(urllib.request.Request(
+            url, headers={"User-Agent": "JARVIS-server/1.0", "Authorization": "Bearer " + poll_key}))))
+    hf_token = os.environ.get("HF_TOKEN", "").strip()
+    if hf_token:
+        model = os.environ.get("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell").strip()
+        hf_url = "https://router.huggingface.co/hf-inference/models/" + model
+        body = json.dumps({"inputs": prompt_en[:500]}).encode("utf-8")
+        attempts.append(("huggingface", lambda: _fetch_image(urllib.request.Request(
+            hf_url, data=body, method="POST", headers={"Authorization": "Bearer " + hf_token, "Content-Type": "application/json",
+                                                       "Accept": "image/png"}), timeout=120)))
+    for name, template in (("pollinations-old", "https://image.pollinations.ai/prompt/{prompt}?width={w}&height={h}&nologo=true&seed={seed}"),
+                           ("pollinations-gen", "https://gen.pollinations.ai/image/{prompt}?width={w}&height={h}&nologo=true&seed={seed}")):
+        url = template.format(prompt=quoted, w=width, h=height, seed=seed)
+        attempts.append((name, lambda u=url: _fetch_image(urllib.request.Request(u, headers={"User-Agent": "JARVIS-server/1.0"}), timeout=60)))
+    reasons = []
+    for name, fn in attempts:
+        try:
+            return fn()
+        except urllib.error.HTTPError as exc:
+            reasons.append("%s: HTTP %d" % (name, exc.code))
+        except Exception as exc:
+            reasons.append("%s: %s %s" % (name, type(exc).__name__, str(exc)[:60]))
+    raise RuntimeError("; ".join(reasons))
 
 
 # ------------------------------------------------------------------ image search (Wikimedia Commons, no key)
