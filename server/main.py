@@ -1060,7 +1060,7 @@ async def image_generate(request: ImageRequest, http_request: Request, x_jarvis_
         data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, request.width, request.height)
     except Exception as exc:
         print("Image generation failed:", type(exc).__name__, str(exc)[:200])
-        raise HTTPException(status_code=502, detail="The free image service is unavailable now (" + type(exc).__name__ + ")")
+        raise HTTPException(status_code=502, detail=("Image services failed: " + str(exc))[:300])
     return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store"})
 
 
@@ -1166,7 +1166,7 @@ async def image_remix(http_request: Request, x_jarvis_token: str | None = Header
         data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, 1024, 1024)
     except Exception as exc:
         print("Remix generation failed:", type(exc).__name__, str(exc)[:200])
-        raise HTTPException(status_code=502, detail="The free image service is unavailable now (" + type(exc).__name__ + ")")
+        raise HTTPException(status_code=502, detail=("Image services failed: " + str(exc))[:300])
     ext = ".png" if "png" in ctype else ".webp" if "webp" in ctype else ".jpg"
     safe_summary = base64.b64encode(plan.encode("utf-8")).decode("ascii")
     return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
