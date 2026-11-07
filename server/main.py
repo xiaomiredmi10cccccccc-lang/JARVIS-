@@ -666,6 +666,52 @@ def chats_analyze(data: AnalyzeChatsRequest, http_request: Request, x_jarvis_tok
     return {"answer": result["answer"], "chats": len(blocks)}
 
 
+class ProfileNoteRequest(BaseModel):
+    facts: list[str] = Field(default_factory=list, max_length=80)
+    messages: list[str] = Field(default_factory=list, max_length=60)
+    previous: str = Field(default="", max_length=3000)
+    language: Literal["tg", "ru", "en"] = "tg"
+
+
+@app.post("/profile/summarize")
+def profile_summarize(data: ProfileNoteRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Short biography / collaboration note about the user, written from what he told the assistant."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    check_quota(user, "chat")
+    check_rate_limit(rate_key(user, http_request))
+    if not ai_tools.provider_chain(language=data.language):
+        raise HTTPException(status_code=503, detail="No AI provider key is configured")
+    facts = [f.strip()[:240] for f in data.facts if f.strip()][-60:]
+    messages = [m.strip()[:240] for m in data.messages if m.strip()][-40:]
+    if not facts and not messages and not data.previous.strip():
+        return {"note": ""}
+    lang_name = {"tg": "Tajik (Cyrillic)", "ru": "Russian", "en": "English"}[data.language]
+    system = (
+        "You keep a private 'about the user' note for an AI assistant. Write a SHORT biography and collaboration note (4-8 sentences, "
+        "one or two short paragraphs, no lists, no headings) in " + lang_name + ". Write in the third person about the user, "
+        "or neutrally. Cover only what is actually known: who the user is (name, age, place, work or study if stated), interests, goals and projects, "
+        "preferences, and how the assistant should cooperate with him (tone, language, level of detail). "
+        "Do NOT list his commands, orders or one-off requests, do NOT write lines like 'the user asked what his name is', do NOT invent anything, "
+        "and do not include secrets such as passwords, card numbers or ID numbers. If a previous note is given, keep what is still true and merge the new information. "
+        "Output only the note text.")
+    parts = []
+    if data.previous.strip():
+        parts.append("Previous note:\n" + data.previous.strip()[:3000])
+    if facts:
+        parts.append("Facts the user stated about himself:\n" + "\n".join("- " + f for f in facts))
+    if messages:
+        parts.append("Recent user messages (for context only; ignore commands and questions):\n" + "\n".join("- " + m for m in messages))
+    try:
+        result = ai_tools.complete([{"role": "system", "content": system}, {"role": "user", "content": "\n\n".join(parts)}],
+                                   max_tokens=500, timeout=60.0, language=data.language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Profile note failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
+    return {"note": result["answer"].strip()[:2000]}
+
+
 @app.post("/chat")
 def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     user = require_auth(authorization, x_jarvis_token)
