@@ -4563,6 +4563,68 @@ class GlassDialog(GlassSheet):
         return True
 
 
+STEP_LABELS = {"tg": ("Забон", "Ном", "Ҳисоб", "Профил"), "ru": ("Язык", "Имя", "Аккаунт", "Профиль"), "en": ("Language", "Name", "Account", "Profile")}
+
+
+class StepBar(FloatLayout):
+    """Checkout-style progress: finished steps are filled circles with a tick, the current one glows, the rest are dim rings."""
+
+    def __init__(self, acc, text_color, labels, **kwargs):
+        super().__init__(size_hint=(0.88, None), height=dp(52), pos_hint={"center_x": 0.5, "top": 0.985}, **kwargs)
+        self.acc = acc
+        self.step = 0
+        self.labels = []
+        for text in labels:
+            lab = make_label(text, 10, "#FFFFFF", False, size_hint=(None, None), height=dp(14))
+            self.labels.append(lab)
+            self.add_widget(lab)
+        self._dim = (0.1, 0.2, 0.4, 0.28) if UI_LIGHT else (1, 1, 1, 0.22)
+        self._text = text_color
+        self.bind(pos=self._draw, size=self._draw)
+
+    def set_step(self, index):
+        self.step = index
+        self.opacity = 0 if index < 0 else 1
+        self._draw()
+
+    def _draw(self, *_):
+        n = len(self.labels)
+        if n == 0 or self.width < 10:
+            return
+        gap = self.width / n
+        r = dp(11)
+        cy = self.top - dp(16)
+        a = self.acc
+        self.canvas.clear()
+        with self.canvas:
+            for i in range(n):
+                cx = self.x + gap * (i + 0.5)
+                if i < n - 1:
+                    Color(*(a + (0.85,) if i < self.step else self._dim))
+                    Line(points=[cx + r + dp(4), cy, cx + gap - r - dp(4), cy], width=dp(1.6), cap="round")
+                if i < self.step:                                  # done: filled circle with a tick
+                    Color(a[0], a[1], a[2], 0.95)
+                    Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+                    Color(1, 1, 1, 1)
+                    Line(points=[cx - r * 0.42, cy - r * 0.02, cx - r * 0.1, cy - r * 0.38, cx + r * 0.46, cy + r * 0.34],
+                         width=dp(1.8), cap="round", joint="round")
+                elif i == self.step:                                # current: glowing ring and dot
+                    Color(a[0], a[1], a[2], 0.22)
+                    Ellipse(pos=(cx - r - dp(4), cy - r - dp(4)), size=(2 * (r + dp(4)), 2 * (r + dp(4))))
+                    Color(a[0], a[1], a[2], 1)
+                    Line(circle=(cx, cy, r), width=dp(1.8))
+                    Ellipse(pos=(cx - dp(4), cy - dp(4)), size=(dp(8), dp(8)))
+                else:                                               # next: dim ring
+                    Color(*self._dim)
+                    Line(circle=(cx, cy, r), width=dp(1.4))
+        for i, lab in enumerate(self.labels):
+            cx = self.x + gap * (i + 0.5)
+            lab.width = gap
+            lab.pos = (cx - gap / 2, self.top - dp(46))
+            lab.color = hex_color("#FFFFFF") if False else (hex_color(self._text) if i <= self.step else hex_color("#8FA6C8"))
+            lab.opacity = 1 if i <= self.step else 0.7
+
+
 class AuroraScreen(FloatLayout):
     """First-run screen: moving glows, a living orb, a dotted wordmark and a frosted card per step."""
 
@@ -4602,21 +4664,23 @@ class AuroraScreen(FloatLayout):
                                         rnd.random(), rnd.random(), rnd.uniform(0.012, 0.04), rnd.uniform(0, 6.28), size])
             self._dim = (0.1, 0.2, 0.4, 0.2) if UI_LIGHT else (1, 1, 1, 0.18)
             self._dot_cols, self._dots = [], []
-            for _i in range(3):
+            for _i in range(0):
                 self._dot_cols.append(Color(*self._dim))
                 self._dots.append(RoundedRectangle(pos=(0, 0), size=(dp(26), dp(4)), radius=[dp(2)]))
         self.wordmark = make_label(dotted_name(app.assistant_name or "S.A.I"), 34, theme["accent"], True,
-                                   size_hint=(1, None), height=dp(52), pos_hint={"center_x": 0.5, "top": 0.80})
+                                   size_hint=(1, None), height=dp(52), pos_hint={"center_x": 0.5, "top": 0.765})
         self.add_widget(self.wordmark)
         self.stage = FloatLayout(size_hint=(1, 1))
         self.add_widget(self.stage)
+        self.stepbar = StepBar(self.acc, theme["text"], STEP_LABELS.get(app.language, STEP_LABELS["tg"]))
+        self.add_widget(self.stepbar)
         self.bind(pos=self._layout, size=self._layout)
         self._layout()
         self._ev = Clock.schedule_interval(self._tick, 1 / 30.0)
 
     # -- geometry ---------------------------------------------------------------------------
     def _orb_center(self):
-        return self.center_x, self.y + self.height * 0.885
+        return self.center_x, self.y + self.height * 0.85
 
     def _layout(self, *_):
         self._bg.pos = self.pos
@@ -4671,12 +4735,17 @@ class AuroraScreen(FloatLayout):
     # -- steps ------------------------------------------------------------------------------
     def set_step(self, index):
         self.step = index
+        self.stepbar.set_step(index)
         self._place(self._t)
 
     def set_wordmark(self, name):
         shown = dotted_name(name or "S.A.I")
         self.wordmark.text = shown
         self.wordmark.font_size = dp(34 if len(shown) <= 9 else 24 if len(shown) <= 16 else 17)
+
+    def stepbar_labels(self, code):
+        for lab, text in zip(self.stepbar.labels, STEP_LABELS.get(code, STEP_LABELS["tg"])):
+            lab.text = text
 
     def spin(self, on):
         sp = getattr(self, "_spin", None)
@@ -4696,7 +4765,7 @@ class AuroraScreen(FloatLayout):
             Clock.schedule_once(lambda dt, o=old: self.stage.remove_widget(o) if o.parent else None, 0.14)
         panel = BoxLayout(orientation="vertical", padding=dp(18), spacing=dp(10), size_hint=(0.86, None),
                           height=dp(min(height, max(300, Window.height / dp(1) * 0.70))),
-                          pos_hint={"center_x": 0.5, "top": 0.72}, opacity=0)
+                          pos_hint={"center_x": 0.5, "top": 0.70}, opacity=0)
         frost(panel, 30, self.acc, 0.15, 0.45)
         self.stage.add_widget(panel)
         Animation(opacity=1, size_hint_x=0.92, d=0.3, t="out_cubic").start(panel)
@@ -6609,7 +6678,7 @@ class JarvisApp(App):
         if self.onboarded:
             self._ob_account_step("login")
         else:
-            self._ob_language_step()
+            self._ob_welcome_step()
 
     def _ob_screen_get(self):
         screen = getattr(self, "_ob_screen", None)
@@ -6619,6 +6688,26 @@ class JarvisApp(App):
             self._ob_screen = screen
             self.sheet_opened(screen)
         return screen
+
+    def _ob_welcome_step(self):
+        """The very first screen: a thank-you and a warm welcome in all three languages."""
+        theme = THEMES[self.theme_index]
+        screen = self._ob_screen_get()
+        screen.set_step(-1)
+        panel = screen.new_panel(400)
+        brand = "S.A.I"
+        panel.add_widget(make_label("Хуш омадед!", 26, theme["text"], True, size_hint_y=None, height=dp(40)))
+        panel.add_widget(make_label("Ташаккур, ки " + brand + "-ро интихоб кардед.\nМан дар ҳар қадам ҳамроҳ ва ёвари шумо мешавам.", 14,
+                                    theme["text"], False, size_hint_y=None, height=dp(66)))
+        panel.add_widget(make_label("Добро пожаловать!  Спасибо, что выбрали " + brand + ".\nЯ буду рядом на каждом шаге.", 12, muted(), False,
+                                    size_hint_y=None, height=dp(52)))
+        panel.add_widget(make_label("Welcome!  Thank you for choosing " + brand + ".\nI will be with you every step of the way.", 12, muted(), False,
+                                    size_hint_y=None, height=dp(52)))
+        panel.add_widget(Widget())
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22,
+                                     text="[b]Оғоз  ·  Начать  ·  Start[/b]", font_size=dp(16), halign="center",
+                                     size_hint_y=None, height=dp(54), color=(1, 1, 1, 1),
+                                     on_release=lambda *_: self.cover_transition(self._ob_language_step, 1.0)))
 
     def _ob_language_step(self):
         theme = THEMES[self.theme_index]
@@ -6632,6 +6721,7 @@ class JarvisApp(App):
         def pick(code):
             self.language = code
             self.save_settings()
+            screen.stepbar_labels(code)
             self.cover_transition(self._ob_name_step, 1.2)
 
         for label, code, hello in (("Тоҷикӣ", "tg", "Салом"), ("Русский", "ru", "Привет"), ("English", "en", "Hello")):
@@ -6812,7 +6902,7 @@ class JarvisApp(App):
     def _ob_profile_step(self, screen):
         """After sign-in: first name, last name, birth year/age and gender (can be skipped)."""
         theme = THEMES[self.theme_index]
-        screen.set_step(2)
+        screen.set_step(3)
         panel = screen.new_panel(470)
         panel.add_widget(make_label(self.t("pf_title"), 18, theme["text"], True, size_hint_y=None, height=dp(30)))
         first_w, first_in = glass_input(self, self.t("pf_first"))
