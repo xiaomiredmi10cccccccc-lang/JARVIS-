@@ -19,7 +19,7 @@ android.presplash_color = #000000
 
 orientation = portrait
 
-android.permissions = INTERNET,RECORD_AUDIO,ACCESS_NETWORK_STATE
+android.permissions = INTERNET,RECORD_AUDIO,ACCESS_NETWORK_STATE,SET_ALARM,QUERY_ALL_PACKAGES,POST_NOTIFICATIONS,WAKE_LOCK
 
 p4a.branch = v2024.01.21
 android.api = 33

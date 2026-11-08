@@ -560,6 +560,17 @@ TEXTS = {
         "pf_male": "Мард",
         "pf_female": "Зан",
         "pf_skip": "Баъдтар",
+        "wake_reply": "Ҳа, гӯш мекунам.",
+        "live_end": "Анҷом",
+        "live_listen": "Гӯш мекунам…",
+        "live_think": "Фикр мекунам…",
+        "live_speak": "Мегӯям…",
+        "live_hint": "Барои қатъ «бас» гӯед",
+        "notify_title": "Ҷавоб тайёр аст",
+        "notify_text": "Барои дидан пахш кунед.",
+        "live_title": "Муоширати зинда",
+        "live_on": "Муоширати зинда фаъол шуд. Гап занед, ман гӯш мекунам. Барои қатъ гӯед «бас».",
+        "live_off": "Муоширати зинда хомӯш шуд.",
         "code_copy": "Нусха",
         "code_copied": "Нусхабардорӣ шуд",
         "av_title": "Акси профил",
@@ -791,6 +802,17 @@ TEXTS = {
         "pf_male": "Мужской",
         "pf_female": "Женский",
         "pf_skip": "Позже",
+        "wake_reply": "Да, слушаю.",
+        "live_end": "Завершить",
+        "live_listen": "Слушаю…",
+        "live_think": "Думаю…",
+        "live_speak": "Говорю…",
+        "live_hint": "Чтобы закончить, скажите «стоп»",
+        "notify_title": "Ответ готов",
+        "notify_text": "Нажмите, чтобы посмотреть.",
+        "live_title": "Живой разговор",
+        "live_on": "Живой разговор включён. Говорите, я слушаю. Чтобы остановить, скажите «стоп».",
+        "live_off": "Живой разговор выключен.",
         "code_copy": "Копировать",
         "code_copied": "Скопировано",
         "av_title": "Фото профиля",
@@ -1022,6 +1044,17 @@ TEXTS = {
         "pf_male": "Male",
         "pf_female": "Female",
         "pf_skip": "Later",
+        "wake_reply": "Yes, I am listening.",
+        "live_end": "End",
+        "live_listen": "Listening…",
+        "live_think": "Thinking…",
+        "live_speak": "Speaking…",
+        "live_hint": "Say “stop” to end",
+        "notify_title": "Answer is ready",
+        "notify_text": "Tap to view it.",
+        "live_title": "Live conversation",
+        "live_on": "Live conversation is on. Speak, I am listening. Say “stop” to end it.",
+        "live_off": "Live conversation is off.",
         "code_copy": "Copy",
         "code_copied": "Copied",
         "av_title": "Profile photo",
@@ -3869,6 +3902,11 @@ def cmd_theme(app, text):
         app.next_theme()
     return app.t("theme_changed").format(THEMES[app.theme_index]["name"])
 
+@command("live", "муоширати зинда", "муошират зинда", "муоширати зиндаро", "живой разговор", "живое общение", "live mode",
+         "live conversation", "режим диалога", priority=75)
+def cmd_live(app, text):
+    return app.toggle_live()
+
 @command("about", "маълумот", "о программе", "о jarvis", "about", priority=40)
 def cmd_about(app, text):
     Clock.schedule_once(lambda dt: app.show_about(), 0.4)
@@ -4094,13 +4132,13 @@ def parse_blocks(text):
         buf, i = [], 0
         while i < len(lines):
             line = lines[i]
-            if (line.strip().startswith("|") and i + 1 < len(lines) and "|" in lines[i + 1]
-                    and _TABLE_SEP_RE.match(lines[i + 1]) and line.count("|") >= 2):
+            if ("|" in line and i + 1 < len(lines) and "|" in lines[i + 1]
+                    and _TABLE_SEP_RE.match(lines[i + 1])):
                 if buf:
                     add_plain("\n".join(buf))
                     buf = []
                 rows = []
-                while i < len(lines) and lines[i].strip().startswith("|"):
+                while i < len(lines) and "|" in lines[i] and lines[i].strip():
                     if not _TABLE_SEP_RE.match(lines[i]):
                         cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
                         rows.append(cells)
@@ -4684,6 +4722,8 @@ class CodeBlock(BoxLayout):
         super().__init__(orientation="vertical", size_hint_y=None, spacing=dp(2),
                          padding=[dp(8), dp(4), dp(8), dp(8)], **kwargs)
         theme = THEMES[app.theme_index]
+        self.opacity = 0
+        Clock.schedule_once(lambda dt: setattr(self, "opacity", 1), 0.2)
         self.bind(minimum_height=self.setter("height"))
         with self.canvas.before:
             Color(0.03, 0.05, 0.09, 0.96) if not UI_LIGHT else Color(0.92, 0.94, 0.98, 1)
@@ -4729,6 +4769,8 @@ class TableBlock(BoxLayout):
 
     def __init__(self, app, rows, **kwargs):
         super().__init__(orientation="vertical", size_hint_y=None, **kwargs)
+        self.opacity = 0                      # shown only after the first layout, so no stray lines flash in a corner
+        Clock.schedule_once(lambda dt: setattr(self, "opacity", 1), 0.2)
         theme = THEMES[app.theme_index]
         acc = hex_color(theme["accent"])[:3]
         text_c = hex_color(theme["text"])
@@ -4775,6 +4817,156 @@ class TableBlock(BoxLayout):
         scroll.add_widget(grid)
         self.add_widget(scroll)
         self.height = scroll.height
+
+
+DEVICE_HINTS = ("будилник", "будильник", "alarm", "хезон", "бедор", "ҳушдор", "разбуди", "разбудить", "wake me", "wake up", "проснуть",
+                "таймер", "timer", "фонарик", "чароғак", "чирог", "flashlight", "torch", "вай-фай", "вайфай", "wi-fi", "wifi",
+                "блютус", "блютуз", "bluetooth", "овозро", "овозашро", "звук", "громкост", "volume", "mute", "bluetooth")
+DEVICE_OPENERS = ("кушо", "кушой", "бикуш", "открой", "запусти", "включи", "open ", "launch ", "start ", "иҷро кун", "оғоз кун")
+DEVICE_APPS = ("whatsapp", "telegram", "youtube", "instagram", "tiktok", "chrome", "камера", "camera", "калькулятор", "calculator",
+               "gallery", "галерея", "галерея", "карт", "maps", "facebook", "viber", "imo", "gmail", "настройк", "танзимот", "settings",
+               "музык", "music", "spotify", "контакт", "contacts", "ватсап", "вацап", "ватсапп", "телеграм", "ютуб", "инстаграм", "тикток",
+               "хром", "вайбер", "джимейл", "мусиқ", "тамос", "харита", "акс", "расм", "соат")
+
+
+def looks_like_device_command(text):
+    low = " ".join(str(text).lower().split())
+    if not low or len(low) > 200:
+        return False
+    if any(h in low for h in DEVICE_HINTS):
+        return True
+    words = low.split()
+    return len(words) <= 8 and any(o in low for o in DEVICE_OPENERS) and any(a in low for a in DEVICE_APPS)
+
+
+DEVICE_MSG = {
+    "tg": {"alarm": "Будилник барои {t} танзим шуд.", "alarm_ui": "Будилник барои {t} омода шуд. Дар барномаи соат онро тасдиқ кунед.",
+           "timer": "Таймер барои {d} танзим шуд.", "flash_on": "Чароғак фурӯзон шуд.", "flash_off": "Чароғак хомӯш шуд.",
+           "open_app": "Барномаи «{a}» кушода мешавад.", "app_missing": "Барномаи «{a}» дар телефон ёфт нашуд.",
+           "settings": "Танзимоти «{p}» кушода шуд.", "panel": "Android иҷозат намедиҳад, ки онро бесадо иваз кунам. Панели интихоб кушода шуд.",
+           "vol_up": "Овоз баланд шуд.", "vol_down": "Овоз паст шуд.", "vol_mute": "Овоз хомӯш шуд.", "vol_set": "Овоз ба {n}% гузошта шуд.",
+           "fail": "Иҷро нашуд: {e}", "no_phone": "Ин амал танҳо дар телефони Android кор мекунад."},
+    "ru": {"alarm": "Будильник установлен на {t}.", "alarm_ui": "Будильник на {t} подготовлен. Подтвердите его в приложении «Часы».",
+           "timer": "Таймер установлен на {d}.", "flash_on": "Фонарик включён.", "flash_off": "Фонарик выключен.",
+           "open_app": "Открываю «{a}».", "app_missing": "Приложение «{a}» на телефоне не найдено.",
+           "settings": "Открыл настройки: {p}.", "panel": "Android не позволяет менять это без вашего участия. Открыл панель выбора.",
+           "vol_up": "Громкость увеличена.", "vol_down": "Громкость уменьшена.", "vol_mute": "Звук выключен.", "vol_set": "Громкость {n}%.",
+           "fail": "Не удалось выполнить: {e}", "no_phone": "Это действие работает только на телефоне Android."},
+    "en": {"alarm": "Alarm set for {t}.", "alarm_ui": "The alarm for {t} is ready. Confirm it in the Clock app.",
+           "timer": "Timer set for {d}.", "flash_on": "Flashlight is on.", "flash_off": "Flashlight is off.",
+           "open_app": "Opening “{a}”.", "app_missing": "The app “{a}” was not found on this phone.",
+           "settings": "Opened settings: {p}.", "panel": "Android does not let me change this silently. I opened the selection panel.",
+           "vol_up": "Volume up.", "vol_down": "Volume down.", "vol_mute": "Sound muted.", "vol_set": "Volume set to {n}%.",
+           "fail": "Could not do it: {e}", "no_phone": "This action works only on an Android phone."},
+}
+
+SETTINGS_ACTIONS = {"wifi": "android.settings.WIFI_SETTINGS", "bluetooth": "android.settings.BLUETOOTH_SETTINGS",
+                    "display": "android.settings.DISPLAY_SETTINGS", "sound": "android.settings.SOUND_SETTINGS",
+                    "battery": "android.settings.BATTERY_SAVER_SETTINGS", "location": "android.settings.LOCATION_SOURCE_SETTINGS",
+                    "airplane": "android.settings.AIRPLANE_MODE_SETTINGS", "apps": "android.settings.APPLICATION_SETTINGS",
+                    "date": "android.settings.DATE_SETTINGS", "accessibility": "android.settings.ACCESSIBILITY_SETTINGS",
+                    "main": "android.settings.SETTINGS"}
+APP_ALIASES = {"whatsapp": ("com.whatsapp",), "telegram": ("org.telegram.messenger", "org.telegram.plus"), "youtube": ("com.google.android.youtube",),
+               "instagram": ("com.instagram.android",), "tiktok": ("com.zhiliaoapp.musically", "com.ss.android.ugc.trill"),
+               "chrome": ("com.android.chrome",), "facebook": ("com.facebook.katana",), "viber": ("com.viber.voip",),
+               "gmail": ("com.google.android.gm",), "maps": ("com.google.android.apps.maps",), "spotify": ("com.spotify.music",)}
+
+
+def format_duration(seconds, lang):
+    h, rest = divmod(int(seconds), 3600)
+    m, sec = divmod(rest, 60)
+    unit = {"tg": ("соат", "дақиқа", "сония"), "ru": ("ч", "мин", "сек"), "en": ("h", "min", "s")}.get(lang, ("h", "min", "s"))
+    parts = [("%d %s" % (v, u)) for v, u in zip((h, m, sec), unit) if v]
+    return " ".join(parts) or "0 " + unit[2]
+
+
+def wake_regex(name):
+    """"Hey <name>" in the ways a speech recogniser may write it (Latin or Cyrillic, with or without dots and spaces)."""
+    base = re.sub(r"[^0-9a-zа-яёғӣқӯҳҷ]", "", str(name).lower())
+    parts = []
+    if base:
+        parts.append(r"[\s.\-]*".join(re.escape(ch) for ch in base))
+    aliases = {"sai": ("сай", "сэй", "сае", "сай"), "jarvis": ("джарвис", "жарвис", "ярвис", "чарвис")}
+    for key, values in aliases.items():
+        if base == key or base in values:
+            parts += [re.escape(v) for v in values]
+    if not parts:
+        return None
+    return re.compile(r"^\W*(?:hey|hay|ok|okay|эй|ей|хей|ҳей|хэй|ҳой|окей)[\s,!.\-]+(?:" + "|".join(parts) + r")\b[\s,!.\-]*", re.IGNORECASE)
+
+
+class LiveOverlay(FloatLayout):
+    """Live conversation screen: only the living orb in the middle over a frosted, darkened background."""
+
+    def __init__(self, app, **kwargs):
+        super().__init__(size_hint=(1, 1), opacity=0, **kwargs)
+        self.app = app
+        theme = THEMES[app.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        bg = hex_color(theme["background"])
+        with self.canvas.before:
+            Color(bg[0] * 0.5, bg[1] * 0.5, bg[2] * 0.5, 0.80)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+            Color(1, 1, 1, 0.50)
+            self._glow = Rectangle(texture=glow_texture(tint), pos=(0, 0), size=(10, 10))
+        self.bind(pos=self._layout, size=self._layout)
+        self.orb = AnimatedCore(app.theme_index, size_hint=(None, None), size=(dp(290), dp(290)),
+                                pos_hint={"center_x": 0.5, "center_y": 0.55})
+        self.add_widget(self.orb)
+        self.status = make_label(app.t("live_listen"), 17, theme["text"], True, size_hint=(None, None), size=(dp(300), dp(30)),
+                                 pos_hint={"center_x": 0.5, "center_y": 0.33})
+        self.add_widget(self.status)
+        self.add_widget(make_label(app.t("live_hint"), 12, muted(), False, size_hint=(None, None), size=(dp(320), dp(24)),
+                                   pos_hint={"center_x": 0.5, "center_y": 0.285}))
+        end = FrostButton(tint=tint, alpha=0.20, radius=24, text=mk(app.t("live_end")), font_size=dp(16), halign="center",
+                          size_hint=(None, None), size=(dp(190), dp(52)), pos_hint={"center_x": 0.5, "y": 0.07},
+                          color=hex_color(theme["text"]))
+        end.bind(on_release=lambda *_: app.stop_live())
+        self.add_widget(end)
+        self._ev = Clock.schedule_interval(self._poll, 0.4)
+        Animation(opacity=1, d=0.35, t="out_quad").start(self)
+
+    def _layout(self, *_):
+        self._bg.pos, self._bg.size = self.pos, self.size
+        d = max(self.width, self.height) * 1.1
+        self._glow.size = (d, d)
+        self._glow.pos = (self.center_x - d / 2.0, self.center_y - d / 2.0)
+
+    def _poll(self, dt):
+        app = self.app
+        if app._busy:
+            key = "live_speak" if app.orb_state == "speaking" else "live_think"
+        elif app.orb_state == "listening":
+            key = "live_listen"
+        elif app.orb_state == "speaking" or app._stream_active:
+            key = "live_speak"
+        else:
+            key = "live_listen"
+        self.status.text = app.t(key)
+
+    def close(self):
+        try:
+            self._ev.cancel()
+        except Exception:
+            pass
+        anim = Animation(opacity=0, d=0.3, t="in_quad")
+        anim.bind(on_complete=lambda *a: self.parent.remove_widget(self) if self.parent else None)
+        anim.start(self)
+
+    def on_touch_down(self, touch):
+        super().on_touch_down(touch)
+        return True                      # nothing behind the live screen can be touched
+
+    def on_touch_move(self, touch):
+        return True
+
+    def on_touch_up(self, touch):
+        super().on_touch_up(touch)
+        return True
+
+
+LIVE_STOP_WORDS = frozenset(("бас", "бас кун", "бас аст", "стоп", "хомӯш", "хомӯш шав", "қатъ кун", "тамом", "хватит", "стоп разговор",
+                             "остановись", "достаточно", "выключи", "хватит разговаривать", "stop", "stop it", "enough", "that is all", "end"))
 
 
 class GlassSheet(FloatLayout):
@@ -5654,6 +5846,10 @@ class JarvisApp(App):
         self.tts_error_noted = False
         self.open_popups = set()
         self.app_paused = False
+        self.live_mode = False
+        self._live_fail = 0
+        self._live_ready_at = None
+        self._stream_active = False
         self._mic_timeout = None
         self.notice = None
         self.chat_placeholder = False
@@ -6003,6 +6199,18 @@ class JarvisApp(App):
     def _build_rich(self, bubble, text, theme, accent):
         """An answer with code or tables: text, code boxes, tables and pictures one under another, in the order written."""
         for block in parse_blocks(text):
+            try:
+                self._build_rich_block(bubble, block, theme, accent)
+            except Exception:
+                save_crash("Rich block failed:\n" + traceback.format_exc())
+                raw = block[-1] if isinstance(block[-1], str) else "\n".join(" | ".join(r) for r in block[-1])
+                lab = Label(text=str(raw), font_size=dp(13), color=hex_color(theme["text"]), halign="left", valign="top", size_hint_y=None)
+                lab.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+                lab.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
+                bubble.add_widget(lab)
+
+    def _build_rich_block(self, bubble, block, theme, accent):
+        if True:
             kind = block[0]
             if kind == "text":
                 lab = EmojiLabel(text="", font_size=dp(15), color=hex_color(theme["text"]), halign="left", valign="top", size_hint_y=None)
@@ -6386,6 +6594,165 @@ class JarvisApp(App):
             pass
         self._chats_pulled = False
 
+    def _device_execute(self, act):
+        """Runs ONE phone action from the server and returns the text to tell the user."""
+        lang = self._lang_code()
+        M = DEVICE_MSG.get(lang, DEVICE_MSG["tg"])
+        kind = str(act.get("action", ""))
+        try:
+            from jnius import autoclass, cast
+        except Exception:
+            return M["no_phone"]
+        try:
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            activity = PythonActivity.mActivity
+            Intent = autoclass("android.content.Intent")
+            Context = autoclass("android.content.Context")
+            if kind == "alarm":
+                AlarmClock = autoclass("android.provider.AlarmClock")
+                hour, minute = int(act.get("hour", 0)), int(act.get("minute", 0))
+                label = str(act.get("label", "") or "")
+                shown = "%02d:%02d" % (hour, minute)
+
+                def fire(skip):
+                    intent = Intent(AlarmClock.ACTION_SET_ALARM)
+                    intent.putExtra(AlarmClock.EXTRA_HOUR, hour)
+                    intent.putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                    if label:
+                        intent.putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                    if skip:
+                        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
+                    activity.startActivity(intent)
+                try:
+                    fire(True)
+                    return M["alarm"].format(t=shown)
+                except Exception:
+                    save_crash("Alarm (silent) failed, asking the Clock app:\n" + traceback.format_exc())
+                    fire(False)
+                    return M["alarm_ui"].format(t=shown)
+            if kind == "timer":
+                AlarmClock = autoclass("android.provider.AlarmClock")
+                seconds = int(act.get("seconds", 0))
+
+                def fire_timer(skip):
+                    intent = Intent(AlarmClock.ACTION_SET_TIMER)
+                    intent.putExtra(AlarmClock.EXTRA_LENGTH, seconds)
+                    if act.get("label"):
+                        intent.putExtra(AlarmClock.EXTRA_MESSAGE, str(act.get("label")))
+                    if skip:
+                        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
+                    activity.startActivity(intent)
+                try:
+                    fire_timer(True)
+                except Exception:
+                    fire_timer(False)
+                return M["timer"].format(d=format_duration(seconds, lang))
+            if kind == "flashlight":
+                manager = cast("android.hardware.camera2.CameraManager", activity.getSystemService(Context.CAMERA_SERVICE))
+                state = str(act.get("state", "toggle"))
+                target = (state == "on") or (state == "toggle" and not getattr(self, "_torch_on", False))
+                done, last = False, None
+                for cid in list(manager.getCameraIdList()):
+                    try:
+                        manager.setTorchMode(str(cid), bool(target))
+                        done = True
+                        break
+                    except Exception as exc:
+                        last = exc
+                if not done:
+                    raise RuntimeError(str(last) if last else "no flash")
+                self._torch_on = bool(target)
+                return M["flash_on" if target else "flash_off"]
+            if kind == "open_settings":
+                page = str(act.get("page", "main"))
+                action = SETTINGS_ACTIONS.get(page, SETTINGS_ACTIONS["main"])
+                if page == "wifi":
+                    try:                                  # Android 10+: a small panel with the switch, no silent switching allowed
+                        activity.startActivity(Intent("android.settings.panel.action.INTERNET_CONNECTIVITY"))
+                        return M["panel"]
+                    except Exception:
+                        pass
+                activity.startActivity(Intent(action))
+                return M["settings"].format(p=page)
+            if kind == "volume":
+                audio = cast("android.media.AudioManager", activity.getSystemService(Context.AUDIO_SERVICE))
+                mode = str(act.get("mode", ""))
+                stream = 3                                  # music / assistant voice
+                if mode == "up":
+                    audio.adjustStreamVolume(stream, 1, 1)
+                    return M["vol_up"]
+                if mode == "down":
+                    audio.adjustStreamVolume(stream, -1, 1)
+                    return M["vol_down"]
+                if mode == "mute":
+                    audio.setStreamVolume(stream, 0, 1)
+                    return M["vol_mute"]
+                level = max(0, min(100, int(act.get("level", 50))))
+                audio.setStreamVolume(stream, int(round(audio.getStreamMaxVolume(stream) * level / 100.0)), 1)
+                return M["vol_set"].format(n=level)
+            if kind == "open_app":
+                name = str(act.get("name", "")).strip()
+                low = name.lower()
+                pm = activity.getPackageManager()
+                packages = []
+                for key, pkgs in APP_ALIASES.items():
+                    if key in low:
+                        packages += list(pkgs)
+                launch = None
+                for pkg in packages:
+                    launch = pm.getLaunchIntentForPackage(pkg)
+                    if launch is not None:
+                        break
+                if launch is None:                          # search the installed apps by their label
+                    main = Intent(Intent.ACTION_MAIN)
+                    main.addCategory(Intent.CATEGORY_LAUNCHER)
+                    infos = pm.queryIntentActivities(main, 0)
+                    best = None
+                    for i in range(infos.size()):
+                        info = infos.get(i)
+                        label = str(info.loadLabel(pm).toString()).lower()
+                        pkg = str(info.activityInfo.packageName)
+                        if label == low or (low and (low in label or label in low) and len(label) > 2):
+                            best = pkg
+                            if label == low:
+                                break
+                    if best:
+                        launch = pm.getLaunchIntentForPackage(best)
+                if launch is None:
+                    return M["app_missing"].format(a=name)
+                activity.startActivity(launch)
+                return M["open_app"].format(a=name)
+        except Exception as exc:
+            save_crash("Device action failed (" + kind + "):\n" + traceback.format_exc())
+            return M["fail"].format(e=str(exc)[:120])
+        return M["fail"].format(e=kind)
+
+    def _start_device_intent(self, chat_id, text, history):
+        """The server works out what the phone should do (alarm, flashlight, app...); anything else goes on as a normal chat."""
+        self.set_orb_state("thinking")
+        self.busy_start("think")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        def job():
+            try:
+                act = self._json_call("POST", "/device/intent", {"text": text[:400], "language": self._lang_code(), "now": now}, timeout=30)
+            except Exception:
+                act = None
+                save_crash("Device intent request failed:\n" + traceback.format_exc())
+
+            def done(dt):
+                if act and str(act.get("action", "none")) != "none":
+                    message = self._device_execute(act)
+                    self.set_orb_state("speaking", 2.5)
+                    self.deliver_answer(chat_id, message)
+                else:
+                    self.busy_stop()
+                    self.set_orb_state("idle")
+                    self._continue_send(chat_id, text, history)
+            Clock.schedule_once(done, 0)
+
+        threading.Thread(target=job, daemon=True).start()
+
     def _start_chat_analysis(self, chat_id, question):
         if not self.server_token.strip():
             self._media_done(chat_id, self.t("server_missing"))
@@ -6473,6 +6840,80 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.1)
         self.scroll_chat_down()
 
+    NOTIFY_ID = 4107
+
+    def ensure_notification_permission(self):
+        """Android 13+: the user is asked once (at the first question) whether the app may show notifications."""
+        if getattr(self, "_notify_asked", False):
+            return
+        self._notify_asked = True
+        try:
+            from android.permissions import request_permissions
+            request_permissions(["android.permission.POST_NOTIFICATIONS"])
+        except Exception:
+            pass
+
+    def notify_answer(self):
+        """The app is not on screen: a notification says that the answer is ready (in the chosen language only)."""
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            activity = PythonActivity.mActivity
+            Context = autoclass("android.content.Context")
+            Build = autoclass("android.os.Build$VERSION")
+            Notification = autoclass("android.app.Notification")
+            PendingIntent = autoclass("android.app.PendingIntent")
+            manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
+            channel_id = "sai_answers"
+            if Build.SDK_INT >= 26:
+                NotificationChannel = autoclass("android.app.NotificationChannel")
+                channel = NotificationChannel(channel_id, "S.A.I", 3)           # IMPORTANCE_DEFAULT
+                manager.createNotificationChannel(channel)
+                builder = autoclass("android.app.Notification$Builder")(activity, channel_id)
+            else:
+                builder = autoclass("android.app.Notification$Builder")(activity)
+            launch = activity.getPackageManager().getLaunchIntentForPackage(activity.getPackageName())
+            flags = PendingIntent.FLAG_UPDATE_CURRENT | (PendingIntent.FLAG_IMMUTABLE if Build.SDK_INT >= 23 else 0)
+            pending = PendingIntent.getActivity(activity, 0, launch, flags)
+            builder.setSmallIcon(activity.getApplicationInfo().icon)
+            builder.setContentTitle(self.assistant_name or "S.A.I")
+            builder.setContentText(self.t("notify_title") + ". " + self.t("notify_text"))
+            builder.setContentIntent(pending)
+            builder.setAutoCancel(True)
+            manager.notify(self.NOTIFY_ID, builder.build())
+        except Exception:
+            save_crash("Notification failed:\n" + traceback.format_exc())
+
+    def clear_notification(self):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            activity.getSystemService(autoclass("android.content.Context").NOTIFICATION_SERVICE).cancel(self.NOTIFY_ID)
+        except Exception:
+            pass
+
+    def _hold_awake(self, on):
+        """While an answer is still being prepared and the app is in the background, the phone is kept awake for at most 2 minutes."""
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Context = autoclass("android.content.Context")
+            lock = getattr(self, "_wakelock", None)
+            if on and lock is None:
+                power = activity.getSystemService(Context.POWER_SERVICE)
+                lock = power.newWakeLock(1, "sai:answer")                        # PARTIAL_WAKE_LOCK
+                lock.acquire(120000)
+                self._wakelock = lock
+            elif not on and lock is not None:
+                try:
+                    if lock.isHeld():
+                        lock.release()
+                except Exception:
+                    pass
+                self._wakelock = None
+        except Exception:
+            self._wakelock = None
+
     def add_chat_message(self, chat_id, role, text):
         text = self.brand(text)
         self.chats.add_message(chat_id, role, text)
@@ -6481,6 +6922,9 @@ class JarvisApp(App):
         if role == "jarvis":
             self.busy_stop()
             self._remove_skeleton()
+            if self.app_paused:
+                self.notify_answer()
+                self._hold_awake(False)
         if self.chats.current_id != chat_id:
             return
         if self.chat_placeholder:
@@ -7275,6 +7719,13 @@ class JarvisApp(App):
         return path
 
     def _stream_chunks(self, chunks, fetch_path, gen, on_fail):
+        self._stream_active = True
+        try:
+            self._stream_chunks_run(chunks, fetch_path, gen, on_fail)
+        finally:
+            self._stream_active = False
+
+    def _stream_chunks_run(self, chunks, fetch_path, gen, on_fail):
         if not chunks:
             Clock.schedule_once(lambda dt: self._voice_ready(), 0)
             return
@@ -7741,6 +8192,7 @@ class JarvisApp(App):
         if not command_text and not pending:
             return
         self.command_input.text = ""
+        self.ensure_notification_permission()
         chat_id = self.chats.current_id
         if pending:                         # picture/file + the typed instruction go to the AI together
             self._pending_attachment = None
@@ -7778,6 +8230,12 @@ class JarvisApp(App):
         if media is not None:
             self._start_media_job(chat_id, media[0], media[1])
             return
+        if self.server_token.strip() and looks_like_device_command(command_text):
+            self._start_device_intent(chat_id, command_text, history)
+            return
+        self._continue_send(chat_id, command_text, history)
+
+    def _continue_send(self, chat_id, command_text, history):
         info_fn = find_info_command(command_text)
         if info_fn is not None:
             self.set_orb_state("thinking")
@@ -8078,6 +8536,7 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self._voice_ready(), 0)
         if (not self.speak_enabled and not force) or not answer:
             return
+        self._live_hold_until = time.monotonic() + 1.0 + len(answer) * 0.075      # the phone voice has no "finished" signal
         try:
             self.tts.stop()
             def attempt(_dt=None, tries=0):
@@ -8104,6 +8563,9 @@ class JarvisApp(App):
         answer = self.brand(answer)
         if RETRY_MARK in str(answer):
             self.add_chat_message(chat_id, "jarvis", answer)       # an error with a Retry button: shown, not read aloud
+            return
+        if self.app_paused:                       # the user left the app: a notification instead of a voice
+            self.add_chat_message(chat_id, "jarvis", clean_md(answer) if not has_rich_blocks(answer) else answer)
             return
         if has_rich_blocks(answer):
             # code / tables: shown at once; only the words around them are read, never the code itself
@@ -8170,6 +8632,15 @@ class JarvisApp(App):
     def _start_synced_answer(self, chat_id, answer, text, path, words):
         """Start the audio, then reveal the answer word by word at the spoken positions."""
         self.chats.add_message(chat_id, "jarvis", answer)
+        if self.app_paused:                        # the app was left while the voice was being made: only the notification
+            self.notify_answer()
+            self._hold_awake(False)
+            self.busy_stop()
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            return
         self.busy_start("answer")
         label = None
         if self.chats.current_id == chat_id:
@@ -8577,8 +9048,85 @@ class JarvisApp(App):
             save_crash("stop_listening failed:\n" + traceback.format_exc())
             self.show_response(self.t("stt_failed"))
 
+    def toggle_live(self, on=None):
+        """Live conversation: after every answer the microphone opens again by itself, until the user says stop."""
+        self.live_mode = (not self.live_mode) if on is None else bool(on)
+        self._live_fail = 0
+        self._live_ready_at = None
+        try:
+            overlay = getattr(self, "_live_overlay", None)
+            if self.live_mode and overlay is None:
+                self._live_overlay = LiveOverlay(self)
+                Window.add_widget(self._live_overlay)
+            elif not self.live_mode and overlay is not None:
+                overlay.close()
+                self._live_overlay = None
+        except Exception:
+            save_crash("Live screen failed:\n" + traceback.format_exc())
+        footer = getattr(self, "footer_label", None)
+        if footer is not None:
+            footer.text = self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"] + ("  \u2022  LIVE" if self.live_mode else "")
+        return self.t("live_on" if self.live_mode else "live_off")
+
+    def stop_live(self):
+        self.stop_speaking()
+        self.show_response(self.toggle_live(False))
+
+    def _live_tick(self, dt):
+        if not getattr(self, "live_mode", False):
+            return
+        if not self.server_token.strip() or self.app_paused:
+            if self.app_paused:
+                self.toggle_live(False)
+            return
+        player = getattr(self, "_server_speech_player", None)
+        try:
+            playing = bool(player is not None and player.isPlaying())
+        except Exception:
+            playing = False
+        busy = (self._busy or self.orb_state != "idle" or self._stream_active or playing or self.open_popups
+                or time.monotonic() < getattr(self, "_live_hold_until", 0)
+                or self.command_input.text.strip() or getattr(self, "_pending_attachment", None))
+        if busy:
+            self._live_ready_at = None
+            return
+        if self._live_ready_at is None:
+            self._live_ready_at = time.monotonic() + 1.2            # a short pause, so the microphone does not hear the end of the answer
+            return
+        if time.monotonic() < self._live_ready_at:
+            return
+        self._live_ready_at = None
+        self.toggle_listening()
+
     def on_speech_text(self, text):
         self.set_orb_state("idle")
+        try:
+            wake = wake_regex(self.assistant_name)
+            m = wake.match(str(text).strip()) if wake else None
+        except Exception:
+            m = None
+        if m:                                                    # "Hey <name> ...": live conversation starts
+            rest = str(text).strip()[m.end():].strip()
+            if not self.live_mode:
+                self.toggle_live(True)
+            if not rest:
+                self.busy_stop()
+                self.deliver_answer(self.chats.current_id, self.t("wake_reply"))
+                return
+            text = rest
+        if self.live_mode:
+            words = " ".join(re.findall(r"\w+", str(text).lower()))
+            if words in LIVE_STOP_WORDS:
+                self.busy_stop()
+                self.show_response(self.toggle_live(False))
+                return
+            if not words:
+                self.busy_stop()
+                self._live_fail += 1
+                if self._live_fail >= 3:
+                    self.show_response(self.toggle_live(False))
+                return
+            self._live_fail = 0
         if not text.strip():
             self.show_response(self.t("stt_failed"))
             return
@@ -8587,6 +9135,12 @@ class JarvisApp(App):
 
     def on_speech_error(self, err):
         self.set_orb_state("idle")
+        if self.live_mode:
+            self.busy_stop()
+            self._live_fail += 1
+            if self._live_fail >= 3:
+                self.show_response(self.toggle_live(False))
+            return
         if err == "unauthorized":
             self.show_response(self.t("server_missing"))
         elif err in ("network_error", "transcription_http_502", "transcription_http_503"):
@@ -8842,6 +9396,8 @@ class JarvisApp(App):
             for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
                                 ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_account", "account")):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
+            option(self.t("live_title"), self.live_mode,
+                   lambda inst: (self.settings_popup.dismiss(), self.show_response(self.toggle_live())), height=56)
             content.add_widget(Widget())
         elif section == "me":
             first, last = profile_person([f["text"] for f in self.profile.facts])
@@ -8965,6 +9521,7 @@ class JarvisApp(App):
             pass
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
         Clock.schedule_interval(self.chat_sync_tick, 10)
+        Clock.schedule_interval(self._live_tick, 0.8)
         if self.server_token.strip():
             Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
             Clock.schedule_once(lambda dt: self.refresh_session(), 5.0)
@@ -9018,12 +9575,18 @@ class JarvisApp(App):
 
     def on_pause(self):
         self.app_paused = True
+        if self.live_mode:
+            self.toggle_live(False)
+        if self._busy:
+            self._hold_awake(True)
         self.update_pause()
         self.save_settings()
         return True
 
     def on_resume(self):
         self.app_paused = False
+        self.clear_notification()
+        self._hold_awake(False)
         self.update_pause()
         if getattr(self, "ui_mode", "auto") == "auto" and hasattr(self, "root_layout"):
             before = UI_LIGHT
