@@ -35,6 +35,7 @@ from kivy.graphics.fbo import Fbo
 from kivy.graphics import ClearColor, ClearBuffers, Scale, Translate
 from kivy.core.text import LabelBase
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
@@ -559,6 +560,15 @@ TEXTS = {
         "pf_male": "Мард",
         "pf_female": "Зан",
         "pf_skip": "Баъдтар",
+        "av_title": "Акси профил",
+        "av_ask": "Акси профилро интихоб кунед (ихтиёрӣ)",
+        "av_pick": "Акс интихоб кардан",
+        "av_change": "Акс иваз кардан",
+        "av_remove": "Акс нест кардан",
+        "title_me": "Профили ман",
+        "me_saved": "Ном ва насаб захира шуд",
+        "me_save": "Захира кардан",
+        "me_about": "Дар бораи ман (ёддошт)",
         "pf_note": "Ин маълумот танҳо дар телефони шумо нигоҳ дошта мешавад.",
         "pf_err": "Ном ва насабро нависед",
         "saved_to": "Захира шуд: {}",
@@ -779,6 +789,15 @@ TEXTS = {
         "pf_male": "Мужской",
         "pf_female": "Женский",
         "pf_skip": "Позже",
+        "av_title": "Фото профиля",
+        "av_ask": "Выберите фото профиля (по желанию)",
+        "av_pick": "Выбрать фото",
+        "av_change": "Сменить фото",
+        "av_remove": "Удалить фото",
+        "title_me": "Мой профиль",
+        "me_saved": "Имя и фамилия сохранены",
+        "me_save": "Сохранить",
+        "me_about": "Обо мне (заметка)",
         "pf_note": "Эти данные хранятся только на вашем телефоне.",
         "pf_err": "Введите имя и фамилию",
         "saved_to": "Сохранено: {}",
@@ -999,6 +1018,15 @@ TEXTS = {
         "pf_male": "Male",
         "pf_female": "Female",
         "pf_skip": "Later",
+        "av_title": "Profile photo",
+        "av_ask": "Choose a profile photo (optional)",
+        "av_pick": "Choose photo",
+        "av_change": "Change photo",
+        "av_remove": "Remove photo",
+        "title_me": "My profile",
+        "me_saved": "Name saved",
+        "me_save": "Save",
+        "me_about": "About me (note)",
         "pf_note": "This information stays on your phone only.",
         "pf_err": "Enter first and last name",
         "saved_to": "Saved: {}",
@@ -3527,6 +3555,25 @@ NAME_PATTERNS = [re.compile(x, re.IGNORECASE) for x in (
     r"my name is\s+([A-Za-z\-]{2,20})")]
 
 
+def profile_person(facts):
+    """(first name, last name) from the profile facts the user gave himself (never the account login)."""
+    first = last = ""
+    for fact in reversed(facts):
+        if not first:
+            for rx in NAME_PATTERNS:
+                m = rx.search(fact)
+                if m:
+                    first = m.group(1).strip().capitalize()
+                    break
+        if not last:
+            m = re.search(r"(?:насаби ман|моя фамилия|my surname is|my last name is)\s+([A-Za-zА-Яа-яЁёҒғӢӣҚқӮӯҲҳҶҷ\-]{2,30})", fact, re.IGNORECASE)
+            if m:
+                last = m.group(1).strip().capitalize()
+        if first and last:
+            break
+    return first, last
+
+
 def greeting_for(language, facts, hour):
     """A respectful greeting for the time of day, with the user's first name when he has told it."""
     name = ""
@@ -3934,6 +3981,15 @@ _ANALYSIS_WORDS = ("таҳлил", "анализ", "analy", "ҷамъбаст", 
 def parse_chats_analysis(text):
     low = " ".join(str(text).lower().split())
     return any(c in low for c in _CHAT_WORDS) and any(a in low for a in _ANALYSIS_WORDS)
+
+
+_WHERE_WORDS = ("где", "куҷо", "кучо", "where", "нишон", "покажи", "show", "ҳани", "хани", "аз куҷо", "не вижу", "намебинам", "не показ", "нишон надод")
+
+
+def is_photo_followup(text):
+    """A short follow-up such as "where is the photo?" / "акс куҷост?" (the topic is the user's previous message)."""
+    low = " ".join(str(text).lower().split())
+    return 0 < len(low.split()) <= 5 and any(n in low for n in _PIC_WORDS) and any(w in low for w in _WHERE_WORDS)
 
 
 def parse_media_intent(text):
@@ -4461,6 +4517,75 @@ def capture_blur(widget, scale=0.16):
     except Exception:
         save_crash("Blur shader failed (the small snapshot is used):\n" + traceback.format_exc())
     return texture
+
+
+_AVATAR = {"key": None, "tex": None}
+
+
+def avatar_texture(path):
+    """Centre-cropped square texture of the profile photo (None when there is none)."""
+    try:
+        if not path or not os.path.exists(path):
+            return None
+        key = (path, os.path.getmtime(path))
+        if _AVATAR["key"] == key:
+            return _AVATAR["tex"]
+        from kivy.core.image import Image as CoreImage
+        with open(path, "rb") as handle:
+            raw = handle.read()
+        ext = "png" if raw[:4] == b"\x89PNG" else "jpg"
+        tex = CoreImage(io.BytesIO(raw), ext=ext, nocache=True).texture
+        side = min(tex.width, tex.height)
+        tex = tex.get_region((tex.width - side) // 2, (tex.height - side) // 2, side, side)
+        _AVATAR["key"], _AVATAR["tex"] = key, tex
+        return tex
+    except Exception:
+        return None
+
+
+class AvatarCircle(Widget):
+    """Round profile photo; without a photo: a ring with the first letter of the name."""
+
+    def __init__(self, app, letter="", **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        super().__init__(**kwargs)
+        self.app = app
+        self.letter = (letter or "?")[:1].upper()
+        self._lab = make_label(self.letter, 20, "#FFFFFF", True, size_hint=(None, None))
+        self.bind(pos=self._draw, size=self._draw)
+        self._draw()
+
+    def refresh(self, letter=None):
+        if letter is not None:
+            self.letter = (letter or "?")[:1].upper()
+        self._draw()
+
+    def _draw(self, *_):
+        theme = THEMES[self.app.theme_index]
+        acc = hex_color(theme["accent"])[:3]
+        self.canvas.clear()
+        if self._lab.parent is self:
+            self.remove_widget(self._lab)
+        d = min(self.width, self.height)
+        if d < 2:
+            return
+        x, y = self.x + (self.width - d) / 2.0, self.y + (self.height - d) / 2.0
+        tex = avatar_texture(self.app.avatar_path())
+        with self.canvas:
+            Color(acc[0], acc[1], acc[2], 0.95)
+            Ellipse(pos=(x - dp(2), y - dp(2)), size=(d + dp(4), d + dp(4)))
+            if tex is not None:
+                Color(1, 1, 1, 1)
+                Ellipse(pos=(x, y), size=(d, d), texture=tex)
+            else:
+                Color(acc[0] * 0.35, acc[1] * 0.35, acc[2] * 0.35, 1)
+                Ellipse(pos=(x, y), size=(d, d))
+        if tex is None:
+            self._lab.font_size = d * 0.42
+            self._lab.text = self.letter
+            self._lab.size = (d, d)
+            self._lab.pos = (x, y)
+            self.add_widget(self._lab)
 
 
 class GlassSheet(FloatLayout):
@@ -5410,6 +5535,11 @@ class JarvisApp(App):
         self.grad_rect.pos = self.root_layout.pos
         self.grad_rect.size = (self.root_layout.width, self.root_layout.height * 0.44)
 
+    def person_name(self):
+        """How the user is addressed: first and last name from his profile; the account login is only a technical id."""
+        first, last = profile_person([f["text"] for f in self.profile.facts])
+        return (first + " " + last).strip()
+
     def brand(self, text):
         """The user chose the assistant's name: it replaces JARVIS (any spelling, also Cyrillic) in every text,
         in old chats and AI replies too. File paths, URLs and media markers are left alone."""
@@ -5584,10 +5714,18 @@ class JarvisApp(App):
         self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
                                        size_hint_x=None, width=dp(52))
         self.action_btn.bind(on_release=self.on_action)
-        command_row.add_widget(self.attach_btn)
+        def pinned(button):
+            # the side buttons keep their size and stay at the bottom edge when the field grows to several lines
+            button.size_hint_y = None
+            button.height = dp(52)
+            holder = AnchorLayout(anchor_x="center", anchor_y="bottom", size_hint_x=None, width=button.width)
+            holder.add_widget(button)
+            return holder
+
+        command_row.add_widget(pinned(self.attach_btn))
         command_row.add_widget(self.command_input)
-        command_row.add_widget(self.stop_speech_btn)
-        command_row.add_widget(self.action_btn)
+        command_row.add_widget(pinned(self.stop_speech_btn))
+        command_row.add_widget(pinned(self.action_btn))
         self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
         frost(self.attach_strip, 20, tint, 0.10, 0.30)
@@ -6007,7 +6145,7 @@ class JarvisApp(App):
             try:
                 done, gone = self._sync_send(dirty, deleted)          # the account must hold the latest chats first
                 Clock.schedule_once(lambda d: self._sync_applied(done, gone), 0)
-                result = self._json_call("POST", "/chats/analyze", {"question": question[:1000], "language": self._lang_code()}, timeout=170)
+                result = self._json_call("POST", "/chats/analyze", {"question": question[:1000], "language": self._lang_code(), "name": self.person_name()}, timeout=170)
                 answer = str(result.get("answer", "")) or self.t("file_no_answer")
                 Clock.schedule_once(lambda d: self._finish_server_answer(chat_id, answer), 0)
             except Exception as exc:
@@ -6112,6 +6250,89 @@ class JarvisApp(App):
         if getattr(self, "chats_popup", None) is not None:
             self.chats_popup.dismiss()
 
+    def avatar_path(self):
+        return os.path.join(self.user_data_dir, "avatar.img")
+
+    def pick_avatar(self, after=None):
+        """Android picker for a profile photo (own request code, the result is stored as the avatar)."""
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("image/*")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            self._avatar_after = after
+            self._avatar_pending = True
+            PythonActivity.mActivity.startActivityForResult(intent, 7413)
+        except Exception as exc:
+            save_crash("Avatar picker failed: " + str(exc))
+            self.show_response(self.t("file_picker_failed"))
+
+    def remove_avatar(self):
+        try:
+            if os.path.exists(self.avatar_path()):
+                os.remove(self.avatar_path())
+        except Exception:
+            pass
+        _AVATAR["key"] = None
+
+    def _avatar_picked(self, result_code, data):
+        """Android thread: read the photo; the screen is updated in the Kivy thread."""
+        try:
+            from jnius import autoclass
+            if result_code != autoclass("android.app.Activity").RESULT_OK or data is None or data.getData() is None:
+                return
+            uri = data.getData()
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            raw = self._read_uri_bytes(resolver, uri, 12 * 1024 * 1024)
+            if not raw or len(raw) > 12 * 1024 * 1024:
+                raise LocalizedError(self.t("file_too_big"))
+            with open(self.avatar_path(), "wb") as handle:
+                handle.write(raw)
+            _AVATAR["key"] = None
+
+            def done(dt):
+                after = getattr(self, "_avatar_after", None)
+                if after:
+                    try:
+                        after()
+                    except Exception:
+                        save_crash("Avatar callback failed:\n" + traceback.format_exc())
+            Clock.schedule_once(done, 0)
+        except Exception as exc:
+            save_crash("Avatar read failed:\n" + traceback.format_exc())
+            message = self.friendly_error(exc)
+            Clock.schedule_once(lambda dt: self.show_response(self.t("file_read_failed").format(message)), 0)
+
+    def _ob_photo_step(self, screen, facts):
+        """Last part of the profile: an optional profile photo."""
+        theme = THEMES[self.theme_index]
+        screen.set_step(3)
+        panel = screen.new_panel(420)
+        panel.add_widget(make_label(self.t("av_title"), 18, theme["text"], True, size_hint_y=None, height=dp(30)))
+        panel.add_widget(make_label(self.t("av_ask"), 12, muted(), False, size_hint_y=None, height=dp(24)))
+        holder = BoxLayout(size_hint_y=None, height=dp(150))
+        first = profile_person(facts)[0] or self.person_name()[:1]
+        circle = AvatarCircle(self, first, size=(dp(130), dp(130)), pos_hint={"center_x": 0.5})
+        holder.add_widget(Widget())
+        holder.add_widget(circle)
+        holder.add_widget(Widget())
+        panel.add_widget(holder)
+        pick = FrostButton(tint=screen.acc2, alpha=0.18, radius=18, text=mk(self.t("av_pick")), font_size=dp(15), halign="center",
+                           size_hint_y=None, height=dp(48), color=hex_color(theme["text"]))
+        pick.bind(on_release=lambda *_: self.pick_avatar(lambda: circle.refresh()))
+        panel.add_widget(pick)
+        panel.add_widget(Widget())
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
+                                     font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
+                                     color=(1, 1, 1, 1), on_release=lambda *_: self._ob_profile_done(screen, facts)))
+        skip = FrostButton(tint=(1, 1, 1), alpha=0.06, radius=18, text=mk(self.t("pf_skip")), font_size=dp(13), halign="center",
+                           size_hint_y=None, height=dp(38), color=hex_color(theme["text"]))
+        skip.bind(on_release=lambda *_: self._ob_profile_done(screen, facts))
+        panel.add_widget(skip)
+
     def pick_attachment(self, *_):
         """Open Android document picker and send the selected image/text file to JARVIS."""
         try:
@@ -6168,6 +6389,10 @@ class JarvisApp(App):
 
     def on_activity_result(self, request_code, result_code, data):
         """Runs on the Android thread: only the file is read here, everything on screen happens in the Kivy thread."""
+        if request_code == 7413 and getattr(self, "_avatar_pending", False):
+            self._avatar_pending = False
+            self._avatar_picked(result_code, data)
+            return
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
             return
         self._attachment_pending = False
@@ -7014,7 +7239,10 @@ class JarvisApp(App):
         def go():
             popup.dismiss()
             self.build_interface()
-            welcome = self.t("ob_welcome").format(self.username, self.assistant_name)
+            who = self.person_name().split(" ")[0]
+            welcome = self.t("ob_welcome").format(who, self.assistant_name)
+            if not who:
+                welcome = welcome.replace(", ,", ",").replace(", !", "!")
             self.show_response(welcome)
             self.speak_answer(welcome)
         self.cover_transition(go, 1.5)
@@ -7038,7 +7266,7 @@ class JarvisApp(App):
             first = " ".join(first_in.text.split())[:24]
             last = " ".join(last_in.text.split())[:30]
             if skip:
-                self._ob_profile_done(screen, [])
+                self.cover_transition(lambda: self._ob_photo_step(screen, []), 0.9)
                 return
             if not first or not last:
                 status.text = self.t("pf_err")
@@ -7106,7 +7334,7 @@ class JarvisApp(App):
                     facts.append("Санаи таваллуди ман %02d.%02d.%d (синну сол: %d)" % (day, month, year, age))
                 if chosen["g"]:
                     facts.append("Ҷинси ман: " + ("мард" if chosen["g"] == "m" else "зан"))
-            self._ob_profile_done(screen, facts)
+            self.cover_transition(lambda: self._ob_photo_step(screen, facts), 0.9)
 
         panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
                                      font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
@@ -7224,7 +7452,7 @@ class JarvisApp(App):
         for item in chat.get("messages", [])[-24:]:
             role = "assistant" if item.get("role") == "jarvis" else item.get("role")
             if role in ("user", "assistant") and item.get("text"):
-                history.append({"role": role, "content": self.brand(item["text"])[:4000]})
+                history.append({"role": role, "content": MEDIA_RE.sub("[акс/файл]", self.brand(item["text"])).replace(RETRY_MARK, "")[:4000]})
         history = self._with_memory(chat_id, history, command_text)
         for fact in extract_facts(command_text):
             self.profile.add(fact)
@@ -7233,6 +7461,12 @@ class JarvisApp(App):
             self._start_chat_analysis(chat_id, command_text)
             return
         media = parse_media_intent(command_text)
+        if media is None and is_photo_followup(command_text):
+            earlier = [m.get("text", "") for m in (self.chats.get(chat_id) or {}).get("messages", [])[:-1] if m.get("role") == "user"]
+            earlier = [strip_media(" ".join(str(t).split())) for t in earlier]
+            earlier = [t for t in earlier if t and not is_photo_followup(t)]
+            if earlier:
+                media = ("search", earlier[-1][:200])
         if media is not None:
             self._start_media_job(chat_id, media[0], media[1])
             return
@@ -7270,7 +7504,13 @@ class JarvisApp(App):
             chat = self.chats.get(chat_id)
             parts = ["Background about this user and this app (use it when relevant, never mention this note). "
                      "assistant name: " + str(self.assistant_name) + "; app language: " + str(self.language) +
-                     ("; account: " + str(self.username) if self.username else "") + "."]
+                     "."]
+            person = self.person_name()
+            if person:
+                parts[0] += (" The user's name (from his own profile): " + person + ". Always address and recognise him by this name; "
+                             "his account login is only a technical id, never use it as his name.")
+            else:
+                parts[0] += " The user's name is not known yet; do not call him by his account login."
             facts = [f["text"] for f in self.profile.facts][-40:]
             if facts:
                 block, size = [], 0
@@ -7450,6 +7690,18 @@ class JarvisApp(App):
         threading.Thread(target=self._ask_server, args=(chat_id, message, history), daemon=True).start()
 
     def _finish_server_answer(self, chat_id, answer):
+        # only the app itself puts [[img:..]] / [[file:..]] markers into the chat; one written by the AI is invented
+        fake = MEDIA_RE.findall(str(answer))
+        if fake:
+            answer = strip_media(answer)
+            stem = os.path.splitext(os.path.basename(fake[0][1]))[0]
+            guess = re.sub(r"[_\-]+", " ", stem).strip()
+            if guess and len(answer) < 400:
+                self._status_after_answer()
+                self.add_chat_message(chat_id, "jarvis", answer or self.t("busy_image") if "busy_image" in LANG_HAS else answer)
+                self._start_media_job(chat_id, "image", guess)
+                return
+        answer = strip_media(answer) if fake else answer
         m = re.search(r"!\[([^\]]*)\]\(([^)\s]+)[^)]*\)", str(answer))
         if m:
             # the AI wrote a picture link that cannot be shown: make the picture itself from its description
@@ -8081,7 +8333,7 @@ class JarvisApp(App):
         accent = theme["accent"].lstrip("#")
         body = BoxLayout(orientation="vertical", spacing=dp(8))
         sheet = GlassSheet(self, dotted_name(self.assistant_name or "S.A.I"), body,
-                           anchor="menu", height=368)
+                           anchor="menu", height=452)
         items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat),
                  ("menu_settings", self.show_settings), ("menu_about", self.show_about))
         for i, (key, action) in enumerate(items, 1):
@@ -8093,6 +8345,25 @@ class JarvisApp(App):
                               text="[color=#%s][b]%02d[/b][/color]   %s" % (accent, i, mk(self.t(key))))
             btn.bind(on_release=go)
             body.add_widget(btn)
+        body.add_widget(Widget())
+        me_row = BoxLayout(orientation="horizontal", spacing=dp(12), size_hint_y=None, height=dp(64), padding=(dp(6), 0))
+        me_btn = FrostButton(tint=hex_color(theme["accent"])[:3], alpha=0.08, radius=22, size_hint_y=None, height=dp(64),
+                             font_size=dp(15), color=hex_color(theme["text"]), halign="left",
+                             text="                " + mk(self.person_name() or self.t("title_me")))
+        me_avatar = AvatarCircle(self, (self.person_name() or self.username or "?")[:1], size=(dp(42), dp(42)))
+        me_btn.bind(pos=lambda *_: setattr(me_avatar, "pos", (me_btn.x + dp(12), me_btn.y + dp(11))))
+        me_avatar.pos = (me_btn.x + dp(12), me_btn.y + dp(11))
+
+        def open_me(inst):
+            sheet.dismiss()
+            Clock.schedule_once(lambda dt: self.open_section("me"), 0.14)
+        me_btn.bind(on_release=open_me)
+        me_wrap = FloatLayout(size_hint_y=None, height=dp(64))
+        me_btn.size_hint = (1, 1)
+        me_btn.pos_hint = {"x": 0, "y": 0}
+        me_wrap.add_widget(me_btn)
+        me_wrap.add_widget(me_avatar)
+        body.add_widget(me_wrap)
         sheet.open()
 
     def show_chats(self, *_):
@@ -8199,7 +8470,7 @@ class JarvisApp(App):
         def job():
             try:
                 result = self._json_call("POST", "/profile/summarize", {
-                    "facts": facts, "messages": messages, "previous": previous, "language": self._lang_code()}, timeout=90)
+                    "facts": facts, "messages": messages, "previous": previous, "language": self._lang_code(), "name": self.person_name()}, timeout=90)
                 note = str(result.get("note", "")).strip()
                 error = ""
             except Exception as exc:
@@ -8229,7 +8500,7 @@ class JarvisApp(App):
         content = BoxLayout(orientation="vertical", spacing=dp(8))
         titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
                   "voice": "title_voice", "account": "title_account", "mode": "title_mode",
-                  "profile": "title_profile"}
+                  "profile": "title_profile", "me": "title_me"}
 
         def option(text, active, callback, height=54):
             self.frost_row(content, text, active, callback, height)
@@ -8238,6 +8509,37 @@ class JarvisApp(App):
             for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
                                 ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_account", "account")):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
+            content.add_widget(Widget())
+        elif section == "me":
+            first, last = profile_person([f["text"] for f in self.profile.facts])
+            row = BoxLayout(size_hint_y=None, height=dp(130))
+            avatar = AvatarCircle(self, first or self.username or "?", size=(dp(110), dp(110)))
+            row.add_widget(Widget())
+            row.add_widget(avatar)
+            row.add_widget(Widget())
+            content.add_widget(row)
+            self.frost_row(content, self.t("av_change") if os.path.exists(self.avatar_path()) else self.t("av_pick"), False,
+                           lambda *_: self.pick_avatar(lambda: self.open_section("me")), 46, center=True)
+            if os.path.exists(self.avatar_path()):
+                self.frost_row(content, self.t("av_remove"), False,
+                               lambda *_: (self.remove_avatar(), self.open_section("me")), 42, center=True)
+            first_w, first_in = glass_input(self, self.t("pf_first"), first)
+            last_w, last_in = glass_input(self, self.t("pf_last"), last)
+            content.add_widget(first_w)
+            content.add_widget(last_w)
+            note = make_label("", 11, muted(), False, size_hint_y=None, height=dp(18))
+            content.add_widget(note)
+
+            def save_names(*_):
+                f = " ".join(first_in.text.split())[:24]
+                l = " ".join(last_in.text.split())[:30]
+                if f:
+                    self.profile.add("Номи ман " + f)
+                if l:
+                    self.profile.add("Насаби ман " + l)
+                note.text = self.t("me_saved")
+            self.frost_row(content, self.t("me_save"), True, save_names, 46, center=True)
+            self.frost_row(content, self.t("me_about"), False, lambda *_: self.open_section("profile"), 46, center=True)
             content.add_widget(Widget())
         elif section == "profile":
             content.add_widget(make_label(self.t("profile_note"), 11, muted(), False, size_hint_y=None, height=dp(60)))
