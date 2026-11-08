@@ -560,6 +560,8 @@ TEXTS = {
         "pf_male": "Мард",
         "pf_female": "Зан",
         "pf_skip": "Баъдтар",
+        "code_copy": "Нусха",
+        "code_copied": "Нусхабардорӣ шуд",
         "av_title": "Акси профил",
         "av_ask": "Акси профилро интихоб кунед (ихтиёрӣ)",
         "av_pick": "Акс интихоб кардан",
@@ -789,6 +791,8 @@ TEXTS = {
         "pf_male": "Мужской",
         "pf_female": "Женский",
         "pf_skip": "Позже",
+        "code_copy": "Копировать",
+        "code_copied": "Скопировано",
         "av_title": "Фото профиля",
         "av_ask": "Выберите фото профиля (по желанию)",
         "av_pick": "Выбрать фото",
@@ -1018,6 +1022,8 @@ TEXTS = {
         "pf_male": "Male",
         "pf_female": "Female",
         "pf_skip": "Later",
+        "code_copy": "Copy",
+        "code_copied": "Copied",
         "av_title": "Profile photo",
         "av_ask": "Choose a profile photo (optional)",
         "av_pick": "Choose photo",
@@ -4057,6 +4063,88 @@ def strip_media(text):
     return MEDIA_RE.sub("", str(text)).replace(RETRY_MARK, "").strip()
 
 
+_FENCE_RE = re.compile(r"```([^\n`]*)\n(.*?)(?:```|\Z)", re.S)
+_TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
+
+
+def clean_md(text):
+    """Plain reading text from light Markdown (headings, bold, inline code, bullets); media markers stay untouched."""
+    out = []
+    for piece in re.split(r"(\[\[(?:img|file):[^\]]+\]\])", str(text)):
+        if piece.startswith("[[img:") or piece.startswith("[[file:"):
+            out.append(piece)
+            continue
+        piece = re.sub(r"\*\*(.+?)\*\*", r"\1", piece, flags=re.S)
+        piece = re.sub(r"(?<![\w_])__(.+?)__(?![\w_])", r"\1", piece, flags=re.S)
+        piece = re.sub(r"`([^`\n]+)`", r"\1", piece)
+        piece = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", piece)
+        piece = re.sub(r"(?m)^\s*[-*+]\s+", "\u2022 ", piece)
+        piece = re.sub(r"(?m)^\s*(?:-{3,}|\*{3,}|_{3,})\s*$", "", piece)
+        piece = re.sub(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)", r"\1: \2", piece)
+        out.append(piece)
+    return "".join(out)
+
+
+def parse_blocks(text):
+    """[("text", s) | ("code", lang, code) | ("table", rows) | ("img"|"file", path)] in the order they appear."""
+    blocks = []
+
+    def add_text(chunk):
+        lines = chunk.split("\n")
+        buf, i = [], 0
+        while i < len(lines):
+            line = lines[i]
+            if (line.strip().startswith("|") and i + 1 < len(lines) and "|" in lines[i + 1]
+                    and _TABLE_SEP_RE.match(lines[i + 1]) and line.count("|") >= 2):
+                if buf:
+                    add_plain("\n".join(buf))
+                    buf = []
+                rows = []
+                while i < len(lines) and lines[i].strip().startswith("|"):
+                    if not _TABLE_SEP_RE.match(lines[i]):
+                        cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                        rows.append(cells)
+                    i += 1
+                blocks.append(("table", rows))
+                continue
+            buf.append(line)
+            i += 1
+        if buf:
+            add_plain("\n".join(buf))
+
+    def add_plain(chunk):
+        pos = 0
+        for m in MEDIA_RE.finditer(chunk):
+            if chunk[pos:m.start()].strip():
+                blocks.append(("text", chunk[pos:m.start()].strip()))
+            blocks.append((m.group(1), m.group(2).strip()))
+            pos = m.end()
+        if chunk[pos:].strip():
+            blocks.append(("text", chunk[pos:].strip()))
+
+    pos = 0
+    text = str(text)
+    for m in _FENCE_RE.finditer(text):
+        add_text(text[pos:m.start()])
+        blocks.append(("code", m.group(1).strip(), m.group(2).rstrip("\n")))
+        pos = m.end()
+    add_text(text[pos:])
+    return blocks
+
+
+def has_rich_blocks(text):
+    return any(b[0] in ("code", "table") for b in parse_blocks(text))
+
+
+def speech_text(text):
+    """What is read aloud: no code and no tables, no Markdown signs."""
+    parts = []
+    for b in parse_blocks(text):
+        if b[0] == "text":
+            parts.append(clean_md(b[1]))
+    return " ".join(" ".join(parts).split())
+
+
 def copy_java_stream(stream, output, limit=None):
     """Copy a Java InputStream into a Java OutputStream through NIO channels (works without Java arrays)."""
     from jnius import autoclass
@@ -4587,6 +4675,106 @@ class AvatarCircle(Widget):
             self._lab.size = (d, d)
             self._lab.pos = (x, y)
             self.add_widget(self._lab)
+
+
+class CodeBlock(BoxLayout):
+    """A code box like in ChatGPT: language name, a copy button and the code, which scrolls sideways."""
+
+    def __init__(self, app, code, lang, **kwargs):
+        super().__init__(orientation="vertical", size_hint_y=None, spacing=dp(2),
+                         padding=[dp(8), dp(4), dp(8), dp(8)], **kwargs)
+        theme = THEMES[app.theme_index]
+        self.bind(minimum_height=self.setter("height"))
+        with self.canvas.before:
+            Color(0.03, 0.05, 0.09, 0.96) if not UI_LIGHT else Color(0.92, 0.94, 0.98, 1)
+            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
+            Color(1, 1, 1, 0.10) if not UI_LIGHT else Color(0, 0, 0, 0.10)
+            self._ln = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(12)), width=dp(1))
+        self.bind(pos=self._paint, size=self._paint)
+        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(30))
+        head.add_widget(make_label((lang or "code").lower(), 11, muted(), False, halign="left", padding=(dp(4), 0)))
+        copy = GlassButton(text=app.t("code_copy"), tint=hex_color(theme["accent"])[:3], active=False, radius=8,
+                           size_hint=(None, None), size=(dp(104), dp(26)), font_size=dp(12), color=hex_color(theme["text"]))
+
+        def do_copy(btn):
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(code)
+                btn.text = app.t("code_copied")
+                Clock.schedule_once(lambda dt: setattr(btn, "text", app.t("code_copy")), 1.4)
+            except Exception:
+                save_crash("Code copy failed:\n" + traceback.format_exc())
+        copy.bind(on_release=do_copy)
+        head.add_widget(copy)
+        self.add_widget(head)
+        lines = code.replace("\t", "    ").split("\n")
+        label = Label(text="\n".join(lines), font_size=dp(12.5), color=hex_color(theme["text"]), halign="left", valign="top",
+                      size_hint=(None, None), markup=False)
+        label.bind(texture_size=lambda inst, ts: setattr(inst, "size", (max(ts[0], 1), max(ts[1], 1))))
+        label.text_size = (None, None)
+        label.texture_update()
+        label.size = label.texture_size
+        scroll = ScrollView(do_scroll_x=True, do_scroll_y=False, bar_width=dp(3), size_hint_y=None,
+                            height=max(dp(24), label.texture_size[1] + dp(14)), scroll_type=["bars", "content"])
+        scroll.add_widget(label)
+        self.add_widget(scroll)
+
+    def _paint(self, *_):
+        self._bg.pos, self._bg.size = self.pos, self.size
+        self._ln.rounded_rectangle = (self.x, self.y, self.width, self.height, dp(12))
+
+
+class TableBlock(BoxLayout):
+    """A table that can be moved in every direction when it is wide or long."""
+
+    def __init__(self, app, rows, **kwargs):
+        super().__init__(orientation="vertical", size_hint_y=None, **kwargs)
+        theme = THEMES[app.theme_index]
+        acc = hex_color(theme["accent"])[:3]
+        text_c = hex_color(theme["text"])
+        ncols = max(len(r) for r in rows)
+        rows = [[clean_md(c) for c in r] + [""] * (ncols - len(r)) for r in rows]
+        widths = []
+        for c in range(ncols):
+            longest = max(max((len(x) for x in rows[r][c].split("\n")), default=0) for r in range(len(rows)))
+            widths.append(min(max(dp(84), longest * dp(8.2) + dp(22)), dp(250)))
+        grid = GridLayout(cols=ncols, size_hint=(None, None), spacing=0)
+        total_h = 0
+        for r, row in enumerate(rows):
+            heights = []
+            for c in range(ncols):
+                chars = max(4, int((widths[c] - dp(18)) / dp(8.2)))
+                lines = sum(max(1, -(-len(part) // chars)) for part in row[c].split("\n"))
+                heights.append(lines * dp(19) + dp(14))
+            h = max(heights)
+            total_h += h
+            for c in range(ncols):
+                cell = Label(text=row[c], font_size=dp(13), bold=(r == 0), color=text_c, halign="left", valign="middle",
+                             size_hint=(None, None), size=(widths[c], h), padding=(dp(9), dp(5)))
+                cell.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0] - dp(18), None)))
+                cell.text_size = (widths[c] - dp(18), None)
+                with cell.canvas.before:
+                    if r == 0:
+                        Color(acc[0], acc[1], acc[2], 0.34)
+                    elif r % 2 == 0:
+                        Color(1, 1, 1, 0.05) if not UI_LIGHT else Color(0, 0, 0, 0.04)
+                    else:
+                        Color(0, 0, 0, 0)
+                    rect = Rectangle(pos=cell.pos, size=cell.size)
+                    Color(1, 1, 1, 0.16) if not UI_LIGHT else Color(0, 0, 0, 0.16)
+                    edge = Line(rectangle=(cell.x, cell.y, cell.width, cell.height), width=dp(0.8))
+                cell.bind(pos=lambda inst, v, rc=rect, ed=edge: (setattr(rc, "pos", inst.pos),
+                                                                   setattr(ed, "rectangle", (inst.x, inst.y, inst.width, inst.height))),
+                          size=lambda inst, v, rc=rect, ed=edge: (setattr(rc, "size", inst.size),
+                                                                    setattr(ed, "rectangle", (inst.x, inst.y, inst.width, inst.height))))
+                grid.add_widget(cell)
+        grid.width = sum(widths)
+        grid.height = total_h
+        scroll = ScrollView(do_scroll_x=True, do_scroll_y=True, bar_width=dp(3), size_hint_y=None,
+                            height=min(total_h + dp(4), dp(340)), scroll_type=["bars", "content"])
+        scroll.add_widget(grid)
+        self.add_widget(scroll)
+        self.height = scroll.height
 
 
 class GlassSheet(FloatLayout):
@@ -5812,6 +6000,42 @@ class JarvisApp(App):
         chat = chat or self.chats.current()
         return chat.get("title") or self.t("chat_default")
 
+    def _build_rich(self, bubble, text, theme, accent):
+        """An answer with code or tables: text, code boxes, tables and pictures one under another, in the order written."""
+        for block in parse_blocks(text):
+            kind = block[0]
+            if kind == "text":
+                lab = EmojiLabel(text="", font_size=dp(15), color=hex_color(theme["text"]), halign="left", valign="top", size_hint_y=None)
+                lab.set_plain(clean_md(block[1]))
+                lab.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+                lab.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
+                bubble.add_widget(lab)
+            elif kind == "code":
+                bubble.add_widget(CodeBlock(self, block[2], block[1]))
+            elif kind == "table":
+                bubble.add_widget(TableBlock(self, block[1]))
+            elif kind in ("img", "file") and os.path.isfile(block[1]):
+                path_m = block[1]
+                if kind == "img":
+                    from kivy.uix.image import Image as KivyImage
+                    from kivy.uix.behaviors import ButtonBehavior
+
+                    class TapImage(ButtonBehavior, KivyImage):
+                        pass
+
+                    thumb = TapImage(source=path_m, size_hint_y=None, height=dp(230), fit_mode="contain", nocache=True)
+                    thumb.bind(on_release=lambda inst, pth=path_m: self.open_media(pth))
+                    bubble.add_widget(thumb)
+                else:
+                    open_btn = GlassButton(text=os.path.basename(path_m).split("__", 1)[-1], tint=accent, active=False, radius=10,
+                                           size_hint_y=None, height=dp(40), font_size=dp(13), color=hex_color(theme["text"]))
+                    open_btn.bind(on_release=lambda btn, pth=path_m: self.open_media(pth))
+                    bubble.add_widget(open_btn)
+                save_btn = GlassButton(text=self.t("save_btn"), tint=accent, active=False, radius=10, font_size=dp(13),
+                                       size_hint_y=None, height=dp(34), color=hex_color(theme["text"]))
+                save_btn.bind(on_release=lambda btn, pth=path_m: self.save_media(pth))
+                bubble.add_widget(save_btn)
+
     def make_bubble(self, role, text, full_text=None):
         text = self.brand(text)
         if full_text is not None:
@@ -5848,7 +6072,16 @@ class JarvisApp(App):
         label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1]))
         user_media = user and bool(media_items)
-        if not user_media:
+        rich = (not user) and has_rich_blocks(text)
+        if rich:
+            try:
+                self._build_rich(bubble, text, theme, accent)
+            except Exception:
+                save_crash("Rich message failed:\n" + traceback.format_exc())
+                rich = False
+            else:
+                media_items = []
+        if not user_media and not rich:
             bubble.add_widget(label)
         for kind_m, path_m in media_items:
             path_m = path_m.strip()
@@ -7872,6 +8105,14 @@ class JarvisApp(App):
         if RETRY_MARK in str(answer):
             self.add_chat_message(chat_id, "jarvis", answer)       # an error with a Retry button: shown, not read aloud
             return
+        if has_rich_blocks(answer):
+            # code / tables: shown at once; only the words around them are read, never the code itself
+            self.add_chat_message(chat_id, "jarvis", answer)
+            spoken = speech_text(answer)[:4000]
+            if spoken:
+                self.speak_answer(spoken)
+            return
+        answer = clean_md(answer)
         text = strip_media(answer)[:4000]
         if self.speak_enabled and text and self.server_token.strip():
             threading.Thread(target=self._request_synced_speech,
@@ -7993,7 +8234,7 @@ class JarvisApp(App):
 
     def read_message(self, text):
         """Read a reply aloud: the text goes to the server again (works even if auto-voice is off)."""
-        text = str(text).strip()[:4000]
+        text = (speech_text(text) if has_rich_blocks(text) else clean_md(str(text))).strip()[:4000]
         if not text:
             return
         player = getattr(self, "_server_speech_player", None)
