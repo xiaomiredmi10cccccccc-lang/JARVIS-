@@ -266,7 +266,7 @@ def normalize_email(email: str) -> str:
 
 def create_access_token(user_id: int, email: str) -> str:
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "email": email, "iat": now, "exp": now + timedelta(days=30)}
+    payload = {"sub": str(user_id), "email": email, "iat": now, "exp": now + timedelta(days=90)}
     return jwt.encode(payload, jwt_secret(), algorithm="HS256")
 
 
@@ -467,6 +467,21 @@ def signin(data: AccountRequest, request: Request):
     if not user or not ok:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     return {"access_token": create_access_token(user["id"], user["username"]), "token_type": "bearer", "username": user["username"]}
+
+
+@app.post("/auth/refresh")
+def refresh_token(authorization: str | None = Header(default=None)):
+    """A still valid sign-in token is exchanged for a fresh one (the app does this at every start, so an active user is never signed out)."""
+    user = require_auth(authorization)
+    if not user["id"]:
+        raise HTTPException(status_code=400, detail="Nothing to refresh")
+    return {"access_token": create_access_token(user["id"], user.get("name", ""))}
+
+
+@app.get("/health/providers")
+def health_providers():
+    """Which AI providers are configured and whether one is paused because its limit is used up (no keys are shown)."""
+    return {"providers": ai_tools.provider_status()}
 
 
 @app.post("/auth/delete")
