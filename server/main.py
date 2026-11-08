@@ -521,6 +521,7 @@ class DeleteChatsRequest(BaseModel):
 
 class AnalyzeChatsRequest(BaseModel):
     question: str = Field(default="", max_length=1000)
+    name: str = Field(default="", max_length=80)
     language: Literal["tg", "ru", "en"] = "tg"
 
 
@@ -631,7 +632,8 @@ def chats_analyze(data: AnalyzeChatsRequest, http_request: Request, x_jarvis_tok
         return {"answer": {"tg": "Ҳоло чатҳои захирашуда нест.", "ru": "Сохранённых чатов пока нет.", "en": "There are no saved chats yet."}[data.language], "chats": 0}
     lang_name = {"tg": "Tajik (Cyrillic)", "ru": "Russian", "en": "English"}[data.language]
     question = data.question.strip() or "Analyze all my chats: main topics, what I ask most, my interests, unfinished tasks, useful conclusions."
-    base = ("You analyse the user's own saved chat history with an AI assistant. Be accurate and concrete, do not invent anything that is not in the chats, "
+    who = (" The user's name is " + data.name.strip() + "; call him by it and never by his account login.") if data.name.strip() else " Do not call him by an account login."
+    base = ("You analyse the user's own saved chat history with an AI assistant." + who + " Be accurate and concrete, do not invent anything that is not in the chats, "
             "and write the answer in " + lang_name + ". Keep it well structured and not too long.")
     # split into chunks of about 22k characters
     chunks, current, size = [], [], 0
@@ -670,6 +672,7 @@ class ProfileNoteRequest(BaseModel):
     facts: list[str] = Field(default_factory=list, max_length=80)
     messages: list[str] = Field(default_factory=list, max_length=60)
     previous: str = Field(default="", max_length=3000)
+    name: str = Field(default="", max_length=80)
     language: Literal["tg", "ru", "en"] = "tg"
 
 
@@ -695,6 +698,8 @@ def profile_summarize(data: ProfileNoteRequest, http_request: Request, x_jarvis_
         "and do not include secrets such as passwords, card numbers or ID numbers. If a previous note is given, keep what is still true and merge the new information. "
         "Output only the note text.")
     parts = []
+    if data.name.strip():
+        parts.append("The user's name (from his own profile): " + data.name.strip())
     if data.previous.strip():
         parts.append("Previous note:\n" + data.previous.strip()[:3000])
     if facts:
