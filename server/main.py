@@ -730,7 +730,10 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
         "en": "You are JARVIS, a helpful and polite AI assistant. Answer clearly, accurately, and directly in English. Think carefully about complex questions. If you do not know the answer, say so honestly. Do not claim to have searched the web unless a web search was actually performed.",
     }
     assistant_name = " ".join(request.assistant_name.split())[:30] or "JARVIS"
-    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name)}]
+    no_files = (" IMPORTANT: in this chat you cannot attach, send or generate images or files yourself. The app makes pictures separately when the user asks for one. "
+                "Never say that you sent or generated a picture or a file, never write Base64 data, file paths, image links or markdown images, and never invent photos. "
+                "If the user wants a picture, just say in one short sentence that you will make it, or answer the question in words.")
+    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name) + no_files}]
     messages.extend({"role": item.role, "content": item.content} for item in request.history)
     searched, sources, search_error = False, [], None
     if should_search_web(request):
