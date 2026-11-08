@@ -683,6 +683,90 @@ def chats_analyze(data: AnalyzeChatsRequest, http_request: Request, x_jarvis_tok
     return {"answer": result["answer"], "chats": len(blocks)}
 
 
+class DeviceIntentRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=400)
+    language: Literal["tg", "ru", "en"] = "tg"
+    now: str = Field(default="", max_length=40)
+
+
+_DEVICE_ACTIONS = ("alarm", "timer", "flashlight", "open_app", "open_settings", "volume")
+_SETTINGS_PAGES = ("wifi", "bluetooth", "display", "sound", "battery", "location", "airplane", "apps", "date", "accessibility", "main")
+
+
+def _clean_device_action(obj) -> dict:
+    """Only known actions with sane values leave the server; anything else means 'not a phone command'."""
+    if not isinstance(obj, dict):
+        return {"action": "none"}
+    action = str(obj.get("action", "none")).strip().lower()
+    if action not in _DEVICE_ACTIONS:
+        return {"action": "none"}
+    try:
+        if action == "alarm":
+            return {"action": "alarm", "hour": max(0, min(23, int(obj.get("hour")))), "minute": max(0, min(59, int(obj.get("minute", 0) or 0))),
+                    "label": str(obj.get("label", ""))[:60]}
+        if action == "timer":
+            seconds = int(obj.get("seconds"))
+            if seconds < 1 or seconds > 24 * 3600:
+                return {"action": "none"}
+            return {"action": "timer", "seconds": seconds, "label": str(obj.get("label", ""))[:60]}
+        if action == "flashlight":
+            state = str(obj.get("state", "toggle")).lower()
+            return {"action": "flashlight", "state": state if state in ("on", "off", "toggle") else "toggle"}
+        if action == "open_app":
+            name = " ".join(str(obj.get("name", "")).split())[:60]
+            return {"action": "open_app", "name": name} if name else {"action": "none"}
+        if action == "open_settings":
+            page = str(obj.get("page", "main")).lower()
+            return {"action": "open_settings", "page": page if page in _SETTINGS_PAGES else "main"}
+        if action == "volume":
+            mode = str(obj.get("mode", "")).lower()
+            if mode not in ("up", "down", "mute", "set"):
+                return {"action": "none"}
+            level = max(0, min(100, int(obj.get("level", 50) or 0))) if mode == "set" else 0
+            return {"action": "volume", "mode": mode, "level": level}
+    except (TypeError, ValueError):
+        return {"action": "none"}
+    return {"action": "none"}
+
+
+@app.post("/device/intent")
+def device_intent(data: DeviceIntentRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Turns a spoken or typed request (Tajik, Russian, English) into ONE phone action for the app to run."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    check_quota(user, "chat")
+    check_rate_limit(rate_key(user, http_request))
+    if not ai_tools.provider_chain(language=data.language):
+        raise HTTPException(status_code=503, detail="No AI provider key is configured")
+    system = (
+        "You turn the user's message into ONE phone action. Reply with a single JSON object and nothing else. Allowed actions:\n"
+        '{"action":"alarm","hour":0-23,"minute":0-59,"label":""}  (set an alarm / wake the user)\n'
+        '{"action":"timer","seconds":integer,"label":""}\n'
+        '{"action":"flashlight","state":"on"|"off"|"toggle"}\n'
+        '{"action":"open_app","name":"app name, use the usual Latin brand name such as WhatsApp, Telegram, YouTube, Camera, Chrome, Calculator"}\n'
+        '{"action":"open_settings","page":"wifi|bluetooth|display|sound|battery|location|airplane|apps|date|accessibility|main"}\n'
+        '{"action":"volume","mode":"up|down|mute|set","level":0-100}\n'
+        '{"action":"none"}  when the message is NOT a request to do one of these things (a question, a chat, a general talk about alarms, anything else).\n'
+        "The user's local time now is " + (data.now or "unknown") + ". Work out exact values: 'wake me at 5 in the morning' = hour 5, minute 0; "
+        "'at 5 in the evening' = 17; 'in 30 minutes' = now + 30 minutes; 'tomorrow at 7' = hour 7. "
+        "Tajik hints: хезон / бедор кун = wake up, будилник = alarm, фонарик / чароғак = flashlight, таймер = timer, овоз = volume or sound, "
+        "саҳар = morning, бегоҳ = evening, шаб = night, соати 5 = 5 o'clock, ним = half past. Output JSON only.")
+    try:
+        result = ai_tools.complete([{"role": "system", "content": system}, {"role": "user", "content": data.text}],
+                                   max_tokens=160, timeout=25.0, language=data.language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Device intent failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
+    raw = result["answer"]
+    match = re.search(r"\{.*\}", raw, re.S)
+    try:
+        obj = json.loads(match.group(0)) if match else {}
+    except ValueError:
+        obj = {}
+    return _clean_device_action(obj)
+
+
 class ProfileNoteRequest(BaseModel):
     facts: list[str] = Field(default_factory=list, max_length=80)
     messages: list[str] = Field(default_factory=list, max_length=60)
