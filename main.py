@@ -6054,6 +6054,25 @@ class JarvisApp(App):
         self.chats.deleted = [x for x in self.chats.deleted if x not in gone]
         self.chats.save()
 
+    def refresh_session(self):
+        """At every start the sign-in token is exchanged for a fresh one, so an active user is not asked to sign in again."""
+        def job():
+            try:
+                result = self._json_call("POST", "/auth/refresh", {}, timeout=30)
+                token = str(result.get("access_token", ""))
+            except urllib.error.HTTPError as exc:
+                if exc.code in (401, 403):
+                    Clock.schedule_once(lambda dt: self._session_expired(), 0)
+                return
+            except Exception:
+                return                         # offline or the server is waking up: try again at the next start
+            if token:
+                def apply(dt):
+                    self.server_token = token
+                    self.save_settings()
+                Clock.schedule_once(apply, 0)
+        threading.Thread(target=job, daemon=True).start()
+
     def chat_sync_tick(self, dt=None):
         if not self.server_token.strip() or getattr(self, "_sync_busy", False) or not getattr(self, "_chats_pulled", False):
             return
@@ -6971,23 +6990,78 @@ class JarvisApp(App):
     def _tajik_stream(self, text):
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
         gen = self._tajik_gen
-        threading.Thread(target=self._tajik_stream_run, args=(strip_media(text)[:900], gen), daemon=True).start()
+        chunks = split_for_speech(strip_media(text)[:3500])
+        threading.Thread(target=self._stream_chunks, args=(chunks, self._tajik_speech_path, gen, None), daemon=True).start()
 
-    def _tajik_stream_run(self, text, gen):
-        chunks = split_for_speech(text)
+    def _edge_stream(self, text, force=False):
+        """Long ru/en text: read piece by piece (sentences), the next piece is made while the current one is spoken."""
+        self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
+        gen = self._tajik_gen
+        chunks = split_for_speech(strip_media(text)[:4000], first=150, rest=260)
+
+        def rest_by_phone(remaining):
+            Clock.schedule_once(lambda dt: self._speak_local_fallback(" ".join(remaining), force), 0)
+        threading.Thread(target=self._stream_chunks, args=(chunks, self._edge_speech_path, gen, rest_by_phone), daemon=True).start()
+
+    def _edge_speech_path(self, text, quiet=False):
+        """Blocking: one piece of text -> mp3 path from the server (None on failure)."""
+        import ssl
+        import tempfile
+        try:
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = None
+            payload = json.dumps({"text": text[:1200], "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")},
+                                 ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/speak", data=payload, method="POST",
+                                         headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.server_token,
+                                                  "Accept": "audio/mpeg"})
+            with urllib.request.urlopen(req, timeout=60, context=ctx) as response:
+                audio = response.read(15 * 1024 * 1024 + 1)
+            if not audio or len(audio) > 15 * 1024 * 1024:
+                raise RuntimeError("Audio is empty or too large")
+            fd, path = tempfile.mkstemp(prefix="jarvis_speech_", suffix=".mp3")
+            with os.fdopen(fd, "wb") as out:
+                out.write(audio)
+            return path
+        except Exception as exc:
+            save_crash("Speech piece failed:\n" + traceback.format_exc())
+            if not quiet:
+                detail = self.friendly_error(exc)
+                Clock.schedule_once(lambda dt: self._note_server_speech_error(detail), 0)
+            return None
+
+    def _fetch_piece(self, fetch_path, piece):
+        """A piece that failed is tried once more after a short pause (the server may just be waking up)."""
+        path = fetch_path(piece, quiet=True)
+        if not path:
+            time.sleep(1.5)
+            path = fetch_path(piece, quiet=True)
+        return path
+
+    def _stream_chunks(self, chunks, fetch_path, gen, on_fail):
         if not chunks:
             Clock.schedule_once(lambda dt: self._voice_ready(), 0)
             return
         got = {}
 
         def fetch(i):
-            got[i] = self._tajik_speech_path(chunks[i])
+            got[i] = self._fetch_piece(fetch_path, chunks[i])
 
         fetch(0)
         for i in range(len(chunks)):
-            if gen != getattr(self, "_tajik_gen", 0) or not got.get(i):
+            if gen != getattr(self, "_tajik_gen", 0):
                 Clock.schedule_once(lambda dt: self._voice_ready(), 0)
-                return                      # stopped by the user, or the voice failed (the user was told once)
+                return                      # stopped by the user
+            if not got.get(i):
+                if on_fail is not None:
+                    on_fail(chunks[i:])     # the rest is read by the phone's own voice
+                else:
+                    Clock.schedule_once(lambda dt: self._note_tajik_voice_error(self.t("err_generic")), 0)
+                    Clock.schedule_once(lambda dt: self._voice_ready(), 0)
+                return
             following = None
             if i + 1 < len(chunks):
                 following = threading.Thread(target=fetch, args=(i + 1,), daemon=True)
@@ -7814,6 +7888,10 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", answer), 0)   # text at once
             self._tajik_stream(text)
             return
+        if len(text) > 320:                       # long text: sentence by sentence, so one slow piece cannot break it all
+            Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", answer), 0)
+            self._edge_stream(text)
+            return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
         payload = json.dumps({"text": text, "timings": True,
                               "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")},
@@ -7954,6 +8032,9 @@ class JarvisApp(App):
         if self._wants_tajik_voice(text):
             self._tajik_stream(text)
             return
+        if len(text) > 320:
+            self._edge_stream(text, force)
+            return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
         payload = json.dumps({"text": text, "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, ensure_ascii=False).encode("utf-8")
         try:
@@ -7997,7 +8078,7 @@ class JarvisApp(App):
         russian_only = any(ch in "ыэЫЭ" for ch in text)
         return self.language == "tg" and bool(letters) and cyr / float(len(letters)) > 0.6 and not russian_only
 
-    def _tajik_speech_path(self, text):
+    def _tajik_speech_path(self, text, quiet=False):
         """Blocking: ask the Tajik voice service for a WAV file. Returns its path, or None on any failure."""
         import ssl
         import tempfile
@@ -8021,8 +8102,9 @@ class JarvisApp(App):
             return path
         except Exception as exc:
             save_crash("Tajik voice failed:\n" + traceback.format_exc())
-            detail = self.friendly_error(exc)
-            Clock.schedule_once(lambda dt: self._note_tajik_voice_error(detail), 0)
+            if not quiet:
+                detail = self.friendly_error(exc)
+                Clock.schedule_once(lambda dt: self._note_tajik_voice_error(detail), 0)
             return None
 
     def _note_tajik_voice_error(self, detail):
@@ -8644,6 +8726,7 @@ class JarvisApp(App):
         Clock.schedule_interval(self.chat_sync_tick, 10)
         if self.server_token.strip():
             Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
+            Clock.schedule_once(lambda dt: self.refresh_session(), 5.0)
         if not self.onboarded or not self.server_token.strip():
             Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
         else:
