@@ -3928,6 +3928,7 @@ def dotted_name(name):
     return "  ".join(words) or "S.A.I"
 
 
+BASE64_BLOB_RE = re.compile(r"(?:/9j/|iVBOR|R0lGOD|UklGR)[A-Za-z0-9+/=\s]{150,}|[A-Za-z0-9+/]{400,}={0,2}")
 MEDIA_RE = re.compile(r"\[\[(img|file):([^\]]+)\]\]")
 RETRY_MARK = "[[retry]]"
 BASE_WORDS = {
@@ -7702,6 +7703,15 @@ class JarvisApp(App):
                 self._start_media_job(chat_id, "image", guess)
                 return
         answer = strip_media(answer) if fake else answer
+        # the AI pasted a picture as a Base64 blob ("here is your file"): that is never a real picture; make a real one instead
+        if BASE64_BLOB_RE.search(str(answer)):
+            earlier = [strip_media(" ".join(str(m.get("text", "")).split())) for m in (self.chats.get(chat_id) or {}).get("messages", [])
+                       if m.get("role") == "user"]
+            earlier = [t for t in earlier if t]
+            if earlier:
+                self._start_media_job(chat_id, "image", earlier[-1][:300])
+                return
+            answer = BASE64_BLOB_RE.sub("", str(answer)).strip()
         m = re.search(r"!\[([^\]]*)\]\(([^)\s]+)[^)]*\)", str(answer))
         if m:
             # the AI wrote a picture link that cannot be shown: make the picture itself from its description
