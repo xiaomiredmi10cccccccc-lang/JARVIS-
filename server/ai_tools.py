@@ -11,6 +11,7 @@ All keys come from environment variables on Render (never from code):
 import io
 import json
 import os
+import time
 import random
 import re
 import urllib.error
@@ -62,25 +63,57 @@ class NoProvider(Exception):
     pass
 
 
+_COOLDOWN = {}   # (provider, model) -> time.monotonic() until which it is skipped (limit reached / key refused)
+
+
+def _cooldown_seconds(exc):
+    """How long to leave a provider alone after this error: 0 = no pause (a one-off failure)."""
+    status = getattr(exc, "status_code", None)
+    text = (type(exc).__name__ + " " + str(exc)).lower()
+    if status in (401, 402, 403) or "invalid api key" in text or "permission" in text:
+        return 1800          # key refused / not paid: no point asking again for 30 minutes
+    if status == 429 or "rate limit" in text or "quota" in text or "resource_exhausted" in text or "too many" in text:
+        if "per day" in text or "daily" in text or "tokens per day" in text:
+            return 1800      # the daily allowance is used up
+        return 90            # per-minute limit
+    return 0
+
+
 def complete(messages, vision=False, max_tokens=None, timeout=45.0, language=None):
-    """Ask the first working provider. Returns {"answer", "model", "provider"}. Raises NoProvider / RuntimeError."""
+    """Ask the first working provider. Returns {"answer", "model", "provider"}. Raises NoProvider / RuntimeError.
+    A provider whose limit is reached or whose key is refused is skipped for a while, so the next request is not slowed down."""
     chain = provider_chain(vision, language)
     if not chain:
         raise NoProvider("No AI provider key is configured (set GROQ_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY)")
+    now = time.monotonic()
+    active = [c for c in chain if _COOLDOWN.get((c[0], c[3]), 0) <= now]
+    skipped = [c for c in chain if c not in active]
     failures = []
-    for name, key, base, model in chain:
+    for name, key, base, model in active + skipped:        # paused ones still come last, as a final try
         try:
             client = OpenAI(api_key=key, base_url=base, timeout=timeout)
             extra = {"max_tokens": max_tokens} if max_tokens else {}
             response = client.chat.completions.create(model=model, messages=messages, **extra)
             answer = response.choices[0].message.content if response.choices else ""
             if answer and answer.strip():
+                _COOLDOWN.pop((name, model), None)
                 return {"answer": answer.strip(), "model": (response.model or model), "provider": name}
             failures.append(name + ": empty")
         except Exception as exc:
             print("AI provider failed:", name, type(exc).__name__, str(exc)[:150])
-            failures.append(name + ": " + type(exc).__name__)
+            pause = _cooldown_seconds(exc)
+            if pause:
+                _COOLDOWN[(name, model)] = time.monotonic() + pause
+            status = getattr(exc, "status_code", None)
+            failures.append(name + ": " + (str(status) if status else type(exc).__name__))
     raise RuntimeError("All AI providers failed (" + "; ".join(failures) + ")")
+
+
+def provider_status():
+    """Which providers are configured and which are paused right now (for /health/providers)."""
+    now = time.monotonic()
+    return [{"provider": c[0], "model": c[3], "paused_seconds": max(0, int(_COOLDOWN.get((c[0], c[3]), 0) - now))}
+            for c in provider_chain()]
 
 
 # ------------------------------------------------------------------ prompts / translation
