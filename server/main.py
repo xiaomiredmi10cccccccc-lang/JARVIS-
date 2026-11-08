@@ -747,7 +747,9 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
     assistant_name = " ".join(request.assistant_name.split())[:30] or "JARVIS"
     no_files = (" IMPORTANT: in this chat you cannot attach, send or generate images or files yourself. The app makes pictures separately when the user asks for one. "
                 "Never say that you sent or generated a picture or a file, never write Base64 data, file paths, image links or markdown images, and never invent photos. "
-                "If the user wants a picture, just say in one short sentence that you will make it, or answer the question in words.")
+                "If the user wants a picture, just say in one short sentence that you will make it, or answer the question in words. "
+                "FORMAT: write code only inside fenced code blocks with the language name (```python ... ```); show comparisons, schedules, "
+                "data and analysis as Markdown tables when they help; keep ordinary answers as plain short paragraphs.")
     messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name) + no_files}]
     messages.extend({"role": item.role, "content": item.content} for item in request.history)
     searched, sources, search_error = False, [], None
