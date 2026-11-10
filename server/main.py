@@ -724,13 +724,14 @@ class DeviceIntentRequest(BaseModel):
     language: Literal["tg", "ru", "en"] = "tg"
     now: str = Field(default="", max_length=40)
     apps: list[str] = Field(default_factory=list, max_length=400)
+    context: str = Field(default="", max_length=7000)
 
 
-_DEVICE_ACTIONS = ("alarm", "timer", "flashlight", "open_app", "open_settings", "volume", "take_photo", "send_message", "read_sms", "brightness", "device_info")
+_DEVICE_ACTIONS = ("alarm", "timer", "flashlight", "open_app", "open_settings", "volume", "take_photo", "send_message", "read_sms", "brightness", "device_info", "call")
 _SETTINGS_PAGES = ("wifi", "bluetooth", "display", "sound", "battery", "location", "airplane", "apps", "date", "accessibility", "main")
 
 
-def _clean_device_action(obj) -> dict:
+def _clean_device_action_core(obj) -> dict:
     """Only known actions with sane values leave the server; anything else means 'not a phone command'."""
     if not isinstance(obj, dict):
         return {"action": "none"}
@@ -755,6 +756,9 @@ def _clean_device_action(obj) -> dict:
         if action == "open_settings":
             page = str(obj.get("page", "main")).lower()
             return {"action": "open_settings", "page": page if page in _SETTINGS_PAGES else "main"}
+        if action == "call":
+            to = " ".join(str(obj.get("to", "")).split())[:60]
+            return {"action": "call", "to": to} if to else {"action": "none"}
         if action == "device_info":
             return {"action": "device_info"}
         if action == "brightness":
@@ -781,6 +785,19 @@ def _clean_device_action(obj) -> dict:
     return {"action": "none"}
 
 
+def _clean_device_action(obj) -> dict:
+    """The action itself (validated) + an optional short 'say' that explains the decision; or one question when a fact is missing."""
+    if isinstance(obj, dict) and str(obj.get("action", "")).lower() == "ask":
+        question = " ".join(str(obj.get("question", "")).split())[:300]
+        return {"action": "ask", "question": question} if question else {"action": "none"}
+    result = _clean_device_action_core(obj)
+    if result.get("action") != "none" and isinstance(obj, dict):
+        say = " ".join(str(obj.get("say", "")).split())[:500]
+        if say:
+            result["say"] = say
+    return result
+
+
 @app.post("/device/intent")
 def device_intent(data: DeviceIntentRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Turns a spoken or typed request (Tajik, Russian, English) into ONE phone action for the app to run."""
@@ -798,6 +815,7 @@ def device_intent(data: DeviceIntentRequest, http_request: Request, x_jarvis_tok
         '{"action":"open_settings","page":"wifi|bluetooth|display|sound|battery|location|airplane|apps|date|accessibility|main"}\n'
         '{"action":"volume","mode":"up|down|mute|set","level":0-100}\n'
         '{"action":"brightness","level":1-100}  (screen brightness)\n'
+        '{"action":"call","to":"contact name or phone number"}  (phone call)\n'
         '{"action":"device_info"}  (the user asks about this phone: model, battery, storage, apps, settings)\n'
         '{"action":"take_photo"}  (open the camera to take a picture)\n'
         '{"action":"read_sms"}  (read the newest text messages aloud)\n'
@@ -805,13 +823,21 @@ def device_intent(data: DeviceIntentRequest, http_request: Request, x_jarvis_tok
         '{"action":"none"}  when the message is NOT a request to do one of these things (a question, a chat, a general talk about alarms, anything else).\n'
         + ("INSTALLED APPS on this phone (for open_app copy the name EXACTLY from this list when the app is there; the user may say it in "
            "Tajik, Russian or English, e.g. Ватсап = WhatsApp): " + "; ".join(a[:40] for a in data.apps[:400]) + "\n" if data.apps else "") +
+        '{"action":"ask","question":"ONE short question"}  when you need ONE missing fact to act (e.g. when the class starts)\n'
+        "Every action object may also contain \"say\": one or two short sentences in the user's language that explain your decision to him.\n"
+        "UNDERSTAND THE REAL GOAL even when the message is not a direct command. Example: 'I have class early tomorrow' means he needs a suitable "
+        "alarm. Use CONTEXT (what he said before in all his chats and what is known about him) to find facts such as the time the class or work starts, "
+        "how long he needs to get ready and to travel, his habits. A healthy sleep is 7-9 hours: in \"say\" also tell him when to go to bed. "
+        "Alarm time = start time minus (travel + getting ready); if the start time is unknown, ask ONE short question instead of guessing. "
+        "Act only on a clear present intention; casual talk, past events, jokes or hypothetical talk are 'none'.\n"
+        + ("CONTEXT (newest last):\n" + data.context.strip()[:7000] + "\n" if data.context.strip() else "") +
         "The user's local time now is " + (data.now or "unknown") + ". Work out exact values: 'wake me at 5 in the morning' = hour 5, minute 0; "
         "'at 5 in the evening' = 17; 'in 30 minutes' = now + 30 minutes; 'tomorrow at 7' = hour 7. "
         "Tajik hints: хезон / бедор кун = wake up, будилник = alarm, фонарик / чароғак = flashlight, таймер = timer, овоз = volume or sound, "
         "саҳар = morning, бегоҳ = evening, шаб = night, соати 5 = 5 o'clock, ним = half past. Output JSON only.")
     try:
         result = ai_tools.complete([{"role": "system", "content": system}, {"role": "user", "content": data.text}],
-                                   max_tokens=160, timeout=25.0, language=data.language)
+                                   max_tokens=420, timeout=30.0, language=data.language)
     except ai_tools.NoProvider as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
@@ -889,6 +915,10 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
     }
     assistant_name = " ".join(request.assistant_name.split())[:30] or "S.A.I"
     no_files = (" IMPORTANT: in this chat you cannot attach, send or generate images or files yourself. The app makes pictures separately when the user asks for one. "
+                "You also cannot open apps, set alarms, call, send messages or change phone settings yourself: the app does that separately. "
+                "Never say that something is being prepared, that it will be ready soon, or that you will notify or show it later: you have no background work; "
+                "answer now or say plainly that you cannot. "
+                "Never say or imply that you opened, started, installed or did something on the phone, and never pretend that an app exists. "
                 "Never say that you sent or generated a picture or a file, never write Base64 data, file paths, image links or markdown images, and never invent photos. "
                 "If the user wants a picture, just say in one short sentence that you will make it, or answer the question in words. "
                 "FORMAT: write code only inside fenced code blocks with the language name (```python ... ```); show comparisons, schedules, "
@@ -1121,7 +1151,8 @@ async def analyze_attachment(http_request: Request, x_jarvis_token: str | None =
         "tg": " Ҳеҷ гоҳ ба корбар нагӯ, ки ба барномаи дигари AI (масалан Meta AI) муроҷиат кунад ва барои онҳо матни дархост (prompt) нанавис. Агар ӯ сохтан ё тағйири акс хоҳад, бигӯ, ки ин барнома худаш акси нав месозад: ӯ бояд навишт, ки чӣ гуна акс мехоҳад.",
         "ru": " Никогда не предлагай пользователю обратиться к другим ИИ-сервисам (например Meta AI) и не пиши для них промпты. Если он хочет создать или изменить картинку, скажи, что приложение само создаёт новое изображение по описанию.",
         "en": " Never tell the user to use other AI services (such as Meta AI) and never write prompts for them. If he wants a picture created or changed, say that this app creates the new picture itself from his description.",
-    }[language]
+    }[language] + (" Never say that something is being prepared or that you will notify or show it later: you have no background work. Answer now or say plainly that you cannot."
+                   if language == "en" else " Ҳеҷ гоҳ нагӯ «ҳоло тайёр мешавад» ё «баъд хабар медиҳам»: ту корҳои пасзамина надорӣ. Ҳозир ҷавоб деҳ ё ростқавлона бигӯ, ки наметавонӣ. (Нельзя писать «готовится» или «сообщу позже».)")
     is_image = mime.startswith("image/")
     if not ai_tools.provider_chain(vision=is_image, language=language):
         raise HTTPException(status_code=503, detail="No AI provider key is configured" + (" for images (Groq or Gemini)" if is_image else ""))
