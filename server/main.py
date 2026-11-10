@@ -69,7 +69,7 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list, max_length=12)
     web_search: bool = False
     language: Literal["tg", "ru", "en"] = "tg"
-    assistant_name: str = Field(default="JARVIS", max_length=30)
+    assistant_name: str = Field(default="S.A.I", max_length=30)
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_SPEECH_CHARS)
@@ -135,6 +135,7 @@ def init_database() -> None:
             for statement in (
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(40)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile TEXT",
                 "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower ON users (LOWER(username))",
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL",
@@ -151,7 +152,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="JARVIS AI Server", version="1.9.0", lifespan=lifespan)
+app = FastAPI(title="S.A.I AI Server", version="1.9.0", lifespan=lifespan)
 
 
 def client_ip(request: Request) -> str:
@@ -383,12 +384,12 @@ def format_search_context(results: list[dict]) -> str:
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def root():
-    return {"service": "JARVIS AI Server", "status": "online", "docs": "/docs"}
+    return {"service": "S.A.I AI Server", "status": "online", "docs": "/docs"}
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "online", "service": "JARVIS"}
+    return {"status": "online", "service": "S.A.I"}
 
 
 @app.post("/auth/register", status_code=201)
@@ -683,13 +684,49 @@ def chats_analyze(data: AnalyzeChatsRequest, http_request: Request, x_jarvis_tok
     return {"answer": result["answer"], "chats": len(blocks)}
 
 
+class ProfileSyncRequest(BaseModel):
+    data: str = Field(default="", max_length=30000)
+
+
+@app.get("/profile")
+def profile_get(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """The profile of the signed-in user (name, birth date, 'about me' note) so a new phone does not ask for it again."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            row = conn.execute("SELECT profile FROM users WHERE id = %s", (user["id"],)).fetchone()
+    except Exception as exc:
+        print("Profile read failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"data": (row[0] if row and row[0] else "")}
+
+
+@app.post("/profile")
+def profile_set(data: ProfileSyncRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        parsed = json.loads(data.data) if data.data else {}
+        if not isinstance(parsed, dict):
+            raise ValueError("not an object")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Profile must be a JSON object")
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            conn.execute("UPDATE users SET profile = %s WHERE id = %s", (data.data, user["id"]))
+    except Exception as exc:
+        print("Profile save failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"saved": True}
+
+
 class DeviceIntentRequest(BaseModel):
     text: str = Field(min_length=1, max_length=400)
     language: Literal["tg", "ru", "en"] = "tg"
     now: str = Field(default="", max_length=40)
+    apps: list[str] = Field(default_factory=list, max_length=400)
 
 
-_DEVICE_ACTIONS = ("alarm", "timer", "flashlight", "open_app", "open_settings", "volume")
+_DEVICE_ACTIONS = ("alarm", "timer", "flashlight", "open_app", "open_settings", "volume", "take_photo", "send_message", "read_sms", "brightness", "device_info")
 _SETTINGS_PAGES = ("wifi", "bluetooth", "display", "sound", "battery", "location", "airplane", "apps", "date", "accessibility", "main")
 
 
@@ -718,6 +755,21 @@ def _clean_device_action(obj) -> dict:
         if action == "open_settings":
             page = str(obj.get("page", "main")).lower()
             return {"action": "open_settings", "page": page if page in _SETTINGS_PAGES else "main"}
+        if action == "device_info":
+            return {"action": "device_info"}
+        if action == "brightness":
+            return {"action": "brightness", "level": max(1, min(100, int(obj.get("level", 50))))}
+        if action == "take_photo":
+            return {"action": "take_photo"}
+        if action == "read_sms":
+            return {"action": "read_sms"}
+        if action == "send_message":
+            text = " ".join(str(obj.get("text", "")).split())[:1000]
+            app = str(obj.get("app", "sms")).lower()
+            if not text:
+                return {"action": "none"}
+            return {"action": "send_message", "app": app if app in ("whatsapp", "telegram", "sms") else "sms",
+                    "to": " ".join(str(obj.get("to", "")).split())[:60], "text": text}
         if action == "volume":
             mode = str(obj.get("mode", "")).lower()
             if mode not in ("up", "down", "mute", "set"):
@@ -745,7 +797,14 @@ def device_intent(data: DeviceIntentRequest, http_request: Request, x_jarvis_tok
         '{"action":"open_app","name":"app name, use the usual Latin brand name such as WhatsApp, Telegram, YouTube, Camera, Chrome, Calculator"}\n'
         '{"action":"open_settings","page":"wifi|bluetooth|display|sound|battery|location|airplane|apps|date|accessibility|main"}\n'
         '{"action":"volume","mode":"up|down|mute|set","level":0-100}\n'
+        '{"action":"brightness","level":1-100}  (screen brightness)\n'
+        '{"action":"device_info"}  (the user asks about this phone: model, battery, storage, apps, settings)\n'
+        '{"action":"take_photo"}  (open the camera to take a picture)\n'
+        '{"action":"read_sms"}  (read the newest text messages aloud)\n'
+        '{"action":"send_message","app":"whatsapp|telegram|sms","to":"contact name or phone number, empty if not said","text":"the message to send, without the command words"}\n'
         '{"action":"none"}  when the message is NOT a request to do one of these things (a question, a chat, a general talk about alarms, anything else).\n'
+        + ("INSTALLED APPS on this phone (for open_app copy the name EXACTLY from this list when the app is there; the user may say it in "
+           "Tajik, Russian or English, e.g. Ватсап = WhatsApp): " + "; ".join(a[:40] for a in data.apps[:400]) + "\n" if data.apps else "") +
         "The user's local time now is " + (data.now or "unknown") + ". Work out exact values: 'wake me at 5 in the morning' = hour 5, minute 0; "
         "'at 5 in the evening' = 17; 'in 30 minutes' = now + 30 minutes; 'tomorrow at 7' = hour 7. "
         "Tajik hints: хезон / бедор кун = wake up, будилник = alarm, фонарик / чароғак = flashlight, таймер = timer, овоз = volume or sound, "
@@ -828,7 +887,7 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
         "ru": "Ты JARVIS — полезный и вежливый ИИ-помощник. Отвечай ясно, точно и по существу на русском. Для сложных вопросов рассуждай внимательно. Если не знаешь ответа, честно скажи об этом. Не утверждай, что искал информацию в интернете, если поиск фактически не выполнялся.",
         "en": "You are JARVIS, a helpful and polite AI assistant. Answer clearly, accurately, and directly in English. Think carefully about complex questions. If you do not know the answer, say so honestly. Do not claim to have searched the web unless a web search was actually performed.",
     }
-    assistant_name = " ".join(request.assistant_name.split())[:30] or "JARVIS"
+    assistant_name = " ".join(request.assistant_name.split())[:30] or "S.A.I"
     no_files = (" IMPORTANT: in this chat you cannot attach, send or generate images or files yourself. The app makes pictures separately when the user asks for one. "
                 "Never say that you sent or generated a picture or a file, never write Base64 data, file paths, image links or markdown images, and never invent photos. "
                 "If the user wants a picture, just say in one short sentence that you will make it, or answer the question in words. "
