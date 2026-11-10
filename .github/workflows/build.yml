@@ -1,4 +1,4 @@
-name: Build JARVIS APK
+name: Build S.A.I APK
 
 on:
   workflow_dispatch:
@@ -151,11 +151,21 @@ jobs:
           echo "APK CREATED: $APK_FILE"
           ls -lh "$APK_FILE"
 
+      - name: Rename APK to S.A.I
+        if: steps.build_apk.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_FILE="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          VERSION="$(grep -E '^version *=' buildozer.spec | head -n1 | sed -E 's/^version *= *//')"
+          mv "$APK_FILE" "bin/SAI-${VERSION:-0.1}.apk"
+          ls -lh bin/
+
       - name: Upload APK
         if: steps.build_apk.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-APK
+          name: SAI-APK
           path: bin/*.apk
           if-no-files-found: error
 
@@ -163,7 +173,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-build-log
+          name: SAI-build-log
           path: build.log
           if-no-files-found: ignore
 
@@ -171,6 +181,6 @@ jobs:
         if: steps.build_apk.outcome == 'failure'
         shell: bash
         run: |
-          echo "JARVIS APK BUILD FAILED"
-          echo "Download JARVIS-build-log to inspect the error."
+          echo "S.A.I APK BUILD FAILED"
+          echo "Download SAI-build-log to inspect the error."
           exit 1
