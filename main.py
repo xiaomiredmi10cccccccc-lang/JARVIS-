@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-JARVIS Android Assistant
+S.A.I Android Assistant
 Kivy + Buildozer compatible. Uses built-in urllib for network tasks.
 """
 from datetime import datetime
@@ -87,7 +87,7 @@ def android_available():
     return True
 
 class SpeechRecognizer(object):
-    """Records speech inside JARVIS and sends it to the protected STT endpoint."""
+    """Records speech inside the app and sends it to the protected STT endpoint."""
     MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
     def __init__(self, app):
@@ -150,8 +150,34 @@ class SpeechRecognizer(object):
             self._on_error = on_error
             self._language = lang if lang in ("tg", "ru", "en") else "tg"
 
+    def cancel(self):
+        """Stops recording and throws the clip away (nothing is sent to the server)."""
+        with self._lock:
+            recorder, path = self._recorder, self._audio_path
+            self._recorder = self._audio_path = self._on_text = self._on_error = None
+        if recorder is not None:
+            for fn in (recorder.stop, recorder.release):
+                try:
+                    fn()
+                except Exception:
+                    pass
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+
+    def amplitude(self):
+        recorder = self._recorder
+        if recorder is None:
+            return None
+        try:
+            return int(recorder.getMaxAmplitude())
+        except Exception:
+            return 0
+
     def stop(self):
-        """Stop recording, then transcribe asynchronously without leaving JARVIS."""
+        """Stop recording, then transcribe asynchronously without leaving the app."""
         with self._lock:
             recorder = self._recorder
             path = self._audio_path
@@ -209,7 +235,7 @@ class SpeechRecognizer(object):
             with open(path, "rb") as audio_file:
                 audio = audio_file.read()
 
-            boundary = "----JARVISBoundary" + uuid.uuid4().hex
+            boundary = "----SAIBoundary" + uuid.uuid4().hex
             parts = []
             parts.append(
                 ("--" + boundary + "\r\n"
@@ -1262,7 +1288,7 @@ def register_app_fonts():
     and symbols are drawn instead of empty boxes. Falls back silently to the built-in Roboto if the
     font files are not found (put JarvisSans-Regular.ttf / JarvisSans-Bold.ttf in assets/)."""
     folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd(),
-               "/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
+               "/storage/emulated/0/Download", "/storage/emulated/0/SAI", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
 
     def find(name):
         for folder in folders:
@@ -1332,7 +1358,7 @@ def emoji_pack():
     try:
         import struct
         folders = [os.path.dirname(os.path.abspath(__file__)), os.getcwd(),
-                   "/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
+                   "/storage/emulated/0/Download", "/storage/emulated/0/SAI", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
         for folder in folders:
             for path in (os.path.join(folder, "assets", "emoji.dat"), os.path.join(folder, "emoji.dat")):
                 if os.path.isfile(path):
@@ -1625,7 +1651,7 @@ def orb_texture(index):
     except Exception:
         pass
     # Folders the user can reach with a file manager (Pydroid keeps main.py in a private folder).
-    for shared in ("/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/storage/emulated/0",
+    for shared in ("/storage/emulated/0/Download", "/storage/emulated/0/SAI", "/storage/emulated/0/JARVIS", "/storage/emulated/0",
                    "/storage/emulated/0/Documents", "/storage/emulated/0/Pydroid3", "/sdcard/Download"):
         folders.append(shared)
     tried = []
@@ -1672,7 +1698,7 @@ def aura_layers():
             folders.append(app.directory)
     except Exception:
         pass
-    folders += ["/storage/emulated/0/Download", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
+    folders += ["/storage/emulated/0/Download", "/storage/emulated/0/SAI", "/storage/emulated/0/JARVIS", "/sdcard/Download"]
     layers = {}
     for name in AURA_LAYER_NAMES:
         for folder in folders:
@@ -3638,6 +3664,7 @@ class ProfileStore(object):
         self.note = ""            # short biography / collaboration note written by the AI
         self.note_time = ""
         self.note_count = 0       # how many facts the note was written from
+        self.on_save = None       # the app pushes the profile to the account when it changes
         try:
             with open(path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
@@ -3656,6 +3683,11 @@ class ProfileStore(object):
             os.replace(tmp, self.path)
         except Exception:
             pass
+        if self.on_save is not None:
+            try:
+                self.on_save()
+            except Exception:
+                pass
 
     def add(self, text):
         text = " ".join(str(text).split())[:220]
@@ -4270,7 +4302,7 @@ def http_json(url, timeout=12):
         ctx = ssl.create_default_context(cafile=certifi.where())
     except Exception:
         ctx = None
-    req = urllib.request.Request(url, headers={"User-Agent": "JARVIS-Android"})
+    req = urllib.request.Request(url, headers={"User-Agent": "SAI-Android"})
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -4821,7 +4853,11 @@ class TableBlock(BoxLayout):
 
 DEVICE_HINTS = ("будилник", "будильник", "alarm", "хезон", "бедор", "ҳушдор", "разбуди", "разбудить", "wake me", "wake up", "проснуть",
                 "таймер", "timer", "фонарик", "чароғак", "чирог", "flashlight", "torch", "вай-фай", "вайфай", "wi-fi", "wifi",
-                "блютус", "блютуз", "bluetooth", "овозро", "овозашро", "звук", "громкост", "volume", "mute", "bluetooth")
+                "блютус", "блютуз", "bluetooth", "овозро", "овозашро", "звук", "громкост", "volume", "mute", "bluetooth",
+                "акс гир", "расм гир", "сфотографируй", "сделай фото", "сделай снимок", "take a photo", "take a picture", "take photo",
+                "фирист", "отправь", "отправить сообщение", "send a message", "send message", "паёмҳоро хон", "паёмро хон", "прочитай сообщения",
+                "прочти сообщения", "read my messages", "read messages", "смс", "sms", "равшани", "яркость", "brightness",
+                "дар бораи телефон", "о телефоне", "про телефон", "about my phone", "phone info", "характеристик")
 DEVICE_OPENERS = ("кушо", "кушой", "бикуш", "открой", "запусти", "включи", "open ", "launch ", "start ", "иҷро кун", "оғоз кун")
 DEVICE_APPS = ("whatsapp", "telegram", "youtube", "instagram", "tiktok", "chrome", "камера", "camera", "калькулятор", "calculator",
                "gallery", "галерея", "галерея", "карт", "maps", "facebook", "viber", "imo", "gmail", "настройк", "танзимот", "settings",
@@ -4845,19 +4881,19 @@ DEVICE_MSG = {
            "open_app": "Барномаи «{a}» кушода мешавад.", "app_missing": "Барномаи «{a}» дар телефон ёфт нашуд.",
            "settings": "Танзимоти «{p}» кушода шуд.", "panel": "Android иҷозат намедиҳад, ки онро бесадо иваз кунам. Панели интихоб кушода шуд.",
            "vol_up": "Овоз баланд шуд.", "vol_down": "Овоз паст шуд.", "vol_mute": "Овоз хомӯш шуд.", "vol_set": "Овоз ба {n}% гузошта шуд.",
-           "fail": "Иҷро нашуд: {e}", "no_phone": "Ин амал танҳо дар телефони Android кор мекунад."},
+           "photo": "Камера кушода шуд. Акс гиред.", "msg_ready": "Паём барои «{a}» омода шуд. Дар он «Фиристодан»-ро пахш кунед.", "perm": "Иҷозат пурсида шуд. Иҷозат диҳед ва фармонро дубора гӯед.", "no_sms": "Паёми нав нест.", "sms_item": "Паём аз {f}: {b}.", "sms_head": "Паёмҳои охирин:", "bright": "Равшании экран {n}% шуд.", "perm_write": "Иҷозати «Тағйири танзимоти система»-ро диҳед ва фармонро дубора гӯед.", "sms_sent": "Паём ба «{a}» фиристода шуд.", "info": "Телефон: {model}, Android {ver}. Батарея: {bat}%. Барномаҳо: {apps}. Ҷойи озод: {free} ГБ. Равшании экран: {br}%.", "no_number": "Рақами «{a}» ёфт нашуд.", "fail": "Иҷро нашуд: {e}", "no_phone": "Ин амал танҳо дар телефони Android кор мекунад."},
     "ru": {"alarm": "Будильник установлен на {t}.", "alarm_ui": "Будильник на {t} подготовлен. Подтвердите его в приложении «Часы».",
            "timer": "Таймер установлен на {d}.", "flash_on": "Фонарик включён.", "flash_off": "Фонарик выключен.",
            "open_app": "Открываю «{a}».", "app_missing": "Приложение «{a}» на телефоне не найдено.",
            "settings": "Открыл настройки: {p}.", "panel": "Android не позволяет менять это без вашего участия. Открыл панель выбора.",
            "vol_up": "Громкость увеличена.", "vol_down": "Громкость уменьшена.", "vol_mute": "Звук выключен.", "vol_set": "Громкость {n}%.",
-           "fail": "Не удалось выполнить: {e}", "no_phone": "Это действие работает только на телефоне Android."},
+           "photo": "Камера открыта. Сделайте снимок.", "msg_ready": "Сообщение для «{a}» подготовлено. Нажмите в нём «Отправить».", "perm": "Запросил разрешение. Разрешите и повторите команду.", "no_sms": "Новых сообщений нет.", "sms_item": "Сообщение от {f}: {b}.", "sms_head": "Последние сообщения:", "bright": "Яркость экрана {n}%.", "perm_write": "Дайте разрешение «Изменение системных настроек» и повторите команду.", "sms_sent": "Сообщение отправлено: «{a}».", "info": "Телефон: {model}, Android {ver}. Батарея: {bat}%. Приложений: {apps}. Свободно: {free} ГБ. Яркость: {br}%.", "no_number": "Номер «{a}» не найден.", "fail": "Не удалось выполнить: {e}", "no_phone": "Это действие работает только на телефоне Android."},
     "en": {"alarm": "Alarm set for {t}.", "alarm_ui": "The alarm for {t} is ready. Confirm it in the Clock app.",
            "timer": "Timer set for {d}.", "flash_on": "Flashlight is on.", "flash_off": "Flashlight is off.",
            "open_app": "Opening “{a}”.", "app_missing": "The app “{a}” was not found on this phone.",
            "settings": "Opened settings: {p}.", "panel": "Android does not let me change this silently. I opened the selection panel.",
            "vol_up": "Volume up.", "vol_down": "Volume down.", "vol_mute": "Sound muted.", "vol_set": "Volume set to {n}%.",
-           "fail": "Could not do it: {e}", "no_phone": "This action works only on an Android phone."},
+           "photo": "Camera is open. Take the picture.", "msg_ready": "The message for “{a}” is ready. Tap Send in it.", "perm": "Permission requested. Allow it and say the command again.", "no_sms": "No new messages.", "sms_item": "Message from {f}: {b}.", "sms_head": "Latest messages:", "bright": "Screen brightness {n}%.", "perm_write": "Allow “Modify system settings” and say the command again.", "sms_sent": "Message sent to “{a}”.", "info": "Phone: {model}, Android {ver}. Battery: {bat}%. Apps: {apps}. Free space: {free} GB. Brightness: {br}%.", "no_number": "No number found for “{a}”.", "fail": "Could not do it: {e}", "no_phone": "This action works only on an Android phone."},
 }
 
 SETTINGS_ACTIONS = {"wifi": "android.settings.WIFI_SETTINGS", "bluetooth": "android.settings.BLUETOOTH_SETTINGS",
@@ -4967,6 +5003,42 @@ class LiveOverlay(FloatLayout):
 
 LIVE_STOP_WORDS = frozenset(("бас", "бас кун", "бас аст", "стоп", "хомӯш", "хомӯш шав", "қатъ кун", "тамом", "хватит", "стоп разговор",
                              "остановись", "достаточно", "выключи", "хватит разговаривать", "stop", "stop it", "enough", "that is all", "end"))
+
+
+_TRANSLIT = {"а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo", "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k",
+             "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts",
+             "ч": "ch", "ш": "sh", "щ": "sh", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya", "ғ": "g", "ӣ": "i",
+             "қ": "k", "ӯ": "u", "ҳ": "h", "ҷ": "j"}
+
+
+def _app_key(text):
+    out = "".join(_TRANSLIT.get(ch, ch) for ch in str(text).lower())
+    return re.sub(r"[^a-z0-9]", "", out)
+
+
+def match_installed_app(name, apps):
+    """Package of the installed app that best fits the spoken / written name (exact, prefix, part of the name, then similar sound)."""
+    import difflib
+    want = _app_key(name)
+    if not want or not apps:
+        return None
+    best, best_score = None, 0.0
+    for label, pkg in apps:
+        key = _app_key(label)
+        if not key:
+            continue
+        if key == want:
+            score = 3.0
+        elif len(want) >= 3 and (key.startswith(want) or want.startswith(key)) and len(key) >= 3:
+            score = 2.0 + min(len(key), len(want)) / max(len(key), len(want))
+        elif len(want) >= 3 and (want in key or (len(key) >= 4 and key in want)):
+            score = 1.5
+        else:
+            ratio = difflib.SequenceMatcher(None, want, key).ratio()
+            score = ratio if ratio >= 0.72 else 0.0
+        if score > best_score:
+            best, best_score = pkg, score
+    return best
 
 
 class GlassSheet(FloatLayout):
@@ -5807,6 +5879,8 @@ class JarvisApp(App):
         self._err_count = 0
         self.store = JsonStore(os.path.join(self.user_data_dir, "jarvis_settings.json"))
         self.profile = ProfileStore(os.path.join(self.user_data_dir, "user_profile.json"))
+        self.profile.on_save = self._profile_changed
+        self._profile_quiet = False
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
@@ -6495,6 +6569,74 @@ class JarvisApp(App):
         self.chats.deleted = [x for x in self.chats.deleted if x not in gone]
         self.chats.save()
 
+    def _profile_payload(self):
+        p = self.profile
+        return json.dumps({"facts": p.facts[-80:], "note": p.note, "note_time": p.note_time, "note_count": p.note_count,
+                           "profile_done": bool(self.profile_done)}, ensure_ascii=False)
+
+    def _profile_changed(self):
+        """The profile changed on this phone: a few seconds later it is saved in the account (name, birth date, 'about me')."""
+        if getattr(self, "_profile_quiet", False) or not getattr(self, "server_token", "").strip():
+            return
+        ev = getattr(self, "_profile_push_ev", None)
+        if ev is not None:
+            try:
+                ev.cancel()
+            except Exception:
+                pass
+        self._profile_push_ev = Clock.schedule_once(lambda dt: self._profile_push(), 3.0)
+
+    def _profile_push(self):
+        payload = self._profile_payload()
+
+        def job():
+            try:
+                self._json_call("POST", "/profile", {"data": payload}, timeout=40)
+            except Exception:
+                pass                                   # offline: it is sent at the next change or start
+        threading.Thread(target=job, daemon=True).start()
+
+    def _apply_remote_profile(self, raw):
+        """Takes the profile stored in the account; returns True when it had a name (so the questions are not asked again)."""
+        try:
+            data = json.loads(raw) if raw else {}
+        except Exception:
+            return False
+        facts = [f for f in data.get("facts", []) if isinstance(f, dict) and f.get("text")]
+        if not facts and not data.get("note"):
+            return False
+        self._profile_quiet = True
+        try:
+            self.profile.facts = facts[-80:]
+            self.profile.note = str(data.get("note", ""))
+            self.profile.note_time = str(data.get("note_time", ""))
+            self.profile.note_count = int(data.get("note_count", 0) or 0)
+            self.profile.save()
+        finally:
+            self._profile_quiet = False
+        first, _ = profile_person([f["text"] for f in facts])
+        if first or data.get("profile_done"):
+            self.profile_done = True
+            self.save_settings()
+        return bool(first)
+
+    def sync_profile(self):
+        """At start: a phone without a local profile gets it from the account; a profile only on the phone goes to the account."""
+        def job():
+            try:
+                result = self._json_call("GET", "/profile", None, timeout=40)
+                raw = str(result.get("data", ""))
+            except Exception:
+                return
+
+            def apply(dt):
+                if raw and not self.profile.facts:
+                    self._apply_remote_profile(raw)
+                elif not raw and self.profile.facts:
+                    self._profile_push()
+            Clock.schedule_once(apply, 0)
+        threading.Thread(target=job, daemon=True).start()
+
     def refresh_session(self):
         """At every start the sign-in token is exchanged for a fresh one, so an active user is not asked to sign in again."""
         def job():
@@ -6615,13 +6757,16 @@ class JarvisApp(App):
                 shown = "%02d:%02d" % (hour, minute)
 
                 def fire(skip):
-                    intent = Intent(AlarmClock.ACTION_SET_ALARM)
-                    intent.putExtra(AlarmClock.EXTRA_HOUR, hour)
-                    intent.putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                    Bundle = autoclass("android.os.Bundle")
+                    extras = Bundle()                                  # typed values: an int must arrive as an int
+                    extras.putInt(AlarmClock.EXTRA_HOUR, hour)
+                    extras.putInt(AlarmClock.EXTRA_MINUTES, minute)
                     if label:
-                        intent.putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                        extras.putString(AlarmClock.EXTRA_MESSAGE, label)
                     if skip:
-                        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
+                        extras.putBoolean(AlarmClock.EXTRA_SKIP_UI, True)
+                    intent = Intent(AlarmClock.ACTION_SET_ALARM)
+                    intent.putExtras(extras)
                     activity.startActivity(intent)
                 try:
                     fire(True)
@@ -6635,12 +6780,15 @@ class JarvisApp(App):
                 seconds = int(act.get("seconds", 0))
 
                 def fire_timer(skip):
-                    intent = Intent(AlarmClock.ACTION_SET_TIMER)
-                    intent.putExtra(AlarmClock.EXTRA_LENGTH, seconds)
+                    Bundle = autoclass("android.os.Bundle")
+                    extras = Bundle()
+                    extras.putInt(AlarmClock.EXTRA_LENGTH, seconds)
                     if act.get("label"):
-                        intent.putExtra(AlarmClock.EXTRA_MESSAGE, str(act.get("label")))
+                        extras.putString(AlarmClock.EXTRA_MESSAGE, str(act.get("label")))
                     if skip:
-                        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
+                        extras.putBoolean(AlarmClock.EXTRA_SKIP_UI, True)
+                    intent = Intent(AlarmClock.ACTION_SET_TIMER)
+                    intent.putExtras(extras)
                     activity.startActivity(intent)
                 try:
                     fire_timer(True)
@@ -6690,34 +6838,56 @@ class JarvisApp(App):
                 level = max(0, min(100, int(act.get("level", 50))))
                 audio.setStreamVolume(stream, int(round(audio.getStreamMaxVolume(stream) * level / 100.0)), 1)
                 return M["vol_set"].format(n=level)
+            if kind == "brightness":
+                SettingsSystem = autoclass("android.provider.Settings$System")
+                if not SettingsSystem.canWrite(activity):
+                    Settings = autoclass("android.provider.Settings")
+                    Uri = autoclass("android.net.Uri")
+                    perm_intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:" + str(activity.getPackageName())))
+                    activity.startActivity(perm_intent)
+                    return M["perm_write"]
+                level = max(1, min(100, int(act.get("level", 50))))
+                resolver = activity.getContentResolver()
+                SettingsSystem.putInt(resolver, "screen_brightness_mode", 0)
+                SettingsSystem.putInt(resolver, "screen_brightness", int(round(level * 255 / 100.0)))
+                return M["bright"].format(n=level)
+            if kind == "device_info":
+                return self._device_report(M, activity)
+            if kind == "take_photo":
+                MediaStore = autoclass("android.provider.MediaStore")
+                activity.startActivity(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
+                return M["photo"]
+            if kind == "read_sms":
+                if not self._perm_ok("android.permission.READ_SMS"):
+                    return M["perm"]
+                Uri = autoclass("android.net.Uri")
+                cursor = activity.getContentResolver().query(Uri.parse("content://sms/inbox"), None, None, None, "date DESC")
+                items = []
+                if cursor is not None:
+                    ia, ib = cursor.getColumnIndex("address"), cursor.getColumnIndex("body")
+                    while cursor.moveToNext() and len(items) < 4:
+                        items.append((str(cursor.getString(ia) or "?"), " ".join(str(cursor.getString(ib) or "").split())[:300]))
+                    cursor.close()
+                if not items:
+                    return M["no_sms"]
+                return M["sms_head"] + "\n" + "\n".join(M["sms_item"].format(f=self._contact_name(a), b=b) for a, b in items)
+            if kind == "send_message":
+                return self._send_message_action(act, M, activity, Intent)
             if kind == "open_app":
                 name = str(act.get("name", "")).strip()
-                low = name.lower()
                 pm = activity.getPackageManager()
-                packages = []
-                for key, pkgs in APP_ALIASES.items():
-                    if key in low:
-                        packages += list(pkgs)
-                launch = None
-                for pkg in packages:
-                    launch = pm.getLaunchIntentForPackage(pkg)
-                    if launch is not None:
-                        break
-                if launch is None:                          # search the installed apps by their label
-                    main = Intent(Intent.ACTION_MAIN)
-                    main.addCategory(Intent.CATEGORY_LAUNCHER)
-                    infos = pm.queryIntentActivities(main, 0)
-                    best = None
-                    for i in range(infos.size()):
-                        info = infos.get(i)
-                        label = str(info.loadLabel(pm).toString()).lower()
-                        pkg = str(info.activityInfo.packageName)
-                        if label == low or (low and (low in label or label in low) and len(label) > 2):
-                            best = pkg
-                            if label == low:
-                                break
-                    if best:
-                        launch = pm.getLaunchIntentForPackage(best)
+                pkg = match_installed_app(name, self.installed_apps())
+                if not pkg:
+                    low = name.lower()
+                    for key, pkgs in APP_ALIASES.items():
+                        if key in low:
+                            for cand in pkgs:
+                                if pm.getLaunchIntentForPackage(cand) is not None:
+                                    pkg = cand
+                                    break
+                        if pkg:
+                            break
+                launch = pm.getLaunchIntentForPackage(pkg) if pkg else None
                 if launch is None:
                     return M["app_missing"].format(a=name)
                 activity.startActivity(launch)
@@ -6727,6 +6897,162 @@ class JarvisApp(App):
             return M["fail"].format(e=str(exc)[:120])
         return M["fail"].format(e=kind)
 
+    def _perm_ok(self, permission):
+        """True when the permission is already given; otherwise the system dialog is shown and False is returned."""
+        try:
+            from android.permissions import check_permission, request_permissions
+            if check_permission(permission):
+                return True
+            request_permissions([permission])
+            return False
+        except Exception:
+            return True
+
+    def _contact_name(self, address):
+        """The contact's name for a phone number (or the number itself when there is no such contact / no permission)."""
+        try:
+            from android.permissions import check_permission
+            if not check_permission("android.permission.READ_CONTACTS"):
+                return address
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            PhoneLookup = autoclass("android.provider.ContactsContract$PhoneLookup")
+            Uri = autoclass("android.net.Uri")
+            uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(address))
+            cursor = activity.getContentResolver().query(uri, ["display_name"], None, None, None)
+            name = address
+            if cursor is not None:
+                if cursor.moveToFirst():
+                    name = str(cursor.getString(0) or address)
+                cursor.close()
+            return name
+        except Exception:
+            return address
+
+    def _contact_number(self, name):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Phone = autoclass("android.provider.ContactsContract$CommonDataKinds$Phone")
+            cursor = activity.getContentResolver().query(Phone.CONTENT_URI, ["display_name", "data1"],
+                                                         "display_name LIKE ?", ["%" + name + "%"], None)
+            number = ""
+            if cursor is not None:
+                if cursor.moveToFirst():
+                    number = str(cursor.getString(1) or "")
+                cursor.close()
+            return number
+        except Exception:
+            save_crash("Contact lookup failed:\n" + traceback.format_exc())
+            return ""
+
+    def _send_message_action(self, act, M, activity, Intent):
+        """Prepares the message in WhatsApp / Telegram / SMS with the right contact; the user taps Send (Android does not allow more)."""
+        from urllib.parse import quote
+        from jnius import autoclass
+        Uri = autoclass("android.net.Uri")
+        app, text, to = str(act.get("app", "sms")), str(act.get("text", "")), str(act.get("to", "")).strip()
+        digits = re.sub(r"[^0-9+]", "", to)
+        number = digits if len(re.sub(r"\D", "", digits)) >= 7 else ""
+        if to and not number:
+            from android.permissions import check_permission
+            if not check_permission("android.permission.READ_CONTACTS"):
+                self._perm_ok("android.permission.READ_CONTACTS")
+                return M["perm"]
+            number = self._contact_number(to)
+        clean = re.sub(r"\D", "", number)
+        label = {"whatsapp": "WhatsApp", "telegram": "Telegram", "sms": "SMS"}[app]
+        if app == "sms" and number:
+            if not self._perm_ok("android.permission.SEND_SMS"):
+                return M["perm"]
+            SmsManager = autoclass("android.telephony.SmsManager")
+            manager = SmsManager.getDefault()
+            parts = manager.divideMessage(text)
+            if parts.size() > 1:
+                manager.sendMultipartTextMessage(number, None, parts, None, None)
+            else:
+                manager.sendTextMessage(number, None, text, None, None)
+            return M["sms_sent"].format(a=(to or number))
+        if to and not number and app == "sms":
+            return M["no_number"].format(a=to)
+        if app == "sms":
+            intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + (number or "")))
+            intent.putExtra("sms_body", text)
+            activity.startActivity(intent)
+            return M["msg_ready"].format(a=(to or label))
+        if app == "whatsapp" and clean:
+            intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/%s?text=%s" % (clean, quote(text))))
+            intent.setPackage("com.whatsapp")
+            try:
+                activity.startActivity(intent)
+            except Exception:
+                intent.setPackage("com.whatsapp.w4b")
+                activity.startActivity(intent)
+            return M["msg_ready"].format(a=(to or label))
+        share = Intent(Intent.ACTION_SEND)
+        share.setType("text/plain")
+        share.putExtra(Intent.EXTRA_TEXT, text)
+        share.setPackage("com.whatsapp" if app == "whatsapp" else "org.telegram.messenger")
+        activity.startActivity(share)
+        return M["msg_ready"].format(a=label + (" → " + to if to else ""))
+
+    def installed_apps(self, refresh=False):
+        """[(label, package)] of every app that has a launcher icon; cached after the first call."""
+        cache = getattr(self, "_apps_cache", None)
+        if cache and not refresh:
+            return cache
+        apps = []
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            pm = activity.getPackageManager()
+            main = Intent(Intent.ACTION_MAIN)
+            main.addCategory(Intent.CATEGORY_LAUNCHER)
+            infos = pm.queryIntentActivities(main, 0)
+            seen = set()
+            for i in range(infos.size()):
+                info = infos.get(i)
+                pkg = str(info.activityInfo.packageName)
+                if pkg in seen or pkg == str(activity.getPackageName()):
+                    continue
+                seen.add(pkg)
+                apps.append((str(info.loadLabel(pm).toString()), pkg))
+        except Exception:
+            save_crash("App list failed:\n" + traceback.format_exc())
+        if apps:
+            self._apps_cache = apps
+        return apps
+
+    def _device_report(self, M, activity):
+        from jnius import autoclass
+        Build = autoclass("android.os.Build")
+        Version = autoclass("android.os.Build$VERSION")
+        bat = -1
+        try:
+            IntentFilter = autoclass("android.content.IntentFilter")
+            status = activity.registerReceiver(None, IntentFilter("android.intent.action.BATTERY_CHANGED"))
+            level, scale = status.getIntExtra("level", -1), status.getIntExtra("scale", 100)
+            bat = int(level * 100 / max(1, scale))
+        except Exception:
+            pass
+        free = 0.0
+        try:
+            StatFs = autoclass("android.os.StatFs")
+            st = StatFs(str(self.user_data_dir))
+            free = st.getAvailableBytes() / (1024.0 ** 3)
+        except Exception:
+            pass
+        br = -1
+        try:
+            br = int(round(autoclass("android.provider.Settings$System").getInt(activity.getContentResolver(), "screen_brightness") * 100 / 255.0))
+        except Exception:
+            pass
+        names = ", ".join(a[0] for a in self.installed_apps()[:40])
+        text = M["info"].format(model=str(Build.MANUFACTURER) + " " + str(Build.MODEL), ver=str(Version.RELEASE), bat=bat,
+                                apps=len(self.installed_apps()), free="%.1f" % free, br=br)
+        return text + ("\n" + names if names else "")
+
     def _start_device_intent(self, chat_id, text, history):
         """The server works out what the phone should do (alarm, flashlight, app...); anything else goes on as a normal chat."""
         self.set_orb_state("thinking")
@@ -6735,7 +7061,8 @@ class JarvisApp(App):
 
         def job():
             try:
-                act = self._json_call("POST", "/device/intent", {"text": text[:400], "language": self._lang_code(), "now": now}, timeout=30)
+                act = self._json_call("POST", "/device/intent", {"text": text[:400], "language": self._lang_code(), "now": now,
+                                                                  "apps": [a[0] for a in self.installed_apps()][:300]}, timeout=30)
             except Exception:
                 act = None
                 save_crash("Device intent request failed:\n" + traceback.format_exc())
@@ -7222,7 +7549,7 @@ class JarvisApp(App):
 
     def _upload_attachment(self, chat_id, filename, mime, raw, prompt, path=None):
         import ssl
-        boundary = "----JARVIS" + uuid.uuid4().hex
+        boundary = "----SAI" + uuid.uuid4().hex
         def field(name, value):
             return ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n").encode("utf-8")
         safe_name = os.path.basename(filename).replace('"', "_")
@@ -7301,7 +7628,7 @@ class JarvisApp(App):
         self.busy_start("image" if message == self.t("media_image") else "think")
 
     def _multipart(self, fields, file_part=None):
-        boundary = "----JARVIS" + uuid.uuid4().hex
+        boundary = "----SAI" + uuid.uuid4().hex
         body = b""
         for key, value in fields.items():
             body += ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + key + "\"\r\n\r\n" + str(value) + "\r\n").encode("utf-8")
@@ -7404,7 +7731,7 @@ class JarvisApp(App):
             count = 0
             for item in results[:4]:
                 try:
-                    req = urllib.request.Request(item["thumb"], headers={"User-Agent": "JARVIS-app/1.0"})
+                    req = urllib.request.Request(item["thumb"], headers={"User-Agent": "SAI-app/1.0"})
                     with urllib.request.urlopen(req, timeout=25, context=ctx) as response:
                         blob = response.read(6 * 1024 * 1024)
                     ext = ".png" if blob[:4] == b"\x89PNG" else ".jpg"
@@ -7572,7 +7899,7 @@ class JarvisApp(App):
             self._media_notice(self.t("copy_failed"))
 
     def save_media(self, path):
-        """Copy a generated picture/file to the phone's gallery (Pictures/JARVIS) or Downloads (Download/JARVIS)."""
+        """Copy a generated picture/file to the phone's gallery (Pictures/SAI) or Downloads (Download/SAI)."""
         import mimetypes
         name = os.path.basename(path).split("__", 1)[-1]
         mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -7665,12 +7992,14 @@ class JarvisApp(App):
 
     # ------------------------------------------------------------------ Tajik voice: short pieces, text first
     def _tajik_stream(self, text):
+        self._last_spoken = text
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
         gen = self._tajik_gen
         chunks = split_for_speech(strip_media(text)[:3500])
         threading.Thread(target=self._stream_chunks, args=(chunks, self._tajik_speech_path, gen, None), daemon=True).start()
 
     def _edge_stream(self, text, force=False):
+        self._last_spoken = text
         """Long ru/en text: read piece by piece (sentences), the next piece is made while the current one is spoken."""
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
         gen = self._tajik_gen
@@ -7973,10 +8302,22 @@ class JarvisApp(App):
                 if attempt == 1:
                     continue
 
+        remote_profile = ""
+        if result and result.get("access_token"):
+            try:                                   # a returning user: name, birth date and the 'about me' note come from the account
+                req = urllib.request.Request(SERVER_BASE + "/profile", method="GET",
+                                             headers={"Authorization": "Bearer " + str(result["access_token"])})
+                with urllib.request.urlopen(req, timeout=40, context=ctx) as response:
+                    remote_profile = str(json.loads(response.read().decode("utf-8")).get("data", ""))
+            except Exception:
+                remote_profile = ""
+
         def done(dt):
             state["busy"] = False
             if result and result.get("access_token"):
                 self.server_token = str(result["access_token"])
+                if remote_profile:
+                    self._apply_remote_profile(remote_profile)
                 self.username = str(result.get("username", username))
                 self.onboarded = True
                 self._ob_active = False
@@ -8536,6 +8877,7 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self._voice_ready(), 0)
         if (not self.speak_enabled and not force) or not answer:
             return
+        self._last_spoken = answer
         self._live_hold_until = time.monotonic() + 1.0 + len(answer) * 0.075      # the phone voice has no "finished" signal
         try:
             self.tts.stop()
@@ -8630,6 +8972,7 @@ class JarvisApp(App):
             Clock.schedule_once(fallback, 0)
 
     def _start_synced_answer(self, chat_id, answer, text, path, words):
+        self._last_spoken = answer
         """Start the audio, then reveal the answer word by word at the spoken positions."""
         self.chats.add_message(chat_id, "jarvis", answer)
         if self.app_paused:                        # the app was left while the voice was being made: only the notification
@@ -9019,6 +9362,7 @@ class JarvisApp(App):
                 lambda err: Clock.schedule_once(lambda dt: self.on_speech_error(err), 0))
             # Keep recording bounded; the mic button can stop it earlier.
             self._mic_timeout = Clock.schedule_once(lambda dt: self.stop_listening(), 30.0)
+            self._vad_begin()
         except VoiceUnavailable as exc:
             self.set_orb_state("idle")
             if str(exc) == "server_token_missing":
@@ -9031,7 +9375,71 @@ class JarvisApp(App):
             save_crash("start_listening failed:\n" + traceback.format_exc())
             self.show_response(self.t("stt_failed"))
 
+    def _vad_begin(self):
+        """Listens to the microphone level: the recording ends by itself when the user stops speaking."""
+        self._vad_end()
+        self._vad = {"t0": time.monotonic(), "base": [], "thr": 2500, "speech": False, "hi": 0, "quiet": None}
+        self._vad_ev = Clock.schedule_interval(self._vad_tick, 0.1)
+
+    def _vad_end(self):
+        ev = getattr(self, "_vad_ev", None)
+        if ev is not None:
+            try:
+                ev.cancel()
+            except Exception:
+                pass
+        self._vad_ev = None
+
+    def _vad_tick(self, dt):
+        if self.orb_state != "listening":
+            self._vad_end()
+            return False
+        amp = self.speech.amplitude()
+        if amp is None:
+            self._vad_end()
+            return False
+        v = self._vad
+        now = time.monotonic()
+        elapsed = now - v["t0"]
+        if elapsed < 0.6:                                   # the first moments set what "quiet" sounds like here
+            v["base"].append(amp)
+            if elapsed >= 0.5 and v["base"]:
+                v["thr"] = max(2200, 2.6 * (sum(v["base"]) / len(v["base"])))
+            return True
+        if amp > v["thr"]:
+            v["hi"] += 1
+            v["quiet"] = None
+            if v["hi"] >= 2:
+                v["speech"] = True
+        else:
+            v["hi"] = 0
+            if v["speech"]:
+                if v["quiet"] is None:
+                    v["quiet"] = now
+                elif now - v["quiet"] >= 1.3:               # silence after speech: the sentence is finished
+                    self._vad_end()
+                    self.stop_listening()
+                    return False
+        if not v["speech"] and elapsed > 9.0:               # nobody spoke: nothing is sent
+            self._vad_end()
+            timeout = getattr(self, "_mic_timeout", None)
+            if timeout is not None:
+                try:
+                    timeout.cancel()
+                except Exception:
+                    pass
+                self._mic_timeout = None
+            self.speech.cancel()
+            self.set_orb_state("idle")
+            if self.live_mode:
+                self._live_fail += 1
+                if self._live_fail >= 3:
+                    self.show_response(self.toggle_live(False))
+            return False
+        return True
+
     def stop_listening(self):
+        self._vad_end()
         timeout = getattr(self, "_mic_timeout", None)
         if timeout is not None:
             try:
@@ -9047,6 +9455,16 @@ class JarvisApp(App):
             self.set_orb_state("idle")
             save_crash("stop_listening failed:\n" + traceback.format_exc())
             self.show_response(self.t("stt_failed"))
+
+    def _is_echo(self, words):
+        """True when the recognised words are (a part of) the assistant's last spoken answer, i.e. its own voice."""
+        last = " ".join(re.findall(r"\w+", str(getattr(self, "_last_spoken", "")).lower()))
+        if not last or len(words.split()) < 2:
+            return False
+        if words in last or last in words:
+            return True
+        import difflib
+        return difflib.SequenceMatcher(None, words, last[:max(len(words) * 2, 80)]).ratio() > 0.62
 
     def toggle_live(self, on=None):
         """Live conversation: after every answer the microphone opens again by itself, until the user says stop."""
@@ -9119,6 +9537,9 @@ class JarvisApp(App):
             if words in LIVE_STOP_WORDS:
                 self.busy_stop()
                 self.show_response(self.toggle_live(False))
+                return
+            if words and self._is_echo(words):
+                self.busy_stop()                              # the microphone heard the assistant's own voice
                 return
             if not words:
                 self.busy_stop()
@@ -9525,6 +9946,7 @@ class JarvisApp(App):
         if self.server_token.strip():
             Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
             Clock.schedule_once(lambda dt: self.refresh_session(), 5.0)
+            Clock.schedule_once(lambda dt: self.sync_profile(), 6.0)
         if not self.onboarded or not self.server_token.strip():
             Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
         else:
