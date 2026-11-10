@@ -586,6 +586,7 @@ TEXTS = {
         "pf_male": "Мард",
         "pf_female": "Зан",
         "pf_skip": "Баъдтар",
+        "device_srv_fail": "Сервер фармони телефонро қабул накард. Хато:",
         "wake_reply": "Ҳа, гӯш мекунам.",
         "live_end": "Анҷом",
         "live_listen": "Гӯш мекунам…",
@@ -828,6 +829,7 @@ TEXTS = {
         "pf_male": "Мужской",
         "pf_female": "Женский",
         "pf_skip": "Позже",
+        "device_srv_fail": "Сервер не принял команду для телефона. Ошибка:",
         "wake_reply": "Да, слушаю.",
         "live_end": "Завершить",
         "live_listen": "Слушаю…",
@@ -1070,6 +1072,7 @@ TEXTS = {
         "pf_male": "Male",
         "pf_female": "Female",
         "pf_skip": "Later",
+        "device_srv_fail": "The server did not accept the phone command. Error:",
         "wake_reply": "Yes, I am listening.",
         "live_end": "End",
         "live_listen": "Listening…",
@@ -4851,18 +4854,41 @@ class TableBlock(BoxLayout):
         self.height = scroll.height
 
 
+# Silent SMS sending needs the SEND_SMS permission, which Play Protect / phone security often blocks for apps installed by hand.
+# False: the message is prepared in the SMS app (the user taps Send). To turn it on: True here and SEND_SMS in buildozer.spec.
+SMS_DIRECT_SEND = False
+CALL_DIRECT = False      # True (and CALL_PHONE in buildozer.spec): the call starts at once; False: the dialer opens with the number
+
 DEVICE_HINTS = ("будилник", "будильник", "alarm", "хезон", "бедор", "ҳушдор", "разбуди", "разбудить", "wake me", "wake up", "проснуть",
                 "таймер", "timer", "фонарик", "чароғак", "чирог", "flashlight", "torch", "вай-фай", "вайфай", "wi-fi", "wifi",
                 "блютус", "блютуз", "bluetooth", "овозро", "овозашро", "звук", "громкост", "volume", "mute", "bluetooth",
                 "акс гир", "расм гир", "сфотографируй", "сделай фото", "сделай снимок", "take a photo", "take a picture", "take photo",
                 "фирист", "отправь", "отправить сообщение", "send a message", "send message", "паёмҳоро хон", "паёмро хон", "прочитай сообщения",
                 "прочти сообщения", "read my messages", "read messages", "смс", "sms", "равшани", "яркость", "brightness",
-                "дар бораи телефон", "о телефоне", "про телефон", "about my phone", "phone info", "характеристик")
+                "занг зан", "занг", "позвони", "позвонить", "call ", "дар бораи телефон", "о телефоне", "про телефон", "about my phone", "phone info", "характеристик")
 DEVICE_OPENERS = ("кушо", "кушой", "бикуш", "открой", "запусти", "включи", "open ", "launch ", "start ", "иҷро кун", "оғоз кун")
 DEVICE_APPS = ("whatsapp", "telegram", "youtube", "instagram", "tiktok", "chrome", "камера", "camera", "калькулятор", "calculator",
                "gallery", "галерея", "галерея", "карт", "maps", "facebook", "viber", "imo", "gmail", "настройк", "танзимот", "settings",
                "музык", "music", "spotify", "контакт", "contacts", "ватсап", "вацап", "ватсапп", "телеграм", "ютуб", "инстаграм", "тикток",
                "хром", "вайбер", "джимейл", "мусиқ", "тамос", "харита", "акс", "расм", "соат")
+
+
+PLAN_HINTS = ("пагоҳ", "саҳар", "барвақт", "дер", "дарс", "имтиҳон", "вохӯрӣ", "кор дорам", "рафтан", "парвоз", "ҳавопаймо", "қатор", "бояд",
+              "завтра", "утром", "рано", "урок", "занятия", "лекци", "экзамен", "встреч", "собеседован", "рейс", "поезд", "нужно", "надо", "проспать",
+              "tomorrow", "early", "class", "lesson", "exam", "meeting", "interview", "flight", "train", "i have to", "i need to", "oversleep",
+              "бедор", "хоб", "спать", "sleep")
+
+
+PROMISE_RE = re.compile(r"(тайёр карда (мешавад|шуда истодааст|истодаам)|дар ҳоли тайёр|ҳоло тайёр|вақте тайёр шуд|баъд аз тайёр шудан|хабар медиҳам|"
+                        r"хабар дода мешавад|нишон дода мешавад|готовится|подготавлива|будет готов|как только будет готов|сообщу|уведомлю|"
+                        r"покажу, когда|is being (prepared|generated|created)|will (notify|let you know|show)|once (it'?s )?ready|when (it'?s )?ready)",
+                        re.IGNORECASE)
+
+
+def looks_like_plan(text):
+    """A statement about plans or duties (not a command): the server may still find a phone action behind it (an alarm, a timer...)."""
+    low = " ".join(str(text).lower().split())
+    return 8 <= len(low) <= 300 and any(h in low for h in PLAN_HINTS)
 
 
 def looks_like_device_command(text):
@@ -4872,7 +4898,8 @@ def looks_like_device_command(text):
     if any(h in low for h in DEVICE_HINTS):
         return True
     words = low.split()
-    return len(words) <= 8 and any(o in low for o in DEVICE_OPENERS) and any(a in low for a in DEVICE_APPS)
+    # a short "open <anything>" goes to the server too: it knows the installed apps and says honestly when the app is not there
+    return len(words) <= 6 and any(o in low for o in DEVICE_OPENERS)
 
 
 DEVICE_MSG = {
@@ -4881,19 +4908,19 @@ DEVICE_MSG = {
            "open_app": "Барномаи «{a}» кушода мешавад.", "app_missing": "Барномаи «{a}» дар телефон ёфт нашуд.",
            "settings": "Танзимоти «{p}» кушода шуд.", "panel": "Android иҷозат намедиҳад, ки онро бесадо иваз кунам. Панели интихоб кушода шуд.",
            "vol_up": "Овоз баланд шуд.", "vol_down": "Овоз паст шуд.", "vol_mute": "Овоз хомӯш шуд.", "vol_set": "Овоз ба {n}% гузошта шуд.",
-           "photo": "Камера кушода шуд. Акс гиред.", "msg_ready": "Паём барои «{a}» омода шуд. Дар он «Фиристодан»-ро пахш кунед.", "perm": "Иҷозат пурсида шуд. Иҷозат диҳед ва фармонро дубора гӯед.", "no_sms": "Паёми нав нест.", "sms_item": "Паём аз {f}: {b}.", "sms_head": "Паёмҳои охирин:", "bright": "Равшании экран {n}% шуд.", "perm_write": "Иҷозати «Тағйири танзимоти система»-ро диҳед ва фармонро дубора гӯед.", "sms_sent": "Паём ба «{a}» фиристода шуд.", "info": "Телефон: {model}, Android {ver}. Батарея: {bat}%. Барномаҳо: {apps}. Ҷойи озод: {free} ГБ. Равшании экран: {br}%.", "no_number": "Рақами «{a}» ёфт нашуд.", "fail": "Иҷро нашуд: {e}", "no_phone": "Ин амал танҳо дар телефони Android кор мекунад."},
+           "photo": "Камера кушода шуд. Акс гиред.", "msg_ready": "Паём барои «{a}» омода шуд. Дар он «Фиристодан»-ро пахш кунед.", "perm": "Иҷозат пурсида шуд. Иҷозат диҳед ва фармонро дубора гӯед.", "no_sms": "Паёми нав нест.", "sms_item": "Паём аз {f}: {b}.", "sms_head": "Паёмҳои охирин:", "bright": "Равшании экран {n}% шуд.", "perm_write": "Иҷозати «Тағйири танзимоти система»-ро диҳед ва фармонро дубора гӯед.", "sms_sent": "Паём ба «{a}» фиристода шуд.", "info": "Телефон: {model}, Android {ver}. Батарея: {bat}%. Барномаҳо: {apps}. Ҷойи озод: {free} ГБ. Равшании экран: {br}%.", "no_number": "Рақами «{a}» ёфт нашуд.", "calling": "Ба «{a}» занг мезанам.", "dial": "Рақами «{a}» дар тамос омода шуд. Тугмаи занг пахш кунед.", "fail": "Иҷро нашуд: {e}", "no_phone": "Ин амал танҳо дар телефони Android кор мекунад."},
     "ru": {"alarm": "Будильник установлен на {t}.", "alarm_ui": "Будильник на {t} подготовлен. Подтвердите его в приложении «Часы».",
            "timer": "Таймер установлен на {d}.", "flash_on": "Фонарик включён.", "flash_off": "Фонарик выключен.",
            "open_app": "Открываю «{a}».", "app_missing": "Приложение «{a}» на телефоне не найдено.",
            "settings": "Открыл настройки: {p}.", "panel": "Android не позволяет менять это без вашего участия. Открыл панель выбора.",
            "vol_up": "Громкость увеличена.", "vol_down": "Громкость уменьшена.", "vol_mute": "Звук выключен.", "vol_set": "Громкость {n}%.",
-           "photo": "Камера открыта. Сделайте снимок.", "msg_ready": "Сообщение для «{a}» подготовлено. Нажмите в нём «Отправить».", "perm": "Запросил разрешение. Разрешите и повторите команду.", "no_sms": "Новых сообщений нет.", "sms_item": "Сообщение от {f}: {b}.", "sms_head": "Последние сообщения:", "bright": "Яркость экрана {n}%.", "perm_write": "Дайте разрешение «Изменение системных настроек» и повторите команду.", "sms_sent": "Сообщение отправлено: «{a}».", "info": "Телефон: {model}, Android {ver}. Батарея: {bat}%. Приложений: {apps}. Свободно: {free} ГБ. Яркость: {br}%.", "no_number": "Номер «{a}» не найден.", "fail": "Не удалось выполнить: {e}", "no_phone": "Это действие работает только на телефоне Android."},
+           "photo": "Камера открыта. Сделайте снимок.", "msg_ready": "Сообщение для «{a}» подготовлено. Нажмите в нём «Отправить».", "perm": "Запросил разрешение. Разрешите и повторите команду.", "no_sms": "Новых сообщений нет.", "sms_item": "Сообщение от {f}: {b}.", "sms_head": "Последние сообщения:", "bright": "Яркость экрана {n}%.", "perm_write": "Дайте разрешение «Изменение системных настроек» и повторите команду.", "sms_sent": "Сообщение отправлено: «{a}».", "info": "Телефон: {model}, Android {ver}. Батарея: {bat}%. Приложений: {apps}. Свободно: {free} ГБ. Яркость: {br}%.", "no_number": "Номер «{a}» не найден.", "calling": "Звоню: «{a}».", "dial": "Номер «{a}» набран. Нажмите кнопку вызова.", "fail": "Не удалось выполнить: {e}", "no_phone": "Это действие работает только на телефоне Android."},
     "en": {"alarm": "Alarm set for {t}.", "alarm_ui": "The alarm for {t} is ready. Confirm it in the Clock app.",
            "timer": "Timer set for {d}.", "flash_on": "Flashlight is on.", "flash_off": "Flashlight is off.",
            "open_app": "Opening “{a}”.", "app_missing": "The app “{a}” was not found on this phone.",
            "settings": "Opened settings: {p}.", "panel": "Android does not let me change this silently. I opened the selection panel.",
            "vol_up": "Volume up.", "vol_down": "Volume down.", "vol_mute": "Sound muted.", "vol_set": "Volume set to {n}%.",
-           "photo": "Camera is open. Take the picture.", "msg_ready": "The message for “{a}” is ready. Tap Send in it.", "perm": "Permission requested. Allow it and say the command again.", "no_sms": "No new messages.", "sms_item": "Message from {f}: {b}.", "sms_head": "Latest messages:", "bright": "Screen brightness {n}%.", "perm_write": "Allow “Modify system settings” and say the command again.", "sms_sent": "Message sent to “{a}”.", "info": "Phone: {model}, Android {ver}. Battery: {bat}%. Apps: {apps}. Free space: {free} GB. Brightness: {br}%.", "no_number": "No number found for “{a}”.", "fail": "Could not do it: {e}", "no_phone": "This action works only on an Android phone."},
+           "photo": "Camera is open. Take the picture.", "msg_ready": "The message for “{a}” is ready. Tap Send in it.", "perm": "Permission requested. Allow it and say the command again.", "no_sms": "No new messages.", "sms_item": "Message from {f}: {b}.", "sms_head": "Latest messages:", "bright": "Screen brightness {n}%.", "perm_write": "Allow “Modify system settings” and say the command again.", "sms_sent": "Message sent to “{a}”.", "info": "Phone: {model}, Android {ver}. Battery: {bat}%. Apps: {apps}. Free space: {free} GB. Brightness: {br}%.", "no_number": "No number found for “{a}”.", "calling": "Calling “{a}”.", "dial": "The number for “{a}” is in the dialer. Tap the call button.", "fail": "Could not do it: {e}", "no_phone": "This action works only on an Android phone."},
 }
 
 SETTINGS_ACTIONS = {"wifi": "android.settings.WIFI_SETTINGS", "bluetooth": "android.settings.BLUETOOTH_SETTINGS",
@@ -6873,6 +6900,24 @@ class JarvisApp(App):
                 return M["sms_head"] + "\n" + "\n".join(M["sms_item"].format(f=self._contact_name(a), b=b) for a, b in items)
             if kind == "send_message":
                 return self._send_message_action(act, M, activity, Intent)
+            if kind == "call":
+                Uri = autoclass("android.net.Uri")
+                to = str(act.get("to", "")).strip()
+                number = re.sub(r"[^0-9+]", "", to)
+                if len(re.sub(r"\D", "", number)) < 5:
+                    from android.permissions import check_permission
+                    if not check_permission("android.permission.READ_CONTACTS"):
+                        self._perm_ok("android.permission.READ_CONTACTS")
+                        return M["perm"]
+                    number = self._contact_number(to)
+                    if not number:
+                        return M["no_number"].format(a=to)
+                uri = Uri.parse("tel:" + Uri.encode(number))
+                if CALL_DIRECT and self._perm_ok("android.permission.CALL_PHONE"):
+                    activity.startActivity(Intent(Intent.ACTION_CALL, uri))
+                    return M["calling"].format(a=to)
+                activity.startActivity(Intent(Intent.ACTION_DIAL, uri))
+                return M["dial"].format(a=to)
             if kind == "open_app":
                 name = str(act.get("name", "")).strip()
                 pm = activity.getPackageManager()
@@ -6962,7 +7007,7 @@ class JarvisApp(App):
             number = self._contact_number(to)
         clean = re.sub(r"\D", "", number)
         label = {"whatsapp": "WhatsApp", "telegram": "Telegram", "sms": "SMS"}[app]
-        if app == "sms" and number:
+        if app == "sms" and number and SMS_DIRECT_SEND:
             if not self._perm_ok("android.permission.SEND_SMS"):
                 return M["perm"]
             SmsManager = autoclass("android.telephony.SmsManager")
@@ -7053,23 +7098,67 @@ class JarvisApp(App):
                                 apps=len(self.installed_apps()), free="%.1f" % free, br=br)
         return text + ("\n" + names if names else "")
 
+    def _intent_context(self, current_text):
+        """What the assistant already knows: the 'about me' note, the facts and the user's latest messages from all chats."""
+        lines = []
+        if self.profile.note:
+            lines.append("About the user: " + self.profile.note[:900])
+        facts = [f["text"] for f in self.profile.facts][-20:]
+        if facts:
+            lines.append("Facts: " + "; ".join(facts)[:900])
+        recent = []
+        for chat in self.chats.sorted_chats()[:15]:
+            for m in chat.get("messages", [])[-15:]:
+                if m.get("role") == "user":
+                    t = " ".join(MEDIA_RE.sub("", str(m.get("text", ""))).replace(RETRY_MARK, "").split())
+                    if len(t) >= 6 and t != " ".join(str(current_text).split()):
+                        recent.append((str(m.get("time", "")), t[:220]))
+        recent.sort(key=lambda x: x[0])
+        for when, t in recent[-35:]:
+            lines.append("- " + (when[:16] + " " if when else "") + t)
+        if time.monotonic() < getattr(self, "_intent_ask_until", 0) and getattr(self, "_last_ask", ""):
+            lines.append("The assistant has just asked the user: " + self._last_ask + " (his new message answers this question)")
+        return "\n".join(lines)[:6800]
+
     def _start_device_intent(self, chat_id, text, history):
         """The server works out what the phone should do (alarm, flashlight, app...); anything else goes on as a normal chat."""
         self.set_orb_state("thinking")
         self.busy_start("think")
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        context = self._intent_context(text)
+        self._intent_ask_until = 0
+        err = None
 
         def job():
+            nonlocal err
             try:
                 act = self._json_call("POST", "/device/intent", {"text": text[:400], "language": self._lang_code(), "now": now,
-                                                                  "apps": [a[0] for a in self.installed_apps()][:300]}, timeout=30)
-            except Exception:
+                                                                  "apps": [a[0] for a in self.installed_apps()][:300],
+                                                                  "context": context}, timeout=45)
+            except Exception as exc:
                 act = None
                 save_crash("Device intent request failed:\n" + traceback.format_exc())
+                err = exc
 
             def done(dt):
+                if act is None:
+                    self.busy_stop()
+                    self.set_orb_state("idle")
+                    code = getattr(err, "code", "")
+                    self.deliver_answer(chat_id, "\u26a0 " + self.t("device_srv_fail") + " " + str(code or type(err).__name__)
+                                        + (" (" + str(getattr(err, "reason", "") or "")[:80] + ")" if getattr(err, "reason", "") else ""))
+                    return
+                if act and str(act.get("action", "")) == "ask" and act.get("question"):
+                    self.busy_stop()
+                    self.set_orb_state("speaking", 2.5)
+                    self._intent_ask_until = time.monotonic() + 300
+                    self._last_ask = str(act["question"])[:300]
+                    self.deliver_answer(chat_id, str(act["question"]))           # one missing fact is asked; the answer continues the talk
+                    return
                 if act and str(act.get("action", "none")) != "none":
                     message = self._device_execute(act)
+                    if act.get("say"):
+                        message = str(act["say"]) + "\n" + message
                     self.set_orb_state("speaking", 2.5)
                     self.deliver_answer(chat_id, message)
                 else:
@@ -7520,12 +7609,14 @@ class JarvisApp(App):
         gone.bind(on_release=self.clear_attachment)
         strip.add_widget(gone)
 
-    def _process_attachment(self, chat_id, att, prompt):
+    def _process_attachment(self, chat_id, att, prompt, force=None):
         name, mime, raw = att["name"], att["mime"], att["raw"]
         self._last_att = (chat_id, att, prompt)
         self._set_delivery(att.get("path"), "sending")
         mode = "analyze"
-        if mime.startswith("image/") and looks_like_remix(prompt):
+        if force:
+            mode = force
+        elif mime.startswith("image/") and looks_like_remix(prompt):
             mode = "image_remix"
         elif mime.startswith("image/") and looks_like_edit(prompt, "image"):
             mode = "image_edit"
@@ -7579,6 +7670,13 @@ class JarvisApp(App):
             self._attachment_net_failed(chat_id, path, self.t("file_send_failed").format(self.friendly_error(exc)))
 
     def _attachment_answer(self, chat_id, answer):
+        last = getattr(self, "_last_att", None)
+        if last and PROMISE_RE.search(str(answer)) and last[1]["mime"].startswith("image/") and not getattr(self, "_promise_redo", False):
+            # the text model only promised a picture ("being prepared..."): the picture is made now, for real
+            self._promise_redo = True
+            self._process_attachment(last[0], last[1], last[2] or "", force="image_remix")
+            return
+        self._promise_redo = False
         self._status_after_answer()
         self.deliver_answer(chat_id, answer)
 
@@ -8571,7 +8669,8 @@ class JarvisApp(App):
         if media is not None:
             self._start_media_job(chat_id, media[0], media[1])
             return
-        if self.server_token.strip() and looks_like_device_command(command_text):
+        awaiting = time.monotonic() < getattr(self, "_intent_ask_until", 0)       # the assistant has just asked a question about a plan
+        if self.server_token.strip() and (awaiting or looks_like_device_command(command_text) or looks_like_plan(command_text)):
             self._start_device_intent(chat_id, command_text, history)
             return
         self._continue_send(chat_id, command_text, history)
@@ -8809,6 +8908,14 @@ class JarvisApp(App):
                 self._start_media_job(chat_id, "image", guess)
                 return
         answer = strip_media(answer) if fake else answer
+        if PROMISE_RE.search(str(answer)):
+            earlier = [strip_media(" ".join(str(m.get("text", "")).split())) for m in (self.chats.get(chat_id) or {}).get("messages", [])
+                       if m.get("role") == "user"]
+            earlier = [t for t in earlier if t]
+            lowq = earlier[-1].lower() if earlier else ""
+            if lowq and (any(n in lowq for n in _PIC_WORDS) or any(v in lowq for v in _DRAW_VERBS)):
+                self._start_media_job(chat_id, "image", earlier[-1][:300])        # a promise is not an answer: make the picture now
+                return
         # the AI pasted a picture as a Base64 blob ("here is your file"): that is never a real picture; make a real one instead
         if BASE64_BLOB_RE.search(str(answer)):
             earlier = [strip_media(" ".join(str(m.get("text", "")).split())) for m in (self.chats.get(chat_id) or {}).get("messages", [])
