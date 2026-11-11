@@ -1042,16 +1042,24 @@ async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: s
     else:
         env_name = "TTS_VOICE_" + language.upper() + "_" + profile.upper()
         voice = os.environ.get(env_name, "").strip() or DEFAULT_TTS_VOICES[profile][language]
-    try:
-        audio, words = await asyncio.wait_for(_synthesize_edge_tts(text, voice), timeout=TTS_TIMEOUT_SECONDS)
-    except HTTPException:
-        raise
-    except asyncio.TimeoutError:
-        print("Edge TTS timed out")
-        raise HTTPException(status_code=504, detail="The speech generation service timed out")
-    except Exception as exc:
-        print("Edge TTS failed:", type(exc).__name__, str(exc)[:200])
-        raise HTTPException(status_code=502, detail="The speech generation service could not complete the request (" + type(exc).__name__ + ")")
+    audio, words, last_error = b"", [], None
+    for attempt in range(3):                      # the free Edge service refuses a request now and then: try again before giving up
+        try:
+            audio, words = await asyncio.wait_for(_synthesize_edge_tts(text, voice), timeout=TTS_TIMEOUT_SECONDS)
+            if audio:
+                break
+        except HTTPException:
+            raise
+        except asyncio.TimeoutError:
+            last_error = "timeout"
+            print("Edge TTS timed out (attempt %d)" % (attempt + 1))
+        except Exception as exc:
+            last_error = type(exc).__name__ + " " + str(exc)[:120]
+            print("Edge TTS failed (attempt %d):" % (attempt + 1), last_error)
+        await asyncio.sleep(0.6 * (attempt + 1))
+    if not audio:
+        code = 504 if last_error == "timeout" else 502
+        raise HTTPException(status_code=code, detail="The speech generation service could not complete the request (" + str(last_error)[:80] + ")")
     if not audio:
         raise HTTPException(status_code=502, detail="Speech audio is empty or too large")
     if request.timings:
