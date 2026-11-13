@@ -860,6 +860,46 @@ class ProfileNoteRequest(BaseModel):
     language: Literal["tg", "ru", "en"] = "tg"
 
 
+class GreetingRequest(BaseModel):
+    name: str = ""
+    language: Literal["tg", "ru", "en"] = "tg"
+    now: str = ""
+    weekday: str = ""
+    recent: list[str] = []
+
+
+@app.post("/greeting")
+def greeting(data: GreetingRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """One short, respectful welcome written by the AI for the moment the user opens the app."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    check_quota(user, "chat")
+    check_rate_limit(rate_key(user, http_request))
+    if not ai_tools.provider_chain(language=data.language):
+        raise HTTPException(status_code=503, detail="No AI provider key is configured")
+    lang_name = {"tg": "Tajik (Cyrillic)", "ru": "Russian", "en": "English"}[data.language]
+    system = (
+        "You are a warm, respectful personal assistant. The user has just opened the app. Write ONE short welcome (at most 14 words) in "
+        + lang_name + ". Match the time of day given (morning / day / evening / night) and use the user's first name only if it is given. "
+        "Be polite and kind, natural, not robotic. Do not ask more than one tiny question, do not offer lists, do not use emoji, "
+        "do not mention that you are an AI, do not invent facts. Never repeat any of the recent welcomes. Output only the welcome text.")
+    parts = ["Local time: " + (data.now.strip()[:20] or "unknown") + (" (" + data.weekday.strip()[:20] + ")" if data.weekday.strip() else "")]
+    if data.name.strip():
+        parts.append("User's name: " + data.name.strip()[:40])
+    recent = [r.strip()[:120] for r in data.recent if r.strip()][-3:]
+    if recent:
+        parts.append("Recent welcomes (do not repeat):\n" + "\n".join("- " + r for r in recent))
+    try:
+        result = ai_tools.complete([{"role": "system", "content": system}, {"role": "user", "content": "\n".join(parts)}],
+                                   max_tokens=80, timeout=12.0, language=data.language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Greeting failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
+    text = result["answer"].strip().strip('"').split("\n")[0][:200]
+    return {"greeting": text}
+
+
 @app.post("/profile/summarize")
 def profile_summarize(data: ProfileNoteRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Short biography / collaboration note about the user, written from what he told the assistant."""
