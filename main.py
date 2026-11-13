@@ -525,6 +525,27 @@ TEXTS = {
         "menu_new": "Чати нав",
         "menu_settings": "Танзимот",
         "menu_about": "Маълумот дар бораи JARVIS",
+        "block_saved": "Файл захира шуд",
+        "block_save_failed": "Захира нашуд",
+        "sec_apps": "Барномаҳо",
+        "title_apps": "Барномаҳо",
+        "apps_header": "Мехоҳед {a} барномаҳои шуморо кушояд?",
+        "apps_which": "Кадом барномаҳоро кушодан мумкин аст?",
+        "apps_search": "Ҷустуҷӯи барнома",
+        "apps_all_on": "Ҳама фаъол",
+        "apps_all_off": "Ҳама хомӯш",
+        "app_blocked": "Барномаи «{a}» хомӯш аст. Ӯро дар Танзимот → Барномаҳо фаъол кунед.",
+        "apps_off": "Кушодани барномаҳо хомӯш аст. Дар Танзимот → Барномаҳо фаъол кунед.",
+        "app_enable": "Фаъол кардан",
+        "app_opened_say": "{a} кушода шуд.",
+        "apps_none": "Барномае ёфт нашуд",
+        "view_share": "Фиристодан",
+        "share_failed": "Фиристодан нашуд",
+        "share_title": "Фиристодан тавассути",
+        "st_sending": "Фиристода истодааст…",
+        "st_sent": "Расид",
+        "st_failed": "Нарасид",
+        "retry_label": "Такрор",
         "chat_default": "Чати нав",
         "chats_title": "Чатҳои ман",
         "chats_empty": "Ҳоло чат нест",
@@ -768,6 +789,27 @@ TEXTS = {
         "menu_new": "Новый чат",
         "menu_settings": "Настройки",
         "menu_about": "О JARVIS",
+        "block_saved": "Файл сохранён",
+        "block_save_failed": "Не удалось сохранить",
+        "sec_apps": "Приложения",
+        "title_apps": "Приложения",
+        "apps_header": "Хотите, чтобы {a} открывал ваши приложения?",
+        "apps_which": "Какие приложения можно открывать?",
+        "apps_search": "Поиск приложения",
+        "apps_all_on": "Включить все",
+        "apps_all_off": "Выключить все",
+        "app_blocked": "Приложение «{a}» выключено. Включите его в Настройки → Приложения.",
+        "apps_off": "Открытие приложений выключено. Включите в Настройки → Приложения.",
+        "app_enable": "Включить",
+        "app_opened_say": "{a} открыто.",
+        "apps_none": "Приложение не найдено",
+        "view_share": "Отправить",
+        "share_failed": "Не удалось отправить",
+        "share_title": "Отправить через",
+        "st_sending": "Отправляется…",
+        "st_sent": "Доставлено",
+        "st_failed": "Не доставлено",
+        "retry_label": "Повторить",
         "chat_default": "Новый чат",
         "chats_title": "Мои чаты",
         "chats_empty": "Чатов пока нет",
@@ -1011,6 +1053,27 @@ TEXTS = {
         "menu_new": "New chat",
         "menu_settings": "Settings",
         "menu_about": "About",
+        "block_saved": "File saved",
+        "block_save_failed": "Could not save",
+        "sec_apps": "Apps",
+        "title_apps": "Apps",
+        "apps_header": "Do you want {a} to open your apps?",
+        "apps_which": "Which apps may be opened?",
+        "apps_search": "Search apps",
+        "apps_all_on": "All on",
+        "apps_all_off": "All off",
+        "app_blocked": "The app “{a}” is switched off. Turn it on in Settings → Apps.",
+        "apps_off": "Opening apps is switched off. Turn it on in Settings → Apps.",
+        "app_enable": "Turn on",
+        "app_opened_say": "{a} opened.",
+        "apps_none": "No app found",
+        "view_share": "Share",
+        "share_failed": "Could not share",
+        "share_title": "Share via",
+        "st_sending": "Sending…",
+        "st_sent": "Delivered",
+        "st_failed": "Not delivered",
+        "retry_label": "Retry",
         "chat_default": "New chat",
         "chats_title": "My chats",
         "chats_empty": "No chats",
@@ -4750,12 +4813,37 @@ class AvatarCircle(Widget):
             self.add_widget(self._lab)
 
 
-class CodeBlock(BoxLayout):
+class TapOpenMixin:
+    """A short tap (not a scroll, not a button inside) on a code box / table opens it on its own screen."""
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            touch.ud["blk_tap"] = (self, touch.pos[0], touch.pos[1], time.time())
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        info = touch.ud.get("blk_tap")
+        handled = super().on_touch_up(touch)
+        try:
+            if (info and info[0] is self and not handled and not getattr(self, "full_view", False) and self.collide_point(*touch.pos)
+                    and abs(touch.pos[0] - info[1]) < dp(10) and abs(touch.pos[1] - info[2]) < dp(10) and time.time() - info[3] < 0.7):
+                touch.ud["blk_tap"] = None
+                Clock.schedule_once(lambda dt: self._open_viewer(), 0)
+        except Exception:
+            save_crash("Block tap failed:\n" + traceback.format_exc())
+        return handled
+
+
+class CodeBlock(TapOpenMixin, BoxLayout):
     """A code box like in ChatGPT: language name, a copy button and the code, which scrolls sideways."""
 
     def __init__(self, app, code, lang, **kwargs):
         super().__init__(orientation="vertical", size_hint_y=None, spacing=dp(2),
                          padding=[dp(8), dp(4), dp(8), dp(8)], **kwargs)
+        self.app = app
+        self.code = code
+        self.lang = lang
+        self.full_view = False
         theme = THEMES[app.theme_index]
         self.opacity = 0
         Clock.schedule_once(lambda dt: setattr(self, "opacity", 1), 0.2)
@@ -4798,12 +4886,17 @@ class CodeBlock(BoxLayout):
         self._bg.pos, self._bg.size = self.pos, self.size
         self._ln.rounded_rectangle = (self.x, self.y, self.width, self.height, dp(12))
 
+    def _open_viewer(self):
+        self.app.open_block("code", self.code, self.lang)
 
-class TableBlock(BoxLayout):
+
+class TableBlock(TapOpenMixin, BoxLayout):
     """A table that can be moved in every direction when it is wide or long."""
 
-    def __init__(self, app, rows, **kwargs):
+    def __init__(self, app, rows, full=False, **kwargs):
         super().__init__(orientation="vertical", size_hint_y=None, **kwargs)
+        self.app = app
+        self.full_view = full
         self.opacity = 0                      # shown only after the first layout, so no stray lines flash in a corner
         Clock.schedule_once(lambda dt: setattr(self, "opacity", 1), 0.2)
         theme = THEMES[app.theme_index]
@@ -4811,6 +4904,7 @@ class TableBlock(BoxLayout):
         text_c = hex_color(theme["text"])
         ncols = max(len(r) for r in rows)
         rows = [[clean_md(c) for c in r] + [""] * (ncols - len(r)) for r in rows]
+        self.rows = rows
         widths = []
         for c in range(ncols):
             longest = max(max((len(x) for x in rows[r][c].split("\n")), default=0) for r in range(len(rows)))
@@ -4852,6 +4946,12 @@ class TableBlock(BoxLayout):
         scroll.add_widget(grid)
         self.add_widget(scroll)
         self.height = scroll.height
+        if full:
+            scroll.size_hint_y = 1
+            self.size_hint_y = 1
+
+    def _open_viewer(self):
+        self.app.open_block("table", self.rows, "")
 
 
 # Silent SMS sending needs the SEND_SMS permission, which Play Protect / phone security often blocks for apps installed by hand.
@@ -5644,6 +5744,229 @@ class DotsButton(FrostButton):
             e.pos = (cx - r, cy - r + (i - 1) * dp(7.5))
 
 
+class IconButton(FrostButton):
+    """A glass button with a drawn icon (retry, share, copy, download, apps ...): no font glyph, so it looks the same everywhere."""
+
+    def __init__(self, kind="retry", icon_rgba=(1, 1, 1, 0.95), **kwargs):
+        kwargs.pop("text", None)
+        super().__init__(**kwargs)
+        self.kind = kind
+        with self.canvas.after:
+            self._ic = Color(*icon_rgba)
+            self._lines = []
+        self.bind(pos=self._draw, size=self._draw)
+        self._draw()
+
+    def set_kind(self, kind):
+        self.kind = kind
+        self._draw()
+
+    def _draw(self, *_):
+        for item in self._lines:
+            try:
+                self.canvas.after.remove(item)
+            except Exception:
+                pass
+        self._lines = []
+        try:
+            cx, cy = self.center_x, self.center_y
+            u = min(self.width, self.height) * 0.26
+            w = max(dp(1.6), u * 0.16)
+            kind = self.kind
+            items = []
+            if kind == "retry":
+                items.append(Line(circle=(cx, cy, u, 40, 340), width=w, cap="round"))
+                items.append(Line(points=[cx + u * 0.62, cy + u * 0.95, cx + u * 1.02, cy + u * 0.35, cx + u * 0.28, cy + u * 0.38],
+                                  width=w, cap="round", joint="round"))
+            elif kind == "share":
+                pts = [(cx - u * 0.85, cy), (cx + u * 0.8, cy + u * 0.85), (cx + u * 0.8, cy - u * 0.85)]
+                items.append(Line(points=[pts[1][0], pts[1][1], pts[0][0], pts[0][1], pts[2][0], pts[2][1]], width=w, cap="round", joint="round"))
+                for px, py in pts:
+                    items.append(Ellipse(pos=(px - u * 0.32, py - u * 0.32), size=(u * 0.64, u * 0.64)))
+            elif kind == "copy":
+                items.append(Line(rounded_rectangle=(cx - u * 0.35, cy - u * 0.2, u * 1.0, u * 1.2, dp(2)), width=w))
+                items.append(Line(rounded_rectangle=(cx - u * 0.9, cy - u * 0.9, u * 1.0, u * 1.2, dp(2)), width=w))
+            elif kind == "download":
+                items.append(Line(points=[cx, cy + u, cx, cy - u * 0.55], width=w, cap="round"))
+                items.append(Line(points=[cx - u * 0.6, cy - u * 0.05, cx, cy - u * 0.65, cx + u * 0.6, cy - u * 0.05], width=w, cap="round", joint="round"))
+                items.append(Line(points=[cx - u * 0.95, cy - u * 0.95, cx + u * 0.95, cy - u * 0.95], width=w, cap="round"))
+            elif kind == "check":
+                items.append(Line(points=[cx - u * 0.9, cy, cx - u * 0.25, cy - u * 0.65, cx + u * 0.95, cy + u * 0.7], width=w * 1.2, cap="round", joint="round"))
+            elif kind == "cross":
+                items.append(Line(points=[cx - u * 0.75, cy - u * 0.75, cx + u * 0.75, cy + u * 0.75], width=w * 1.2, cap="round"))
+                items.append(Line(points=[cx - u * 0.75, cy + u * 0.75, cx + u * 0.75, cy - u * 0.75], width=w * 1.2, cap="round"))
+            elif kind == "apps":
+                for gx in (-0.8, 0.1):
+                    for gy in (-0.8, 0.1):
+                        items.append(Rectangle(pos=(cx + gx * u, cy + gy * u), size=(u * 0.7, u * 0.7)))
+            for item in items:
+                self.canvas.after.add(item)
+            self._lines = items
+        except Exception:
+            pass
+
+
+class PillSwitch(Widget):
+    """A modern on/off switch: an empty ring with a cross when it is off, a filled coloured pill with a check mark when it is on."""
+
+    _pos_k = NumericProperty(0.0)
+
+    def __init__(self, active=False, on_change=None, tint=(0.4, 0.8, 1.0), **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(56), dp(30)))
+        super().__init__(**kwargs)
+        self.active = bool(active)
+        self.on_change = on_change
+        self.tint = tint
+        self._pos_k = 1.0 if self.active else 0.0
+        self.bind(pos=self._redraw, size=self._redraw)
+        self._redraw()
+
+    def set_active(self, value, notify=False):
+        value = bool(value)
+        if value == self.active:
+            return
+        self.active = value
+        Animation(_pos_k=1.0 if value else 0.0, d=0.16, t="out_quad").start(self)
+        if notify and self.on_change:
+            self.on_change(value)
+
+    def on__pos_k(self, *_):
+        self._redraw()
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            touch.grab(self)
+            return True
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            if self.collide_point(*touch.pos):
+                self.set_active(not self.active, notify=True)
+            return True
+        return super().on_touch_up(touch)
+
+    def _redraw(self, *_):
+        try:
+            self.canvas.clear()
+            k = getattr(self, "_pos_k", 0.0)
+            x, y, w, h = self.x, self.y, self.width, self.height
+            r = h / 2.0
+            with self.canvas:
+                if k > 0.02:
+                    Color(self.tint[0], self.tint[1], self.tint[2], 0.25 + 0.65 * k)
+                    RoundedRectangle(pos=(x, y), size=(w, h), radius=[r])
+                Color(1, 1, 1, 0.34 - 0.2 * k)
+                Line(rounded_rectangle=(x, y, w, h, r), width=dp(1.4))
+                kr = r - dp(4)
+                kx = x + r + (w - 2 * r) * k
+                Color(1, 1, 1, 0.55 + 0.45 * k)
+                Ellipse(pos=(kx - kr, y + r - kr), size=(2 * kr, 2 * kr))
+                mw = max(dp(1.4), kr * 0.18)
+                if k > 0.5:
+                    Color(self.tint[0] * 0.5, self.tint[1] * 0.5, self.tint[2] * 0.5, 1)
+                    Line(points=[kx - kr * 0.45, y + r, kx - kr * 0.1, y + r - kr * 0.38, kx + kr * 0.5, y + r + kr * 0.4], width=mw, cap="round", joint="round")
+                else:
+                    Color(0.35, 0.35, 0.4, 1)
+                    d = kr * 0.38
+                    Line(points=[kx - d, y + r - d, kx + d, y + r + d], width=mw, cap="round")
+                    Line(points=[kx - d, y + r + d, kx + d, y + r - d], width=mw, cap="round")
+        except Exception:
+            pass
+
+
+SENSITIVE_APP_RE = re.compile(r"bank|wallet|finance|fintech|crypto|binance|paypal|sber|tinkoff|alif|eskhata|amonat|payme|kaspi|korti|money|credit|\bpay\b|\u0431\u0430\u043d\u043a|\u043a\u043e\u0448\u0435\u043b|\u0431\u0430\u043d\u043a", re.I)
+
+
+class LetterDot(Widget):
+    """A round coloured dot with the first letter of an app name."""
+
+    def __init__(self, letter, tint, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(38), dp(38)))
+        super().__init__(**kwargs)
+        self._lab = make_label((letter or "?")[:1].upper(), 16, "#FFFFFF", True, size_hint=(None, None))
+        self.add_widget(self._lab)
+        self.tint = tint
+        self.bind(pos=self._draw, size=self._draw)
+        self._draw()
+
+    def _draw(self, *_):
+        try:
+            self.canvas.before.clear()
+            with self.canvas.before:
+                Color(self.tint[0], self.tint[1], self.tint[2], 0.45)
+                Ellipse(pos=self.pos, size=self.size)
+            self._lab.size = self.size
+            self._lab.pos = self.pos
+        except Exception:
+            pass
+
+
+class AppsPicker(BoxLayout):
+    """Search field + 'all on / all off' + a scrolling list of the installed apps, each with an on/off switch."""
+
+    def __init__(self, app, **kwargs):
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("spacing", dp(8))
+        super().__init__(**kwargs)
+        self.app = app
+        theme = THEMES[app.theme_index]
+        self.tint = hex_color(theme["accent"])[:3]
+        self.apps = sorted(app.installed_apps(), key=lambda a: a[0].lower())
+        wrap, self.search = glass_input(app, app.t("apps_search"), "", size=14)
+        self.search.bind(text=lambda inst, value: self._fill(value))
+        self.add_widget(wrap)
+        row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(40))
+        for key, val, kind in (("apps_all_on", True, "check"), ("apps_all_off", False, "cross")):
+            b = FrostButton(tint=self.tint, alpha=0.12, radius=14, text=mk(app.t(key)), font_size=dp(13), halign="center",
+                            color=hex_color(theme["text"]))
+            b.bind(on_release=lambda inst, v=val: self._set_all(v))
+            row.add_widget(b)
+        self.add_widget(row)
+        from kivy.uix.scrollview import ScrollView
+        self.scroll = ScrollView(do_scroll_x=False, bar_width=dp(3))
+        self.grid = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(4))
+        self.grid.bind(minimum_height=self.grid.setter("height"))
+        self.scroll.add_widget(self.grid)
+        self.add_widget(self.scroll)
+        self._switches = {}
+        self._fill("")
+
+    def _visible(self, query):
+        q = (query or "").strip().lower()
+        return [a for a in self.apps if not q or q in a[0].lower()]
+
+    def _fill(self, query):
+        app = self.app
+        theme = THEMES[app.theme_index]
+        self.grid.clear_widgets()
+        self._switches = {}
+        shown = self._visible(query)
+        if not shown:
+            self.grid.add_widget(make_label(app.t("apps_none"), 13, muted(), False, size_hint_y=None, height=dp(40)))
+        for label, pkg in shown:
+            row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(50), padding=(dp(4), dp(4)))
+            row.add_widget(LetterDot(label, self.tint))
+            row.add_widget(make_label(label, 14, theme["text"], False, halign="left"))
+            sw = PillSwitch(active=app.app_allowed(label, pkg), tint=self.tint,
+                            on_change=lambda v, pk=pkg: app.set_app_allowed(pk, v))
+            holder = AnchorLayout(size_hint=(None, 1), width=dp(60))
+            holder.add_widget(sw)
+            row.add_widget(holder)
+            self.grid.add_widget(row)
+            self._switches[pkg] = sw
+
+    def _set_all(self, value):
+        for label, pkg in self._visible(self.search.text):
+            self.app.set_app_allowed(pkg, value)
+            sw = self._switches.get(pkg)
+            if sw is not None:
+                sw.set_active(value)
+
+
 def emoji_cell(ch, size, on_release):
     """A tappable full-colour emoji picture (None when the colour pack or this emoji is missing)."""
     from kivy.uix.behaviors import ButtonBehavior
@@ -5714,6 +6037,12 @@ class MediaViewer(FloatLayout):
         back.bind(on_release=lambda *_: self.dismiss())
         bar.add_widget(back)
         bar.add_widget(make_label(self.name, 15, theme["text"], True, halign="left"))
+        share_top = IconButton(kind="share", tint=tint, alpha=0.14, radius=18, icon_rgba=hex_color(theme["text"]),
+                               size_hint=(None, 1), width=dp(46))
+        share_top.bind(on_release=lambda *_: self.app.share_media(self.path))
+        bar.add_widget(share_top)
+        self.bar = bar
+        self.share_top = share_top
         menu = DotsButton(tint=tint, alpha=0.14, radius=18, size_hint=(None, 1), width=dp(46))
         menu.bind(on_release=lambda *_: self.show_menu())
         bar.add_widget(menu)
@@ -5778,7 +6107,7 @@ class MediaViewer(FloatLayout):
         app = self.app
         theme = THEMES[app.theme_index]
         body = BoxLayout(orientation="vertical", spacing=dp(8))
-        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=170)
+        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=236)
 
         def act(fn):
             def run(*_):
@@ -5786,8 +6115,15 @@ class MediaViewer(FloatLayout):
                 fn()
             return run
 
-        app.frost_row(body, app.t("view_copy"), False, act(lambda: app.copy_media(self.path)), height=52)
-        app.frost_row(body, app.t("view_download"), False, act(lambda: app.save_media(self.path)), height=52)
+        tint = hex_color(theme["accent"])[:3]
+        for kind, key, fn in (("share", "view_share", lambda: app.share_media(self.path)),
+                              ("copy", "view_copy", lambda: app.copy_media(self.path)),
+                              ("download", "view_download", lambda: app.save_media(self.path))):
+            row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(52))
+            row.add_widget(IconButton(kind=kind, tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
+                                      size_hint=(None, 1), width=dp(52)))
+            app.frost_row(row, app.t(key), False, act(fn), height=52)
+            body.add_widget(row)
         sheet.open()
 
     def toast(self, text):
@@ -5808,6 +6144,101 @@ class MediaViewer(FloatLayout):
         self.app.sheet_closed(self)
         if self.parent is not None:
             self.parent.remove_widget(self)
+
+
+CODE_EXT = {"python": "py", "py": "py", "javascript": "js", "js": "js", "typescript": "ts", "ts": "ts", "html": "html", "css": "css",
+            "json": "json", "java": "java", "kotlin": "kt", "c": "c", "cpp": "cpp", "c++": "cpp", "csharp": "cs", "cs": "cs", "go": "go",
+            "rust": "rs", "php": "php", "ruby": "rb", "swift": "swift", "sql": "sql", "bash": "sh", "sh": "sh", "shell": "sh",
+            "xml": "xml", "yaml": "yml", "yml": "yml", "markdown": "md", "md": "md", "kivy": "kv", "kv": "kv", "dart": "dart", "r": "r",
+            "lua": "lua", "powershell": "ps1", "bat": "bat", "csv": "csv", "ini": "ini", "toml": "toml", "txt": "txt", "text": "txt"}
+
+
+def export_block(app, kind, payload, lang):
+    """Turns a code box into a file with the right extension, a table into a .csv (opens in Excel / Sheets); returns its path."""
+    import csv
+    import io
+    folder = os.path.join(app.user_data_dir, "exports")
+    os.makedirs(folder, exist_ok=True)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    if kind == "table":
+        path = os.path.join(folder, "table_" + stamp + ".csv")
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        for row in payload:
+            writer.writerow([str(c).replace("\n", " ") for c in row])
+        with open(path, "wb") as handle:
+            handle.write(b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8"))        # BOM: Excel reads Tajik/Russian letters correctly
+        return path
+    ext = CODE_EXT.get((lang or "").strip().lower(), "txt")
+    path = os.path.join(folder, "code_" + stamp + "." + ext)
+    with open(path, "wb") as handle:
+        handle.write(str(payload).encode("utf-8"))
+    return path
+
+
+class BlockViewer(MediaViewer):
+    """A code box or a table on its own full screen: three-dot menu with download (choose where), copy, share."""
+
+    def __init__(self, app, kind, payload, lang="", **kwargs):
+        self.kind = kind
+        self.payload = payload
+        self.lang = lang
+        path = export_block(app, kind, payload, lang)
+        super().__init__(app, path, **kwargs)
+        try:
+            self.bar.remove_widget(self.share_top)          # share lives inside the three-dot menu here
+        except Exception:
+            pass
+
+    def _fill(self):
+        app = self.app
+        theme = THEMES[app.theme_index]
+        if self.kind == "table":
+            self.area.add_widget(TableBlock(app, self.payload, full=True, pos_hint={"x": 0, "y": 0}))
+            return
+        lines = str(self.payload).replace("\t", "    ").split("\n")
+        label = Label(text="\n".join(lines), font_size=dp(14), color=hex_color(theme["text"]), halign="left", valign="top",
+                      size_hint=(None, None), markup=False, padding=(dp(14), dp(10)))
+        label.text_size = (None, None)
+        label.texture_update()
+        label.size = (label.texture_size[0] + dp(28), label.texture_size[1] + dp(20))
+        scroll = ScrollView(do_scroll_x=True, do_scroll_y=True, bar_width=dp(4), size_hint=(1, 1), scroll_type=["bars", "content"])
+        scroll.add_widget(label)
+        self.area.add_widget(scroll)
+
+    def show_menu(self):
+        app = self.app
+        theme = THEMES[app.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=236)
+
+        def act(fn):
+            def run(*_):
+                sheet.dismiss()
+                Clock.schedule_once(lambda dt: fn(), 0.15)
+            return run
+        for kind, key, fn in (("download", "view_download", lambda: app.save_as(self.path)),
+                              ("copy", "view_copy", lambda: self._copy()),
+                              ("share", "view_share", lambda: app.share_media(self.path))):
+            row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(52))
+            row.add_widget(IconButton(kind=kind, tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
+                                      size_hint=(None, 1), width=dp(52)))
+            app.frost_row(row, app.t(key), False, act(fn), height=52)
+            body.add_widget(row)
+        sheet.open()
+
+    def _copy(self):
+        try:
+            from kivy.core.clipboard import Clipboard
+            if self.kind == "table":
+                text = "\n".join("\t".join(str(c) for c in row) for row in self.payload)     # pastes into Sheets/Excel as cells
+            else:
+                text = str(self.payload)
+            Clipboard.copy(text)
+            self.toast(self.app.t("code_copied"))
+        except Exception:
+            save_crash("Block copy failed:\n" + traceback.format_exc())
 
 
 def human_size(n):
@@ -5833,7 +6264,7 @@ def glass_input(app, hint, text="", password=False, center=False, size=15):
     return wrap, ti
 
 
-EMOJI_OVERLAY = False     # coloured pictures over the field's text; the plain (single-colour) glyphs underneath are blanked
+EMOJI_OVERLAY = True     # coloured pictures over the field's text; the plain (single-colour) glyphs underneath are blanked
 
 
 class EmojiInput(TextInput):
@@ -5847,11 +6278,29 @@ class EmojiInput(TextInput):
         for prop in ("text", "pos", "size", "scroll_x", "scroll_y", "font_size", "padding"):
             self.bind(**{prop: self._emoji_later})
 
+    def get_text(self):
+        return self.text
+
+    def clear_native(self):
+        pass
+
+    def insert_text(self, substring, from_undo=False):
+        """Capital letter at the start of the text and after . ! ? (the keyboard does not do it for this field)."""
+        try:
+            if (not from_undo and substring and substring[0].isalpha() and substring[0].islower()
+                    and not self.password):
+                before = self.text[:self.cursor_index()]
+                if before == "" or before.endswith("\n") or re.search(r"[.!?\u2026]\s+$", before):
+                    substring = substring[0].upper() + substring[1:]
+        except Exception:
+            pass
+        return super().insert_text(substring, from_undo=from_undo)
+
     def _create_line_label(self, text, hint=False):
         """Draw the plain glyph of every emoji as blank space: only the coloured picture is visible."""
         try:
             if EMOJI_OVERLAY and emoji_pack()[0] and any(ord(ch) >= 0x203C for ch in text):
-                text = "".join("\u2007" * len(v) if k == "e" else v for k, v in split_emoji(text))
+                text = "".join("\u2003" * len(v) if k == "e" else v for k, v in split_emoji(text))
         except Exception:
             pass
         return super()._create_line_label(text, hint)
@@ -5870,7 +6319,7 @@ class EmojiInput(TextInput):
             line_h = self.line_height + self.line_spacing
             left = self.x + self.padding[0] - self.scroll_x
             top = self.top - self.padding[1] + self.scroll_y
-            side = self.font_size * 1.25
+            side = self.font_size * 1.1
             with self.canvas.after:
                 Color(1, 1, 1, 1)
                 for row, line in enumerate(self._lines):
@@ -5883,9 +6332,10 @@ class EmojiInput(TextInput):
                             before += value
                             continue
                         tex = emoji_texture(value)
+                        blank = "\u2003" * len(value)           # what is really drawn in the field for this emoji
                         start = label.get_extents(before)[0] if before else 0
-                        width = label.get_extents(value)[0]
-                        before += value
+                        width = label.get_extents(blank)[0]
+                        before += blank
                         if tex is None:
                             continue
                         cx = left + start + width / 2.0
@@ -5895,6 +6345,296 @@ class EmojiInput(TextInput):
                         Rectangle(texture=tex, pos=(cx - side / 2.0, cy - side / 2.0), size=(side, side))
         except Exception:
             self.canvas.after.clear()
+
+
+try:
+    from android.runnable import run_on_ui_thread
+except Exception:                                   # not on a phone
+    def run_on_ui_thread(func):
+        return func
+
+try:
+    from jnius import PythonJavaClass, java_method
+
+    class _NativeTextWatcher(PythonJavaClass):
+        __javainterfaces__ = ["android/text/TextWatcher"]
+        __javacontext__ = "app"
+
+        def __init__(self, callback):
+            super().__init__()
+            self.callback = callback
+
+        @java_method("(Ljava/lang/CharSequence;III)V")
+        def beforeTextChanged(self, s, start, count, after):
+            pass
+
+        @java_method("(Ljava/lang/CharSequence;III)V")
+        def onTextChanged(self, s, start, before, count):
+            pass
+
+        @java_method("(Landroid/text/Editable;)V")
+        def afterTextChanged(self, editable):
+            try:
+                self.callback(str(editable.toString()))
+            except Exception:
+                pass
+except Exception:
+    _NativeTextWatcher = None
+
+
+def _NATIVE_HIDERS():
+    """Screens that draw over the main window: the native field must be hidden under them."""
+    from kivy.uix.modalview import ModalView
+    return (LiveOverlay, GlassSheet, MediaViewer, TransitionCover, AuroraScreen, ModalView)
+
+
+def _argb(rgba):
+    r, g, b = [int(max(0, min(1, v)) * 255) for v in rgba[:3]]
+    a = int(max(0, min(1, rgba[3] if len(rgba) > 3 else 1.0)) * 255)
+    value = (a << 24) | (r << 16) | (g << 8) | b
+    return value - (1 << 32) if value >= (1 << 31) else value
+
+
+class NativeInput(EmojiInput):
+    """The real Android EditText placed over this (then invisible) Kivy field: the keyboard's own capital letters,
+    word suggestions and full-colour emoji work, and the text cannot be garbled by the keyboard's composing buffer.
+    Everything else in the app keeps using this object as before (text, insert_text, do_backspace, focus).
+    If the native field cannot be made, the ordinary Kivy field stays visible."""
+
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self._edit = None
+        self._watcher = None
+        self._native_ready = False
+        self._from_native = False
+        self._seq = 0
+        self._geo = None
+        self._tick_ev = None
+        try:
+            from kivy.utils import platform as kv_platform
+            old = getattr(app, "_native_input", None)
+            if old is not None and old is not self:
+                old.destroy()
+            app._native_input = self
+            if kv_platform == "android" and _NativeTextWatcher is not None:
+                self._ui_create(float(self.font_size), _argb(self.foreground_color),
+                                _argb(self.hint_text_color), [int(v) for v in self.padding], str(self.hint_text), str(self.text))
+                self._tick_ev = Clock.schedule_interval(self._tick, 0.12)
+                self.bind(text=self._on_kivy_text)
+        except Exception:
+            save_crash("Native input not started:\n" + traceback.format_exc())
+
+    # ----- UI thread -----
+    @run_on_ui_thread
+    def _ui_create(self, size_px, color, hint_color, padding, hint, text):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            EditText = autoclass("android.widget.EditText")
+            Params = autoclass("android.widget.FrameLayout$LayoutParams")
+            edit = EditText(activity)
+            edit.setBackgroundColor(0)
+            edit.setTextSize(0, float(size_px))
+            edit.setTextColor(color)
+            edit.setHintTextColor(hint_color)
+            edit.setHint(hint)
+            edit.setPadding(padding[0], padding[1], padding[2], padding[3])
+            edit.setGravity(8388627)                                   # start | centre vertically
+            edit.setInputType(1 | 0x4000 | 0x8000 | 0x20000)           # text, capital at sentence start, suggestions, multi-line
+            edit.setImeOptions(0x10000000 | 0x2000000)                 # no full-screen keyboard in landscape
+            edit.setMaxLines(5)
+            edit.setHorizontallyScrolling(False)
+            edit.setVisibility(4)
+            if text:
+                edit.setText(text)
+            self._watcher = _NativeTextWatcher(self._native_changed)
+            edit.addTextChangedListener(self._watcher)
+            activity.addContentView(edit, Params(10, 10))
+            self._edit = edit
+            Clock.schedule_once(self._became_native, 0)
+        except Exception:
+            self._edit = None
+            save_crash("Native EditText failed:\n" + traceback.format_exc())
+
+    @run_on_ui_thread
+    def _ui_geo(self, x, y, w, h, visible):
+        edit = self._edit
+        if edit is None:
+            return
+        try:
+            params = edit.getLayoutParams()
+            params.width = int(w)
+            params.height = int(h)
+            edit.setLayoutParams(params)
+            edit.setX(float(x))
+            edit.setY(float(y))
+            if visible:
+                edit.setVisibility(0)
+            else:
+                if edit.hasFocus():
+                    edit.clearFocus()
+                edit.setVisibility(4)
+        except Exception:
+            save_crash("Native EditText layout failed:\n" + traceback.format_exc())
+
+    @run_on_ui_thread
+    def _ui_text(self, text):
+        edit = self._edit
+        if edit is None:
+            return
+        try:
+            if str(edit.getText().toString()) != text:
+                edit.setText(text)
+                edit.setSelection(len(text))
+        except Exception:
+            pass
+
+    @run_on_ui_thread
+    def _ui_focus(self, on):
+        edit = self._edit
+        if edit is None:
+            return
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            imm = activity.getSystemService("input_method")
+            if on:
+                edit.requestFocus()
+                imm.showSoftInput(edit, 0)
+            else:
+                imm.hideSoftInputFromWindow(edit.getWindowToken(), 0)
+                edit.clearFocus()
+        except Exception:
+            pass
+
+    @run_on_ui_thread
+    def _ui_insert(self, substring):
+        edit = self._edit
+        if edit is None:
+            return
+        try:
+            editable = edit.getText()
+            start, end = edit.getSelectionStart(), edit.getSelectionEnd()
+            if start < 0:
+                start = end = editable.length()
+            editable.replace(min(start, end), max(start, end), substring)
+        except Exception:
+            pass
+
+    @run_on_ui_thread
+    def _ui_backspace(self):
+        edit = self._edit
+        if edit is None:
+            return
+        try:
+            from jnius import autoclass
+            KeyEvent = autoclass("android.view.KeyEvent")
+            edit.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
+            edit.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+        except Exception:
+            pass
+
+    @run_on_ui_thread
+    def _ui_destroy(self):
+        edit, self._edit = self._edit, None
+        if edit is None:
+            return
+        try:
+            parent = edit.getParent()
+            if parent is not None:
+                parent.removeView(edit)
+        except Exception:
+            pass
+
+    # ----- Kivy thread -----
+    def _became_native(self, *_):
+        if self._edit is None:
+            return
+        self._native_ready = True
+        self.opacity = 0                     # the Kivy field stays only as the object the app talks to
+        self.disabled = True
+        try:
+            Window.softinput_mode = ""       # the system moves the native field above the keyboard itself
+        except Exception:
+            pass
+
+    def _native_changed(self, value):
+        seq = self._seq
+        Clock.schedule_once(lambda dt: self._from_native_set(value, seq), 0)
+
+    def _from_native_set(self, value, seq):
+        if seq != self._seq:                 # the app changed the text after this keystroke (for example cleared it after sending)
+            return
+        self._from_native = True
+        try:
+            if value != self.text:
+                self.text = value
+        finally:
+            self._from_native = False
+
+    def _on_kivy_text(self, inst, value):
+        if self._from_native or self._edit is None:
+            return
+        self._seq += 1
+        self._ui_text(value)
+
+    def get_text(self):
+        edit = self._edit
+        if edit is not None and self._native_ready:
+            try:
+                return str(edit.getText().toString())
+            except Exception:
+                pass
+        return self.text
+
+    def clear_native(self):
+        if self._edit is not None:
+            self._seq += 1
+            self._ui_text("")
+
+    def insert_text(self, substring, from_undo=False):
+        if self._edit is not None and self._native_ready:
+            self._ui_insert(substring)
+            return
+        return super().insert_text(substring, from_undo=from_undo)
+
+    def do_backspace(self, from_undo=False, mode="bkspc"):
+        if self._edit is not None and self._native_ready:
+            self._ui_backspace()
+            return
+        return super().do_backspace(from_undo=from_undo, mode=mode)
+
+    def on_focus(self, instance, value, *largs):
+        if self._edit is not None and self._native_ready:
+            self._ui_focus(bool(value))
+            return
+        return super().on_focus(instance, value, *largs)
+
+    def _tick(self, dt):
+        if self._edit is None:
+            return True
+        try:
+            app = self.app
+            visible = bool(self._native_ready and self.parent is not None and self.get_root_window() is not None
+                           and not getattr(app, "app_paused", False)
+                           and not any(isinstance(c, _NATIVE_HIDERS()) for c in Window.children))
+            wx, wy = self.to_window(self.x, self.y)
+            geo = (int(wx), int(Window.height - (wy + self.height)), int(self.width), int(self.height), visible)
+            if geo != self._geo:
+                self._geo = geo
+                self._ui_geo(*geo)
+        except Exception:
+            pass
+        return True
+
+    def destroy(self):
+        try:
+            if self._tick_ev is not None:
+                self._tick_ev.cancel()
+            self._ui_destroy()
+        except Exception:
+            pass
 
 
 class JarvisApp(App):
@@ -6118,7 +6858,7 @@ class JarvisApp(App):
         self.root_layout.clear_widgets()
         theme = THEMES[self.theme_index]
         tint = hex_color(theme["accent"])[:3]
-        main = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        main = BoxLayout(orientation="vertical", padding=[dp(6), dp(12), dp(6), dp(12)], spacing=dp(8))   # ~2 mm wider bars
         self.root_layout.add_widget(main)
 
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
@@ -6164,17 +6904,18 @@ class JarvisApp(App):
         main.add_widget(chat_panel)
         self.render_chat()
 
+        row_min = max(dp(58), min(dp(74), Window.height * 0.072))       # taller on bigger phones: room under the hint text
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
-                                size_hint_y=None, height=dp(52))
+                                size_hint_y=None, height=row_min)
         glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
-        self.command_input = TextInput(
-            hint_text=self.t("input"), multiline=True, size_hint_x=1,
+        self.command_input = NativeInput(
+            self, hint_text=self.t("input"), multiline=True, size_hint_x=1,
             font_size=dp(15), foreground_color=hex_color(theme["text"]),
             hint_text_color=(*hex_color(theme["accent"])[:3], 0.52),
             cursor_color=hex_color(theme["accent"]),
             background_normal="", background_active="",
             background_color=(0, 0, 0, 0),
-            padding=[dp(8), dp(15), dp(4), dp(10)],
+            padding=[dp(8), max(dp(12), (row_min - dp(24)) / 2), dp(4), max(dp(12), (row_min - dp(24)) / 2)],
             input_type="text", keyboard_suggestions=True,
         )
         # Enter starts a new paragraph (multiline); a message is sent only with the send button.
@@ -6184,7 +6925,7 @@ class JarvisApp(App):
             # the input row grows with the text (up to ~5 lines) and shrinks back after sending
             try:
                 need = self.command_input.minimum_height + dp(6)
-                command_row.height = max(dp(52), min(dp(140), need))
+                command_row.height = max(row_min, min(dp(140), need))
             except Exception:
                 pass
 
@@ -6212,6 +6953,10 @@ class JarvisApp(App):
         command_row.add_widget(self.command_input)
         command_row.add_widget(pinned(self.stop_speech_btn))
         command_row.add_widget(pinned(self.action_btn))
+        self.send_strip = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=0, opacity=0,
+                                    padding=(dp(12), dp(2)))
+        self._send_state = "idle"
+        main.add_widget(self.send_strip)
         self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
         frost(self.attach_strip, 20, tint, 0.10, 0.30)
@@ -6438,7 +7183,7 @@ class JarvisApp(App):
                 save_crash("Media bubble failed:\n" + traceback.format_exc())
         if user_media and strip_media(text):
             bubble.add_widget(label)
-        if RETRY_MARK in str(text) and getattr(self, "_retry", None) is not None:
+        if False and RETRY_MARK in str(text) and getattr(self, "_retry", None) is not None:
             retry_btn = GlassButton(text=self.t("retry_btn"), tint=accent, active=True, radius=12, size_hint_y=None,
                                     height=dp(40), font_size=dp(14), color=hex_color(theme["text"]))
 
@@ -6921,7 +7666,10 @@ class JarvisApp(App):
             if kind == "open_app":
                 name = str(act.get("name", "")).strip()
                 pm = activity.getPackageManager()
-                pkg = match_installed_app(name, self.installed_apps())
+                if not self.apps_master():
+                    return M["apps_off"] if "apps_off" in M else self.t("apps_off")
+                all_apps = self.installed_apps()
+                pkg = match_installed_app(name, all_apps)
                 if not pkg:
                     low = name.lower()
                     for key, pkgs in APP_ALIASES.items():
@@ -6935,8 +7683,13 @@ class JarvisApp(App):
                 launch = pm.getLaunchIntentForPackage(pkg) if pkg else None
                 if launch is None:
                     return M["app_missing"].format(a=name)
-                activity.startActivity(launch)
-                return M["open_app"].format(a=name)
+                label = next((a[0] for a in all_apps if a[1] == pkg), name)
+                if not self.app_allowed(label, pkg):
+                    Clock.schedule_once(lambda dt: self._offer_enable_app(label, pkg), 0.3)
+                    return self.t("app_blocked").format(a=label)
+                self._opening_say = True
+                self._say_then(self.t("app_opened_say").format(a=label), lambda: activity.startActivity(launch))
+                return self.t("app_opened_say").format(a=label)
         except Exception as exc:
             save_crash("Device action failed (" + kind + "):\n" + traceback.format_exc())
             return M["fail"].format(e=str(exc)[:120])
@@ -7041,6 +7794,151 @@ class JarvisApp(App):
         activity.startActivity(share)
         return M["msg_ready"].format(a=label + (" → " + to if to else ""))
 
+    # ---- which apps the assistant may open (the user decides; stored only on this phone) ----
+    def _apps_cfg(self):
+        cfg = getattr(self, "_apps_cfg_cache", None)
+        if cfg is None:
+            cfg = {"master": True, "asked": False, "allow": {}}
+            try:
+                path = os.path.join(self.user_data_dir, "apps_allow.json")
+                if os.path.exists(path):
+                    with open(path, "r", encoding="utf-8") as handle:
+                        data = json.load(handle)
+                    cfg["master"] = bool(data.get("master", True))
+                    cfg["asked"] = bool(data.get("asked", False))
+                    cfg["allow"] = {str(k): bool(v) for k, v in dict(data.get("allow", {})).items()}
+            except Exception:
+                pass
+            self._apps_cfg_cache = cfg
+        return cfg
+
+    def _apps_cfg_save(self):
+        try:
+            path = os.path.join(self.user_data_dir, "apps_allow.json")
+            with open(path + ".tmp", "w", encoding="utf-8") as handle:
+                json.dump(self._apps_cfg(), handle, ensure_ascii=False)
+            os.replace(path + ".tmp", path)
+        except Exception:
+            save_crash("Apps settings not saved:\n" + traceback.format_exc())
+
+    def apps_master(self):
+        return bool(self._apps_cfg()["master"])
+
+    def set_apps_master(self, value):
+        self._apps_cfg()["master"] = bool(value)
+        self._apps_cfg()["asked"] = True
+        self._apps_cfg_save()
+
+    def app_allowed(self, label, pkg):
+        """An app the user switched on; an app he never touched is on unless it looks like a bank / payment app."""
+        allow = self._apps_cfg()["allow"]
+        if pkg in allow:
+            return allow[pkg]
+        return not (SENSITIVE_APP_RE.search(str(label)) or SENSITIVE_APP_RE.search(str(pkg)))
+
+    def set_app_allowed(self, pkg, value):
+        self._apps_cfg()["allow"][str(pkg)] = bool(value)
+        self._apps_cfg_save()
+
+    def allowed_app_labels(self):
+        if not self.apps_master():
+            return []
+        return [a[0] for a in self.installed_apps() if self.app_allowed(a[0], a[1])]
+
+    def _offer_enable_app(self, label, pkg):
+        """The user asked for an app that is switched off: one tap turns it on."""
+        try:
+            theme = THEMES[self.theme_index]
+            body = BoxLayout(orientation="vertical", spacing=dp(8))
+            sheet = GlassSheet(self, self.t("sec_apps"), body, anchor="menu", height=210)
+            body.add_widget(make_label(self.t("app_blocked").format(a=label), 14, theme["text"], False, size_hint_y=None, height=dp(70)))
+
+            def enable(*_):
+                self.set_app_allowed(pkg, True)
+                if not self.apps_master():
+                    self.set_apps_master(True)
+                sheet.dismiss()
+            self.frost_row(body, self.t("app_enable"), True, enable, 52, center=True)
+            sheet.open()
+        except Exception:
+            save_crash("Enable offer failed:\n" + traceback.format_exc())
+
+    def _say_then(self, text, go, max_wait=5.0):
+        """Say a short sentence first, then run go() (used before another app takes the screen)."""
+        state = {"done": False, "ev": None}
+
+        def fire(*_):
+            if state["done"]:
+                return
+            state["done"] = True
+            try:
+                go()
+            except Exception:
+                save_crash("Launch after speech failed:\n" + traceback.format_exc())
+        state["ev"] = Clock.schedule_once(fire, max_wait)
+        if not self.speak_enabled:
+            if state["ev"] is not None:
+                state["ev"].cancel()
+            fire()
+            return
+
+        def play(path):
+            if state["done"]:
+                return
+            if state["ev"] is not None:
+                state["ev"].cancel()
+            seconds = 1.8
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                MediaPlayer = autoclass("android.media.MediaPlayer")
+                File = autoclass("java.io.File")
+                Uri = autoclass("android.net.Uri")
+                player = MediaPlayer.create(PythonActivity.mActivity, Uri.fromFile(File(path)))
+                seconds = max(0.6, player.getDuration() / 1000.0)
+                self._server_speech_player = player
+                player.start()
+            except Exception:
+                save_crash("Spoken confirmation failed:\n" + traceback.format_exc())
+                seconds = 0.2
+            state["ev"] = Clock.schedule_once(fire, min(seconds + 0.2, 4.5))
+
+        def local():
+            if state["ev"] is not None:
+                state["ev"].cancel()
+            self._speak_local_fallback(text)
+            state["ev"] = Clock.schedule_once(fire, min(1.0 + len(text) * 0.07, 4.0))
+
+        def job():
+            path = None
+            try:
+                import hashlib
+                import shutil
+                folder = os.path.join(self.user_data_dir, "say_cache")
+                os.makedirs(folder, exist_ok=True)
+                tajik = self._wants_tajik_voice(text)
+                key = hashlib.md5((("t" if tajik else self.voice_profile) + "|" + text).encode("utf-8")).hexdigest()
+                cached = os.path.join(folder, key + (".wav" if tajik else ".mp3"))
+                if os.path.exists(cached) and os.path.getsize(cached) > 200:
+                    path = cached
+                elif self.server_token.strip():
+                    fetched = self._tajik_speech_path(text, quiet=True) if tajik else self._edge_speech_path(text, quiet=True)
+                    if fetched:
+                        shutil.copy(fetched, cached)
+                        path = cached
+                        try:
+                            os.remove(fetched)
+                        except Exception:
+                            pass
+            except Exception:
+                save_crash("Speech cache failed:\n" + traceback.format_exc())
+            if path:
+                Clock.schedule_once(lambda dt: play(path), 0)
+            else:
+                Clock.schedule_once(lambda dt: local(), 0)
+
+        threading.Thread(target=job, daemon=True).start()
+
     def installed_apps(self, refresh=False):
         """[(label, package)] of every app that has a launcher icon; cached after the first call."""
         cache = getattr(self, "_apps_cache", None)
@@ -7133,7 +8031,7 @@ class JarvisApp(App):
             nonlocal err
             try:
                 act = self._json_call("POST", "/device/intent", {"text": text[:400], "language": self._lang_code(), "now": now,
-                                                                  "apps": [a[0] for a in self.installed_apps()][:300],
+                                                                  "apps": self.allowed_app_labels()[:300],
                                                                   "context": context}, timeout=45)
             except Exception as exc:
                 act = None
@@ -7147,6 +8045,8 @@ class JarvisApp(App):
                     code = getattr(err, "code", "")
                     self.deliver_answer(chat_id, "\u26a0 " + self.t("device_srv_fail") + " " + str(code or type(err).__name__)
                                         + (" (" + str(getattr(err, "reason", "") or "")[:80] + ")" if getattr(err, "reason", "") else ""))
+                    self._send_resend = lambda: self._start_device_intent(chat_id, text, history)
+                    self._send_fail()
                     return
                 if act and str(act.get("action", "")) == "ask" and act.get("question"):
                     self.busy_stop()
@@ -7156,15 +8056,23 @@ class JarvisApp(App):
                     self.deliver_answer(chat_id, str(act["question"]))           # one missing fact is asked; the answer continues the talk
                     return
                 if act and str(act.get("action", "none")) != "none":
+                    self._opening_say = False
                     message = self._device_execute(act)
-                    if act.get("say"):
+                    if act.get("say") and not self._opening_say:
                         message = str(act["say"]) + "\n" + message
                     self.set_orb_state("speaking", 2.5)
-                    self.deliver_answer(chat_id, message)
+                    if self._opening_say:                     # the sentence is already being spoken before the other app opens
+                        self._opening_say = False
+                        self.busy_stop()
+                        self.add_chat_message(chat_id, "jarvis", message)
+                    else:
+                        self.deliver_answer(chat_id, message)
                 else:
                     self.busy_stop()
                     self.set_orb_state("idle")
                     self._continue_send(chat_id, text, history)
+            if act is None or str((act or {}).get("action", "none")) != "none":
+                self._bg_notify()
             Clock.schedule_once(done, 0)
 
         threading.Thread(target=job, daemon=True).start()
@@ -7183,9 +8091,11 @@ class JarvisApp(App):
                 Clock.schedule_once(lambda d: self._sync_applied(done, gone), 0)
                 result = self._json_call("POST", "/chats/analyze", {"question": question[:1000], "language": self._lang_code(), "name": self.person_name()}, timeout=170)
                 answer = str(result.get("answer", "")) or self.t("file_no_answer")
+                self._bg_notify()
                 Clock.schedule_once(lambda d: self._finish_server_answer(chat_id, answer), 0)
             except Exception as exc:
                 message = self.friendly_error(exc)
+                self._bg_notify()
                 Clock.schedule_once(lambda d: self._media_done(chat_id, message), 0)
 
         threading.Thread(target=job, daemon=True).start()
@@ -7300,6 +8210,20 @@ class JarvisApp(App):
         except Exception:
             save_crash("Notification failed:\n" + traceback.format_exc())
 
+    def _bg_notify(self):
+        """Called from a worker thread when a result is ready: while the app is paused the Kivy clock does not run,
+        so the notification is posted right here instead of through Clock."""
+        try:
+            if not getattr(self, "app_paused", False):
+                return
+            now = time.time()
+            if now - getattr(self, "_last_bg_notify", 0) < 3:
+                return
+            self._last_bg_notify = now
+            self.notify_answer()
+        except Exception:
+            pass
+
     def clear_notification(self):
         try:
             from jnius import autoclass
@@ -7336,6 +8260,10 @@ class JarvisApp(App):
         if role == "user":
             self.hide_intro()
         if role == "jarvis":
+            if RETRY_MARK in str(text):
+                self._send_fail()
+            else:
+                self._send_ok()
             self.busy_stop()
             self._remove_skeleton()
             if self.app_paused:
@@ -7440,11 +8368,40 @@ class JarvisApp(App):
         panel.add_widget(Widget())
         panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
                                      font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
-                                     color=(1, 1, 1, 1), on_release=lambda *_: self._ob_profile_done(screen, facts)))
+                                     color=(1, 1, 1, 1), on_release=lambda *_: self._ob_apps_step(screen, facts)))
         skip = FrostButton(tint=(1, 1, 1), alpha=0.06, radius=18, text=mk(self.t("pf_skip")), font_size=dp(13), halign="center",
                            size_hint_y=None, height=dp(38), color=hex_color(theme["text"]))
-        skip.bind(on_release=lambda *_: self._ob_profile_done(screen, facts))
+        skip.bind(on_release=lambda *_: self._ob_apps_step(screen, facts))
         panel.add_widget(skip)
+
+    def _ob_apps_step(self, screen, facts):
+        """Last question: may the assistant open the user's apps, and which ones."""
+        theme = THEMES[self.theme_index]
+        screen.set_step(3)
+        panel = screen.new_panel(600)
+        title = make_label(self.t("apps_header").format(a=self.assistant_name or "S.A.I"), 19, theme["text"], True,
+                           halign="left", size_hint_y=None, height=dp(78))
+        title.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        panel.add_widget(title)
+        holder = BoxLayout(orientation="vertical")
+        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48))
+        row.add_widget(Widget())
+        row.add_widget(PillSwitch(active=self.apps_master(), tint=screen.acc2, size=(dp(76), dp(40)),
+                                  on_change=lambda v: (self.set_apps_master(v), setattr(picker, "opacity", 1 if v else 0.25),
+                                                       setattr(picker, "disabled", not v))))
+        panel.add_widget(row)
+        panel.add_widget(make_label(self.t("apps_which"), 12, muted(), False, halign="left", size_hint_y=None, height=dp(22)))
+        picker = AppsPicker(self)
+        panel.add_widget(picker)
+
+        def done(*_):
+            self._apps_cfg()["asked"] = True
+            self._apps_cfg_save()
+            self._ob_profile_done(screen, facts)
+
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22, text="[b]" + mk(self.t("ob_continue")) + "[/b]",
+                                     font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
+                                     color=(1, 1, 1, 1), on_release=done))
 
     def pick_attachment(self, *_):
         """Open Android document picker and send the selected image/text file to JARVIS."""
@@ -7505,6 +8462,24 @@ class JarvisApp(App):
         if request_code == 7413 and getattr(self, "_avatar_pending", False):
             self._avatar_pending = False
             self._avatar_picked(result_code, data)
+            return
+        if request_code == 7414 and getattr(self, "_save_as_path", None):
+            path, self._save_as_path = self._save_as_path, None
+            try:
+                from jnius import autoclass
+                Activity = autoclass("android.app.Activity")
+                if result_code != Activity.RESULT_OK or data is None or data.getData() is None:
+                    return
+                resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+                out = resolver.openOutputStream(data.getData())
+                inp = autoclass("java.io.FileInputStream")(path)
+                copy_java_stream(inp, out)
+                inp.close()
+                out.close()
+                Clock.schedule_once(lambda dt: self._media_notice(self.t("block_saved")), 0)
+            except Exception:
+                save_crash("Save as failed:\n" + traceback.format_exc())
+                Clock.schedule_once(lambda dt: self._media_notice(self.t("block_save_failed")), 0)
             return
         if request_code != 7412 or not getattr(self, "_attachment_pending", False):
             return
@@ -7659,11 +8634,13 @@ class JarvisApp(App):
                 result = json.loads(response.read().decode("utf-8"))
             answer = str(result.get("answer", self.t("file_no_answer")))
             Clock.schedule_once(lambda dt: self._set_delivery(path, "sent"), 0)
+            self._bg_notify()
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, answer), 0)
         except urllib.error.HTTPError as exc:
             save_crash("Attachment upload HTTP error: %s" % exc.code)
             detail = self.friendly_error(exc)
             Clock.schedule_once(lambda dt: self._set_delivery(path, "sent"), 0)
+            self._bg_notify()
             Clock.schedule_once(lambda dt: self._attachment_answer(chat_id, detail), 0)
         except Exception as exc:
             save_crash("Attachment upload failed:\n" + traceback.format_exc())
@@ -7812,6 +8789,7 @@ class JarvisApp(App):
         except Exception as exc:
             save_crash("Image generation failed:\n" + traceback.format_exc())
             text, say = self.t("image_failed").format(self.friendly_error(exc)), ""
+        self._bg_notify()
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
     def _job_search(self, chat_id, query):
@@ -7843,6 +8821,7 @@ class JarvisApp(App):
         except Exception as exc:
             save_crash("Image search failed:\n" + traceback.format_exc())
             text = self.t("image_failed").format(self.friendly_error(exc))
+        self._bg_notify()
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, ""), 0)
 
     def _job_create_file(self, chat_id, request):
@@ -7858,6 +8837,7 @@ class JarvisApp(App):
         except Exception as exc:
             save_crash("File creation failed:\n" + traceback.format_exc())
             text, say = self.t("edit_failed").format(self.friendly_error(exc)), ""
+        self._bg_notify()
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
     def _attachment_edit_job(self, chat_id, name, mime, raw, prompt, mode, path=None):
@@ -7909,7 +8889,34 @@ class JarvisApp(App):
             else:
                 self._attachment_net_failed(chat_id, path, text)
                 return
+        self._bg_notify()
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
+
+    def open_block(self, kind, payload, lang=""):
+        try:
+            BlockViewer(self, kind, payload, lang).open()
+        except Exception:
+            detail = traceback.format_exc()
+            save_crash("Open block failed:\n" + detail)
+            self.show_error_popup("Open block failed:\n" + detail)
+
+    def save_as(self, path):
+        """The system 'save as' screen: the user chooses the folder and the file name."""
+        import mimetypes
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            name = os.path.basename(path)
+            intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType(mimetypes.guess_type(name)[0] or "application/octet-stream")
+            intent.putExtra(Intent.EXTRA_TITLE, name)
+            self._save_as_path = path
+            activity.startActivityForResult(intent, 7414)
+        except Exception:
+            save_crash("Save as failed:\n" + traceback.format_exc())
+            self._media_notice(self.t("block_save_failed"))
 
     def open_media(self, path):
         try:
@@ -7939,6 +8946,83 @@ class JarvisApp(App):
         label = getattr(self, "_delivery_labels", {}).get(path)
         if label is not None:
             self._paint_delivery(label, state)
+
+    # ---- "sending" strip under the chat: progress while the command travels, a retry icon when it did not arrive ----
+    def _send_begin(self, resend):
+        """resend(): sends the SAME command again (the message is already in the chat and is not added twice)."""
+        self._send_resend = resend
+        self._send_render("sending")
+        try:
+            ev = getattr(self, "_send_timeout_ev", None)
+            if ev is not None:
+                ev.cancel()
+            self._send_timeout_ev = Clock.schedule_once(lambda dt: self._send_fail() if self._send_state == "sending" else None, 50)
+        except Exception:
+            pass
+
+    def _send_ok(self):
+        if getattr(self, "_send_state", "idle") in ("sending", "failed"):
+            self._send_render("sent")
+            Clock.schedule_once(lambda dt: self._send_render("idle") if self._send_state == "sent" else None, 1.2)
+
+    def _send_fail(self):
+        if getattr(self, "_send_state", "idle") != "idle" or getattr(self, "_send_resend", None) or getattr(self, "_retry", None):
+            self._send_render("failed")
+
+    def _send_tap_retry(self, *_):
+        fn = getattr(self, "_retry", None)
+        if fn is not None:
+            self._retry = None
+            self._send_begin(fn)
+            fn()
+            return
+        again = getattr(self, "_send_resend", None)
+        if again is not None:
+            self._send_begin(again)
+            again()
+
+    def _send_render(self, state):
+        strip = getattr(self, "send_strip", None)
+        self._send_state = state
+        if strip is None:
+            return
+        try:
+            for w in list(strip.children):
+                if isinstance(w, IndeterminateBar):
+                    w.stop()
+            strip.clear_widgets()
+            if state == "idle":
+                strip.height = 0
+                strip.opacity = 0
+                return
+            theme = THEMES[self.theme_index]
+            accent = hex_color(theme["accent"])[:3]
+            strip.opacity = 1
+            if state == "sending":
+                strip.height = dp(22)
+                col = BoxLayout(orientation="vertical", spacing=dp(3))
+                col.add_widget(make_label(self.t("st_sending"), 11, "#8FA6C8", False, halign="left", size_hint_y=None, height=dp(14)))
+                col.children[0].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                col.add_widget(IndeterminateBar(color=accent))
+                strip.add_widget(col)
+            elif state == "sent":
+                strip.height = dp(26)
+                strip.add_widget(Widget())
+                mark = IconButton(kind="check", icon_rgba=hex_color("#7CE0A0"), tint=(0.3, 0.9, 0.55), alpha=0.0, size_hint=(None, None), size=(dp(24), dp(24)))
+                strip.add_widget(mark)
+                strip.add_widget(make_label(self.t("st_sent"), 11, "#7CE0A0", False, size_hint=(None, 1), width=dp(70)))
+            else:                                      # failed
+                strip.height = dp(46)
+                lab = make_label(self.t("st_failed"), 12, "#FFB4B4", True, halign="left")
+                lab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                strip.add_widget(lab)
+                btn = IconButton(kind="retry", tint=accent, alpha=0.22, radius=18, icon_rgba=hex_color(theme["text"]),
+                                 size_hint=(None, None), size=(dp(40), dp(40)), pos_hint={"center_y": 0.5})
+                btn.bind(on_release=self._send_tap_retry)
+                strip.add_widget(btn)
+                strip.add_widget(make_label(self.t("retry_label"), 12, theme["text"], False, size_hint=(None, 1), width=dp(64)))
+        except Exception:
+            save_crash("Send strip failed:\n" + traceback.format_exc())
 
     def retry_last(self):
         fn, self._retry = getattr(self, "_retry", None), None
@@ -7995,6 +9079,60 @@ class JarvisApp(App):
         except Exception as exc:
             save_crash("Copy media failed:\n" + traceback.format_exc())
             self._media_notice(self.t("copy_failed"))
+
+    def _media_uri(self, path, name, mime):
+        """A content:// address for a file of the app (gallery / downloads), made once and kept."""
+        from jnius import autoclass
+        cache = getattr(self, "_clip_uris", None)
+        if cache is None:
+            cache = self._clip_uris = {}
+        uri = cache.get(path)
+        if uri is not None:
+            return uri
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = activity.getContentResolver()
+        ContentValues = autoclass("android.content.ContentValues")
+        values = ContentValues()
+        values.put("_display_name", name)
+        values.put("mime_type", mime)
+        is_image = mime.startswith("image/")
+        values.put("relative_path", "Pictures/SAI" if is_image else "Download/SAI")
+        collection = (autoclass("android.provider.MediaStore$Images$Media") if is_image
+                      else autoclass("android.provider.MediaStore$Downloads")).EXTERNAL_CONTENT_URI
+        uri = resolver.insert(collection, values)
+        if uri is None:
+            raise RuntimeError("MediaStore refused the file")
+        out = resolver.openOutputStream(uri)
+        inp = autoclass("java.io.FileInputStream")(path)
+        copy_java_stream(inp, out)
+        inp.close()
+        out.close()
+        cache[path] = uri
+        return uri
+
+    def share_media(self, path):
+        """The system 'send' list (messengers, mail, Bluetooth ...) like in any normal app."""
+        import mimetypes
+        name = os.path.basename(path).split("__", 1)[-1]
+        mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        try:
+            from jnius import autoclass, cast
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            send = Intent(Intent.ACTION_SEND)
+            if is_text_file(name, mime) and os.path.getsize(path) <= 120000:
+                with open(path, "rb") as handle:
+                    send.setType("text/plain")
+                    send.putExtra(Intent.EXTRA_TEXT, handle.read().decode("utf-8", "replace"))
+            else:
+                uri = self._media_uri(path, name, mime)
+                send.setType(mime)
+                send.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            activity.startActivity(Intent.createChooser(send, self.t("share_title")))
+        except Exception:
+            save_crash("Share failed:\n" + traceback.format_exc())
+            self._media_notice(self.t("share_failed"))
 
     def save_media(self, path):
         """Copy a generated picture/file to the phone's gallery (Pictures/SAI) or Downloads (Download/SAI)."""
@@ -8626,11 +9764,12 @@ class JarvisApp(App):
     def send_command(self, *_):
         if not hasattr(self, "command_input"):
             return
-        command_text = self.command_input.text.strip()
+        command_text = self.command_input.get_text().strip()
         pending = getattr(self, "_pending_attachment", None)
         if not command_text and not pending:
             return
         self.command_input.text = ""
+        self.command_input.clear_native()
         self.ensure_notification_permission()
         chat_id = self.chats.current_id
         if pending:                         # picture/file + the typed instruction go to the AI together
@@ -8643,6 +9782,7 @@ class JarvisApp(App):
             self.add_chat_message(chat_id, "user", shown)
             for fact in extract_facts(command_text):
                 self.profile.add(fact)
+            self._send_begin(lambda: self._process_attachment(chat_id, pending, command_text))
             self._process_attachment(chat_id, pending, command_text)
             return
         # Keep prior turns for the API before adding the current user message.
@@ -8656,24 +9796,29 @@ class JarvisApp(App):
         for fact in extract_facts(command_text):
             self.profile.add(fact)
         self.add_chat_message(chat_id, "user", command_text)
-        if parse_chats_analysis(command_text):
-            self._start_chat_analysis(chat_id, command_text)
-            return
-        media = parse_media_intent(command_text)
-        if media is None and is_photo_followup(command_text):
-            earlier = [m.get("text", "") for m in (self.chats.get(chat_id) or {}).get("messages", [])[:-1] if m.get("role") == "user"]
-            earlier = [strip_media(" ".join(str(t).split())) for t in earlier]
-            earlier = [t for t in earlier if t and not is_photo_followup(t)]
-            if earlier:
-                media = ("search", earlier[-1][:200])
-        if media is not None:
-            self._start_media_job(chat_id, media[0], media[1])
-            return
-        awaiting = time.monotonic() < getattr(self, "_intent_ask_until", 0)       # the assistant has just asked a question about a plan
-        if self.server_token.strip() and (awaiting or looks_like_device_command(command_text) or looks_like_plan(command_text)):
-            self._start_device_intent(chat_id, command_text, history)
-            return
-        self._continue_send(chat_id, command_text, history)
+
+        def route():
+            if parse_chats_analysis(command_text):
+                self._start_chat_analysis(chat_id, command_text)
+                return
+            media = parse_media_intent(command_text)
+            if media is None and is_photo_followup(command_text):
+                earlier = [m.get("text", "") for m in (self.chats.get(chat_id) or {}).get("messages", [])[:-1] if m.get("role") == "user"]
+                earlier = [strip_media(" ".join(str(t).split())) for t in earlier]
+                earlier = [t for t in earlier if t and not is_photo_followup(t)]
+                if earlier:
+                    media = ("search", earlier[-1][:200])
+            if media is not None:
+                self._start_media_job(chat_id, media[0], media[1])
+                return
+            awaiting = time.monotonic() < getattr(self, "_intent_ask_until", 0)       # the assistant has just asked a question about a plan
+            if self.server_token.strip() and (awaiting or looks_like_device_command(command_text) or looks_like_plan(command_text)):
+                self._start_device_intent(chat_id, command_text, history)
+                return
+            self._continue_send(chat_id, command_text, history)
+
+        self._send_begin(route)
+        route()
 
     def _continue_send(self, chat_id, command_text, history):
         info_fn = find_info_command(command_text)
@@ -8826,6 +9971,7 @@ class JarvisApp(App):
         except Exception:
             save_crash("Info command failed:\n" + traceback.format_exc())
             answer = self.t("info_error")
+        self._bg_notify()
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _ask_server(self, chat_id, message, history):
@@ -8886,8 +10032,10 @@ class JarvisApp(App):
                 def offer(dt):
                     self._retry = lambda: self._resend_text(chat_id, message, history)
                     self._finish_server_answer(chat_id, answer + "\n" + RETRY_MARK)
+                self._bg_notify()
                 Clock.schedule_once(offer, 0)
                 return
+        self._bg_notify()
         Clock.schedule_once(lambda dt: self._finish_server_answer(chat_id, answer), 0)
 
     def _resend_text(self, chat_id, message, history):
@@ -9010,6 +10158,8 @@ class JarvisApp(App):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
         Clock.schedule_once(lambda dt: self._maybe_retitle(chat_id), 10)
         answer = self.brand(answer)
+        if RETRY_MARK not in str(answer):
+            self._send_ok()
         if RETRY_MARK in str(answer):
             self.add_chat_message(chat_id, "jarvis", answer)       # an error with a Retry button: shown, not read aloud
             return
@@ -9915,14 +11065,14 @@ class JarvisApp(App):
         content = BoxLayout(orientation="vertical", spacing=dp(8))
         titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
                   "voice": "title_voice", "account": "title_account", "mode": "title_mode",
-                  "profile": "title_profile", "me": "title_me"}
+                  "profile": "title_profile", "me": "title_me", "apps": "title_apps"}
 
         def option(text, active, callback, height=54):
             self.frost_row(content, text, active, callback, height)
 
         if section == "main":
             for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
-                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_account", "account")):
+                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_apps", "apps"), ("sec_account", "account")):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
             option(self.t("live_title"), self.live_mode,
                    lambda inst: (self.settings_popup.dismiss(), self.show_response(self.toggle_live())), height=56)
@@ -9989,6 +11139,21 @@ class JarvisApp(App):
                                lambda *_: (self.profile.clear_note(), self.open_section("profile")), 44, center=True)
             if self.server_token.strip() and (not self.profile.note or len(self.profile.facts) != self.profile.note_count):
                 Clock.schedule_once(lambda dt: self.refresh_profile_note(), 0.4)
+        elif section == "apps":
+            content.add_widget(make_label(self.t("apps_header").format(a=self.assistant_name or "S.A.I"), 19, theme["text"], True,
+                                          halign="left", size_hint_y=None, height=dp(78)))
+            content.children[0].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+            row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(10))
+            row.add_widget(Widget())
+            master = PillSwitch(active=self.apps_master(), tint=hex_color(theme["accent"])[:3], size=(dp(76), dp(40)),
+                                on_change=lambda v: (self.set_apps_master(v), Clock.schedule_once(lambda dt: self.open_section("apps"), 0.2)))
+            row.add_widget(master)
+            content.add_widget(row)
+            if self.apps_master():
+                content.add_widget(make_label(self.t("apps_which"), 12, muted(), False, halign="left", size_hint_y=None, height=dp(24)))
+                content.add_widget(AppsPicker(self))
+            else:
+                content.add_widget(Widget())
         elif section == "mode":
             for key, code in (("mode_auto", "auto"), ("mode_dark", "dark"), ("mode_light", "light")):
                 option(self.t(key), self.ui_mode == code,
@@ -10060,17 +11225,43 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt: self.greet_user(), 1.8)
 
     def greet_user(self):
-        """The assistant welcomes the user when the app opens: shown in the chat (not saved) and read aloud."""
+        """The AI writes a short, respectful welcome for the time of day when the app opens; it is shown and read aloud.
+        No fixed offline phrases: if the server does not answer in time, nothing is said."""
         try:
-            if getattr(self, "_ob_active", False):
+            if getattr(self, "_ob_active", False) or not self.server_token.strip():
                 return
-            text = greeting_for(self.language, [f["text"] for f in self.profile.facts], datetime.now().hour)
-            if self.chat_placeholder:
-                self.notice = text
-                self.render_chat()
-            else:
-                self.append_bubble("jarvis", text)
-            self.speak_answer(text)
+            now = datetime.now()
+            if time.time() - getattr(self, "_last_greet", 0) < 3 * 3600:          # not at every return to the app
+                return
+            self._last_greet = time.time()
+            recent = list(getattr(self, "_recent_greetings", []))[-3:]
+            payload = {"name": (profile_person([f["text"] for f in self.profile.facts])[0] or ""), "language": self._lang_code(),
+                       "now": now.strftime("%H:%M"), "weekday": now.strftime("%A"), "recent": recent}
+
+            def job():
+                try:
+                    result = self._json_call("POST", "/greeting", payload, timeout=9)
+                    text = str(result.get("greeting", "")).strip()
+                except Exception:
+                    save_crash("Greeting request failed:\n" + traceback.format_exc())
+                    return
+                if not text:
+                    return
+
+                def show(dt):
+                    if getattr(self, "_ob_active", False):
+                        return
+                    self._recent_greetings = (recent + [text])[-3:]
+                    if self.chat_placeholder:
+                        self.notice = text
+                        self.render_chat()
+                    else:
+                        self.append_bubble("jarvis", text)
+                    if not self.app_paused:
+                        self.speak_answer(text)
+                Clock.schedule_once(show, 0)
+
+            threading.Thread(target=job, daemon=True).start()
         except Exception:
             save_crash("Greeting failed:\n" + traceback.format_exc())
 
@@ -10114,6 +11305,11 @@ class JarvisApp(App):
 
     def on_resume(self):
         self.app_paused = False
+        try:
+            if time.time() - getattr(self, "_last_greet", 0) >= 3 * 3600 and not getattr(self, "_ob_active", False):
+                Clock.schedule_once(lambda dt: self.greet_user(), 0.8)
+        except Exception:
+            pass
         self.clear_notification()
         self._hold_awake(False)
         self.update_pause()
