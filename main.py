@@ -525,6 +525,41 @@ TEXTS = {
         "menu_new": "Чати нав",
         "menu_settings": "Танзимот",
         "menu_about": "Маълумот дар бораи JARVIS",
+        "menu_library": "Китобхона",
+        "lib_title": "Китобхона",
+        "lib_empty": "Китобхона холӣ аст. Дар экрани код ё ҷадвал: се нуқта → «Ба китобхона».",
+        "lib_save_last": "Ҷавоби охирро нигоҳ доштан",
+        "lib_save": "Ба китобхона",
+        "lib_saved": "Ба китобхона илова шуд",
+        "lib_text": "Матн",
+        "lib_code": "Код",
+        "lib_table": "Ҷадвал",
+        "sec_security": "Амният",
+        "title_security": "Амният",
+        "pin_title": "Қулфи PIN",
+        "pin_note": "Ихтиёрӣ. PIN танҳо экранро ҳимоя мекунад ва дар телефон нигоҳ дошта мешавад.",
+        "pin_new": "PIN-и нав (4–6 рақам)",
+        "pin_repeat": "PIN-ро такрор кунед",
+        "pin_enter": "PIN-ро ворид кунед",
+        "pin_wrong": "PIN нодуруст аст",
+        "pin_mismatch": "PIN-ҳо мувофиқ нестанд. Аз нав.",
+        "pin_wait": "Бисёр хато. Интизор шавед: {n} сония",
+        "pin_cancel": "Бекор кардан",
+        "pin_forgot": "Фаромӯш кардам",
+        "pin_forgot_ask": "PIN нест карда мешавад ва шумо аз аккаунт мебароед. Пас аз воридшавӣ чатҳо аз сервер бармегарданд.",
+        "pin_forgot_yes": "Нест кардан ва баромадан",
+        "pin_after": "Қулф кардан пас аз баромадан аз барнома:",
+        "pin_after_0": "Ҳар дафъа дар кушодан",
+        "pin_after_30": "Баъд аз 30 сония",
+        "pin_after_120": "Баъд аз 2 дақиқа",
+        "pin_after_600": "Баъд аз 10 дақиқа",
+        "pin_secure": "Пинҳон кардани экран дар «барномаҳои охирин» ва манъи скриншот",
+        "pin_change": "Тағйири PIN",
+        "open_full": "Кушодани ҷадвали пурра",
+        "multi_skip": "Амали дуюм, ки экранро мегирад, нигоҳ дошта нашуд.",
+        "apps_hidden": "Телефон рӯйхати барномаҳоро ба S.A.I намедиҳад. Дар танзимоти барнома → Иҷозатҳо иҷозати «Барномаҳои насбшуда» (ё «Рӯйхати барномаҳо»)-ро фаъол кунед, баъд «Навсозӣ»-ро пахш кунед.",
+        "apps_open_settings": "Кушодани танзимоти барнома",
+        "apps_refresh": "Навсозӣ",
         "block_saved": "Файл захира шуд",
         "block_save_failed": "Захира нашуд",
         "sec_apps": "Барномаҳо",
@@ -789,6 +824,41 @@ TEXTS = {
         "menu_new": "Новый чат",
         "menu_settings": "Настройки",
         "menu_about": "О JARVIS",
+        "menu_library": "Библиотека",
+        "lib_title": "Библиотека",
+        "lib_empty": "Библиотека пуста. На экране кода или таблицы: три точки → «В библиотеку».",
+        "lib_save_last": "Сохранить последний ответ",
+        "lib_save": "В библиотеку",
+        "lib_saved": "Добавлено в библиотеку",
+        "lib_text": "Текст",
+        "lib_code": "Код",
+        "lib_table": "Таблица",
+        "sec_security": "Безопасность",
+        "title_security": "Безопасность",
+        "pin_title": "PIN-код",
+        "pin_note": "По желанию. PIN защищает только экран и хранится на телефоне.",
+        "pin_new": "Новый PIN (4–6 цифр)",
+        "pin_repeat": "Повторите PIN",
+        "pin_enter": "Введите PIN",
+        "pin_wrong": "Неверный PIN",
+        "pin_mismatch": "PIN не совпадают. Ещё раз.",
+        "pin_wait": "Слишком много ошибок. Подождите: {n} с",
+        "pin_cancel": "Отмена",
+        "pin_forgot": "Забыл PIN",
+        "pin_forgot_ask": "PIN будет удалён, и вы выйдете из аккаунта. После входа чаты вернутся с сервера.",
+        "pin_forgot_yes": "Удалить и выйти",
+        "pin_after": "Блокировать после выхода из приложения:",
+        "pin_after_0": "При каждом открытии",
+        "pin_after_30": "Через 30 секунд",
+        "pin_after_120": "Через 2 минуты",
+        "pin_after_600": "Через 10 минут",
+        "pin_secure": "Скрывать экран в «недавних» и запретить скриншоты",
+        "pin_change": "Сменить PIN",
+        "open_full": "Открыть таблицу полностью",
+        "multi_skip": "Второе действие, занимающее экран, пропущено.",
+        "apps_hidden": "Телефон не показывает S.A.I список приложений. В настройках приложения → Разрешения включите «Установленные приложения» (или «Список приложений») и нажмите «Обновить».",
+        "apps_open_settings": "Открыть настройки приложения",
+        "apps_refresh": "Обновить",
         "block_saved": "Файл сохранён",
         "block_save_failed": "Не удалось сохранить",
         "sec_apps": "Приложения",
@@ -1053,6 +1123,41 @@ TEXTS = {
         "menu_new": "New chat",
         "menu_settings": "Settings",
         "menu_about": "About",
+        "menu_library": "Library",
+        "lib_title": "Library",
+        "lib_empty": "The library is empty. On a code or table screen: three dots → Save to library.",
+        "lib_save_last": "Save the last answer",
+        "lib_save": "Save to library",
+        "lib_saved": "Saved to the library",
+        "lib_text": "Text",
+        "lib_code": "Code",
+        "lib_table": "Table",
+        "sec_security": "Security",
+        "title_security": "Security",
+        "pin_title": "PIN lock",
+        "pin_note": "Optional. The PIN only protects the screen and is stored on this phone.",
+        "pin_new": "New PIN (4–6 digits)",
+        "pin_repeat": "Repeat the PIN",
+        "pin_enter": "Enter your PIN",
+        "pin_wrong": "Wrong PIN",
+        "pin_mismatch": "The PINs do not match. Try again.",
+        "pin_wait": "Too many tries. Wait {n} s",
+        "pin_cancel": "Cancel",
+        "pin_forgot": "Forgot PIN",
+        "pin_forgot_ask": "The PIN will be removed and you will be signed out. After you sign in your chats come back from the server.",
+        "pin_forgot_yes": "Remove and sign out",
+        "pin_after": "Lock after leaving the app:",
+        "pin_after_0": "Every time it opens",
+        "pin_after_30": "After 30 seconds",
+        "pin_after_120": "After 2 minutes",
+        "pin_after_600": "After 10 minutes",
+        "pin_secure": "Hide the screen in recent apps and block screenshots",
+        "pin_change": "Change PIN",
+        "open_full": "Open the full table",
+        "multi_skip": "A second action that takes the screen was skipped.",
+        "apps_hidden": "The phone hides the app list from S.A.I. In the app settings → Permissions turn on “Installed apps” (or “App list”), then tap Refresh.",
+        "apps_open_settings": "Open app settings",
+        "apps_refresh": "Refresh",
         "block_saved": "File saved",
         "block_save_failed": "Could not save",
         "sec_apps": "Apps",
@@ -3780,6 +3885,76 @@ class ProfileStore(object):
         self.save()
 
 
+class LibraryStore(object):
+    """Saved texts, code and tables. Items: {id, kind: text|code|table, title, payload, lang, t, del}. Deleted items stay as small
+    tombstones so a deletion also reaches the account and the other phone."""
+
+    def __init__(self, path):
+        self.path = path
+        self.items = []
+        try:
+            if path and os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+                if isinstance(data, list):
+                    self.items = [i for i in data if isinstance(i, dict) and i.get("id")]
+        except Exception:
+            self.items = []
+
+    def save(self):
+        if not self.path:
+            return
+        try:
+            with open(self.path + ".tmp", "w", encoding="utf-8") as handle:
+                json.dump(self.items, handle, ensure_ascii=False)
+            os.replace(self.path + ".tmp", self.path)
+        except Exception:
+            save_crash("Library not saved:\n" + traceback.format_exc())
+
+    def alive(self):
+        return sorted([i for i in self.items if not i.get("del")], key=lambda i: i.get("t", 0), reverse=True)
+
+    def add(self, kind, payload, title="", lang=""):
+        import binascii
+        text = payload if kind != "table" else payload
+        if not title:
+            if kind == "table":
+                title = " | ".join(str(c) for c in (payload[0] if payload else []))[:60]
+            else:
+                title = " ".join(str(text).split())[:60]
+        item = {"id": binascii.hexlify(os.urandom(6)).decode(), "kind": kind, "title": title or "-", "payload": payload,
+                "lang": lang, "t": time.time(), "del": False}
+        self.items.append(item)
+        self.save()
+        return item
+
+    def remove(self, item_id):
+        for i in self.items:
+            if i["id"] == item_id:
+                i["del"], i["payload"], i["t"] = True, "", time.time()
+        self.save()
+
+    def merge(self, remote):
+        """The newer version of every id wins (tombstones included). Returns True when this phone changed."""
+        mine = {i["id"]: i for i in self.items}
+        changed = False
+        for r in remote:
+            if not isinstance(r, dict) or not r.get("id"):
+                continue
+            cur = mine.get(r["id"])
+            if cur is None or float(r.get("t", 0)) > float(cur.get("t", 0)):
+                mine[r["id"]] = r
+                changed = True
+        self.items = list(mine.values())
+        if changed:
+            self.save()
+        return changed
+
+    def dump(self):
+        keep = [i for i in self.items if not i.get("del") or time.time() - float(i.get("t", 0)) < 90 * 86400]
+        return json.dumps(keep[-400:], ensure_ascii=False)
+
+
 class ChatStore(object):
     def __init__(self, path=None):
         self.path = path
@@ -4890,65 +5065,197 @@ class CodeBlock(TapOpenMixin, BoxLayout):
         self.app.open_block("code", self.code, self.lang)
 
 
-class TableBlock(TapOpenMixin, BoxLayout):
-    """A table that can be moved in every direction when it is wide or long."""
+class PinchScroll(ScrollView):
+    """A scroll view that also zooms with two fingers: the picture follows the fingers at once, and when they are lifted
+    on_zoom(factor) is called so the content can be built again at the new size."""
 
-    def __init__(self, app, rows, full=False, **kwargs):
+    def __init__(self, on_zoom=None, target=None, **kwargs):
+        super().__init__(**kwargs)
+        self.on_zoom_cb = on_zoom
+        self.target = target
+        self._pts = {}
+        self._d0 = None
+        self._factor = 1.0
+        self._pinching = False
+        self._saved = None
+        self._scale = None
+
+    def _dist(self):
+        pts = list(self._pts.values())
+        if len(pts) < 2:
+            return 0.0
+        return ((pts[0].x - pts[1].x) ** 2 + (pts[0].y - pts[1].y) ** 2) ** 0.5
+
+    def _live(self, factor):
+        t = self.target
+        if t is None:
+            return
+        if self._scale is None:
+            with t.canvas.before:
+                PushMatrix()
+                self._scale = Scale(1, 1, 1)
+            with t.canvas.after:
+                PopMatrix()
+        pts = list(self._pts.values())
+        mx = sum(p.x for p in pts) / max(1, len(pts))
+        my = sum(p.y for p in pts) / max(1, len(pts))
+        self._scale.origin = (mx, my)
+        self._scale.x = self._scale.y = factor
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self._pts[touch.uid] = touch
+            if len(self._pts) == 2:
+                self._d0 = self._dist() or None
+                self._pinching = True
+                self._factor = 1.0
+                self._saved = (self.do_scroll_x, self.do_scroll_y)
+                self.do_scroll_x = self.do_scroll_y = False
+                return True
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if self._pinching:
+            if self._d0:
+                d = self._dist()
+                if d:
+                    self._factor = max(0.4, min(3.5, d / self._d0))
+                    try:
+                        self._live(self._factor)
+                    except Exception:
+                        pass
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        was = touch.uid in self._pts
+        self._pts.pop(touch.uid, None)
+        result = super().on_touch_up(touch)
+        if was and self._pinching and len(self._pts) < 2:
+            self._pinching = False
+            if self._saved:
+                self.do_scroll_x, self.do_scroll_y = self._saved
+            factor = self._factor
+            self._factor = 1.0
+            try:
+                if self._scale is not None:
+                    self._scale.x = self._scale.y = 1.0
+            except Exception:
+                pass
+            if self.on_zoom_cb and abs(factor - 1.0) > 0.04:
+                Clock.schedule_once(lambda dt: self.on_zoom_cb(factor), 0)
+            return True
+        return result
+
+
+class TableGrid(GridLayout):
+    """The cells are plain labels; the backgrounds and the lines are drawn here, a few long lines instead of a frame per cell,
+    and only after the cells have their place (no stray lines in a corner)."""
+
+    def __init__(self, widths, heights, acc, **kwargs):
+        super().__init__(cols=len(widths), size_hint=(None, None), spacing=0, **kwargs)
+        self.col_w = widths
+        self.row_h = heights
+        self.acc = acc
+        self.width = sum(widths)
+        self.height = sum(heights)
+        self._ready = False
+        self.bind(pos=self._draw, size=self._draw)
+        Clock.schedule_once(self._first, 0.05)
+
+    def _first(self, *_):
+        self._ready = True
+        self._draw()
+
+    def _draw(self, *_):
+        if not self._ready:
+            return
+        try:
+            self.canvas.before.clear()
+            x0, top, w, h = self.x, self.top, self.width, self.height
+            line_c = (0, 0, 0, 0.16) if UI_LIGHT else (1, 1, 1, 0.16)
+            with self.canvas.before:
+                y = top
+                for r, rh in enumerate(self.row_h):
+                    y -= rh
+                    if r == 0:
+                        Color(self.acc[0], self.acc[1], self.acc[2], 0.34)
+                        Rectangle(pos=(x0, y), size=(w, rh))
+                    elif r % 2 == 0:
+                        Color(*((0, 0, 0, 0.04) if UI_LIGHT else (1, 1, 1, 0.05)))
+                        Rectangle(pos=(x0, y), size=(w, rh))
+                Color(*line_c)
+                y = top
+                lw = dp(0.8)
+                Line(points=[x0, y, x0 + w, y], width=lw)
+                for rh in self.row_h:
+                    y -= rh
+                    Line(points=[x0, y, x0 + w, y], width=lw)
+                x = x0
+                Line(points=[x, top, x, top - h], width=lw)
+                for cw in self.col_w:
+                    x += cw
+                    Line(points=[x, top, x, top - h], width=lw)
+        except Exception:
+            pass
+
+
+class TableBlock(TapOpenMixin, BoxLayout):
+    """In the chat: a preview that moves sideways only (up/down belongs to the chat) with a hint to open it.
+    On its own screen (full=True): the whole table, any direction, pinch to zoom."""
+
+    def __init__(self, app, rows, full=False, zoom=1.0, on_zoom=None, **kwargs):
         super().__init__(orientation="vertical", size_hint_y=None, **kwargs)
         self.app = app
         self.full_view = full
-        self.opacity = 0                      # shown only after the first layout, so no stray lines flash in a corner
-        Clock.schedule_once(lambda dt: setattr(self, "opacity", 1), 0.2)
         theme = THEMES[app.theme_index]
         acc = hex_color(theme["accent"])[:3]
         text_c = hex_color(theme["text"])
         ncols = max(len(r) for r in rows)
         rows = [[clean_md(c) for c in r] + [""] * (ncols - len(r)) for r in rows]
         self.rows = rows
+        z = max(0.6, min(3.0, float(zoom)))
+        cw_char = dp(8.2) * z
         widths = []
         for c in range(ncols):
             longest = max(max((len(x) for x in rows[r][c].split("\n")), default=0) for r in range(len(rows)))
-            widths.append(min(max(dp(84), longest * dp(8.2) + dp(22)), dp(250)))
-        grid = GridLayout(cols=ncols, size_hint=(None, None), spacing=0)
-        total_h = 0
+            widths.append(min(max(dp(84) * z, longest * cw_char + dp(22) * z), dp(250) * z))
+        heights = []
         for r, row in enumerate(rows):
-            heights = []
+            hs = []
             for c in range(ncols):
-                chars = max(4, int((widths[c] - dp(18)) / dp(8.2)))
+                chars = max(4, int((widths[c] - dp(18) * z) / cw_char))
                 lines = sum(max(1, -(-len(part) // chars)) for part in row[c].split("\n"))
-                heights.append(lines * dp(19) + dp(14))
-            h = max(heights)
-            total_h += h
+                hs.append(lines * dp(19) * z + dp(14) * z)
+            heights.append(max(hs))
+        grid = TableGrid(widths, heights, acc)
+        for r, row in enumerate(rows):
             for c in range(ncols):
-                cell = Label(text=row[c], font_size=dp(13), bold=(r == 0), color=text_c, halign="left", valign="middle",
-                             size_hint=(None, None), size=(widths[c], h), padding=(dp(9), dp(5)))
-                cell.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0] - dp(18), None)))
-                cell.text_size = (widths[c] - dp(18), None)
-                with cell.canvas.before:
-                    if r == 0:
-                        Color(acc[0], acc[1], acc[2], 0.34)
-                    elif r % 2 == 0:
-                        Color(1, 1, 1, 0.05) if not UI_LIGHT else Color(0, 0, 0, 0.04)
-                    else:
-                        Color(0, 0, 0, 0)
-                    rect = Rectangle(pos=cell.pos, size=cell.size)
-                    Color(1, 1, 1, 0.16) if not UI_LIGHT else Color(0, 0, 0, 0.16)
-                    edge = Line(rectangle=(cell.x, cell.y, cell.width, cell.height), width=dp(0.8))
-                cell.bind(pos=lambda inst, v, rc=rect, ed=edge: (setattr(rc, "pos", inst.pos),
-                                                                   setattr(ed, "rectangle", (inst.x, inst.y, inst.width, inst.height))),
-                          size=lambda inst, v, rc=rect, ed=edge: (setattr(rc, "size", inst.size),
-                                                                    setattr(ed, "rectangle", (inst.x, inst.y, inst.width, inst.height))))
+                cell = Label(text=row[c], font_size=dp(13) * z, bold=(r == 0), color=text_c, halign="left", valign="middle",
+                             size_hint=(None, None), size=(widths[c], heights[r]), padding=(dp(9) * z, dp(5) * z))
+                cell.text_size = (widths[c] - dp(18) * z, None)
                 grid.add_widget(cell)
-        grid.width = sum(widths)
-        grid.height = total_h
-        scroll = ScrollView(do_scroll_x=True, do_scroll_y=True, bar_width=dp(3), size_hint_y=None,
-                            height=min(total_h + dp(4), dp(340)), scroll_type=["bars", "content"])
+        total_h = sum(heights)
+        self.grid = grid
+        if full:
+            scroll = PinchScroll(on_zoom=on_zoom, target=grid, do_scroll_x=True, do_scroll_y=True, bar_width=dp(4),
+                                 scroll_distance=dp(6), scroll_timeout=120, scroll_type=["bars", "content"])
+            scroll.add_widget(grid)
+            self.size_hint_y = 1
+            self.add_widget(scroll)
+            self.scroll = scroll
+            return
+        clip = dp(300)
+        scroll = ScrollView(do_scroll_x=True, do_scroll_y=False, bar_width=dp(3), size_hint_y=None, scroll_distance=dp(8),
+                            height=min(total_h + dp(4), clip), scroll_type=["bars", "content"])
+        scroll.scroll_y = 1
         scroll.add_widget(grid)
         self.add_widget(scroll)
-        self.height = scroll.height
-        if full:
-            scroll.size_hint_y = 1
-            self.size_hint_y = 1
+        hint = make_label("\u2922 " + app.t("open_full"), 11, muted(), False, halign="left", size_hint_y=None, height=dp(20))
+        hint.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        self.add_widget(hint)
+        self.height = scroll.height + hint.height
+        self.scroll = scroll
 
     def _open_viewer(self):
         self.app.open_block("table", self.rows, "")
@@ -5945,6 +6252,19 @@ class AppsPicker(BoxLayout):
         self.grid.clear_widgets()
         self._switches = {}
         shown = self._visible(query)
+        if not self.apps:
+            # the phone hides the list of installed apps from S.A.I (a separate switch on realme / Xiaomi / Oppo phones)
+            lab = make_label(app.t("apps_hidden"), 13, theme["text"], False, halign="left", size_hint_y=None, height=dp(120))
+            lab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+            self.grid.add_widget(lab)
+            for key, fn in (("apps_open_settings", lambda *_: app.open_app_details()),
+                            ("apps_refresh", lambda *_: (setattr(self, "apps", sorted(app.installed_apps(refresh=True), key=lambda a: a[0].lower())),
+                                                         self._fill(self.search.text)))):
+                b = FrostButton(tint=self.tint, alpha=0.16, radius=14, text=mk(app.t(key)), font_size=dp(14), halign="center",
+                                size_hint_y=None, height=dp(46), color=hex_color(theme["text"]))
+                b.bind(on_release=fn)
+                self.grid.add_widget(b)
+            return
         if not shown:
             self.grid.add_widget(make_label(app.t("apps_none"), 13, muted(), False, size_hint_y=None, height=dp(40)))
         for label, pkg in shown:
@@ -6191,19 +6511,38 @@ class BlockViewer(MediaViewer):
             pass
 
     def _fill(self):
+        self.zoom = getattr(self, "zoom", 1.0)
+        self._build_content()
+
+    def _on_zoom(self, factor):
+        self.zoom = max(0.6, min(3.0, self.zoom * factor))
+        old = getattr(self, "_scroll", None)
+        pos = (old.scroll_x, old.scroll_y) if old is not None else (0, 1)
+        self.area.clear_widgets()
+        self._build_content()
+        sc = getattr(self, "_scroll", None)
+        if sc is not None:
+            sc.scroll_x, sc.scroll_y = pos
+
+    def _build_content(self):
         app = self.app
         theme = THEMES[app.theme_index]
+        z = self.zoom
         if self.kind == "table":
-            self.area.add_widget(TableBlock(app, self.payload, full=True, pos_hint={"x": 0, "y": 0}))
+            block = TableBlock(app, self.payload, full=True, zoom=z, on_zoom=self._on_zoom, pos_hint={"x": 0, "y": 0})
+            self._scroll = block.scroll
+            self.area.add_widget(block)
             return
         lines = str(self.payload).replace("\t", "    ").split("\n")
-        label = Label(text="\n".join(lines), font_size=dp(14), color=hex_color(theme["text"]), halign="left", valign="top",
+        label = Label(text="\n".join(lines), font_size=dp(14) * z, color=hex_color(theme["text"]), halign="left", valign="top",
                       size_hint=(None, None), markup=False, padding=(dp(14), dp(10)))
         label.text_size = (None, None)
         label.texture_update()
         label.size = (label.texture_size[0] + dp(28), label.texture_size[1] + dp(20))
-        scroll = ScrollView(do_scroll_x=True, do_scroll_y=True, bar_width=dp(4), size_hint=(1, 1), scroll_type=["bars", "content"])
+        scroll = PinchScroll(on_zoom=self._on_zoom, target=label, do_scroll_x=True, do_scroll_y=True, bar_width=dp(4),
+                             size_hint=(1, 1), scroll_distance=dp(6), scroll_timeout=120, scroll_type=["bars", "content"])
         scroll.add_widget(label)
+        self._scroll = scroll
         self.area.add_widget(scroll)
 
     def show_menu(self):
@@ -6211,7 +6550,7 @@ class BlockViewer(MediaViewer):
         theme = THEMES[app.theme_index]
         tint = hex_color(theme["accent"])[:3]
         body = BoxLayout(orientation="vertical", spacing=dp(8))
-        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=236)
+        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=300)
 
         def act(fn):
             def run(*_):
@@ -6219,6 +6558,7 @@ class BlockViewer(MediaViewer):
                 Clock.schedule_once(lambda dt: fn(), 0.15)
             return run
         for kind, key, fn in (("download", "view_download", lambda: app.save_as(self.path)),
+                              ("apps", "lib_save", lambda: self._to_library()),
                               ("copy", "view_copy", lambda: self._copy()),
                               ("share", "view_share", lambda: app.share_media(self.path))):
             row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(52))
@@ -6227,6 +6567,14 @@ class BlockViewer(MediaViewer):
             app.frost_row(row, app.t(key), False, act(fn), height=52)
             body.add_widget(row)
         sheet.open()
+
+    def _to_library(self):
+        try:
+            kind = "table" if self.kind == "table" else ("code" if (self.lang or "").strip() else "text")
+            self.app.library_add(kind, self.payload, self.lang)
+            self.toast(self.app.t("lib_saved"))
+        except Exception:
+            save_crash("Library save failed:\n" + traceback.format_exc())
 
     def _copy(self):
         try:
@@ -6385,7 +6733,7 @@ except Exception:
 def _NATIVE_HIDERS():
     """Screens that draw over the main window: the native field must be hidden under them."""
     from kivy.uix.modalview import ModalView
-    return (LiveOverlay, GlassSheet, MediaViewer, TransitionCover, AuroraScreen, ModalView)
+    return (LiveOverlay, GlassSheet, MediaViewer, TransitionCover, AuroraScreen, ModalView, PinPad)
 
 
 def _argb(rgba):
@@ -6393,6 +6741,69 @@ def _argb(rgba):
     a = int(max(0, min(1, rgba[3] if len(rgba) > 3 else 1.0)) * 255)
     value = (a << 24) | (r << 16) | (g << 8) | b
     return value - (1 << 32) if value >= (1 << 31) else value
+
+
+LOCAL_SPLIT_RE = re.compile(r"\s*(?:,|;|\bва\b|\bҳам\b|\bи\b|\bа также\b|\band\b|\bthen\b|\bсипас\b|\bбаъд\b)\s*", re.I)
+LOCAL_UNITS = ((re.compile(r"^(сония|сония|сек|секунд|second|sec|s)", re.I), 1),
+               (re.compile(r"^(дақиқа|дакика|дақ|мин|минут|minute|min|m)", re.I), 60),
+               (re.compile(r"^(соат|час|hour|hr|h)", re.I), 3600))
+
+
+def _norm_digits(text):
+    """'1о' typed with a letter instead of zero, extra spaces."""
+    text = re.sub(r"(?<=\d)[оОoO](?![A-Za-zА-Яа-яЁёӢӣӮӯҒғҚқҲҳҶҷ])", "0", text)
+    return text
+
+
+def parse_local_device(text, app_labels=()):
+    """Simple phone commands understood without the server (alarm, timer, torch, volume, open app). Returns a list of actions."""
+    out = []
+    raw = _norm_digits(" ".join(str(text).split()))
+    for part in [p for p in LOCAL_SPLIT_RE.split(raw) if p and p.strip()]:
+        low = part.lower()
+        act = None
+        if re.search(r"будилник|будильник|alarm|бедор\s*кун|хезон|разбуди", low):
+            m = re.search(r"(\d{1,2})\s*(?:[:.]|\s)\s*(\d{2})\b", low) or re.search(r"(?:соати|в|at|ба)?\s*(\d{1,2})\b()", low)
+            if m:
+                hour = int(m.group(1))
+                minute = int(m.group(2)) if m.group(2) else 0
+                if re.search(r"бегоҳ|шом|вечер|pm|evening|\bшаб\b|ночи|night", low) and hour < 12:
+                    hour += 12
+                if 0 <= hour <= 23 and 0 <= minute <= 59:
+                    act = {"action": "alarm", "hour": hour, "minute": minute, "label": ""}
+        elif re.search(r"таймер|timer", low):
+            m = re.search(r"(\d+)\s*([^\W\d_]+)", low)
+            if m:
+                for rx, mult in LOCAL_UNITS:
+                    if rx.match(m.group(2)):
+                        seconds = int(m.group(1)) * mult
+                        if 1 <= seconds <= 24 * 3600:
+                            act = {"action": "timer", "seconds": seconds, "label": ""}
+                        break
+        elif re.search(r"фонарик|фонарь|чароғак|чирог|flashlight|torch", low):
+            off = re.search(r"хомӯш|хомуш|выключ|погаси|off|ӯчир|учир", low)
+            on = re.search(r"гирён|фурӯз|фуруз|равшан|включ|зажги|\bon\b|turn on", low)
+            act = {"action": "flashlight", "state": "off" if off else ("on")}
+        elif re.search(r"овоз|звук|громк|volume|sound", low):
+            if re.search(r"хомӯш|хомуш|выключ|без звука|mute|silent", low):
+                act = {"action": "volume", "mode": "mute", "level": 0}
+            elif re.search(r"баланд|зиёд|больше|громче|louder|up|increase", low):
+                act = {"action": "volume", "mode": "up", "level": 0}
+            elif re.search(r"паст|кам|тише|меньше|lower|down|decrease", low):
+                act = {"action": "volume", "mode": "down", "level": 0}
+        elif re.search(r"^(?:лутфан\s+)?(?:барномаи?|приложение|app)?\s*(?:кушо|кушой|открой|запусти|open|launch)\b|(?:кушо|кушой|открой|запусти|open|launch)\s*$", low):
+            name = re.sub(r"\b(кушо|кушой|барномаи?|барномаро|приложение|открой|запусти|open|launch|the|app|лутфан)\b", " ", low)
+            name = " ".join(name.split()).strip(" .!?")
+            name = re.sub(r"(?<=\S)ро$", "", name)
+            if name:
+                act = {"action": "open_app", "name": name}
+        if act is not None:
+            out.append(act)
+    return out
+
+
+# False: the ordinary Kivy text field (works everywhere). True: the Android EditText over it (experimental, needs testing on the phone).
+NATIVE_INPUT = False
 
 
 class NativeInput(EmojiInput):
@@ -6417,7 +6828,7 @@ class NativeInput(EmojiInput):
             if old is not None and old is not self:
                 old.destroy()
             app._native_input = self
-            if kv_platform == "android" and _NativeTextWatcher is not None:
+            if NATIVE_INPUT and kv_platform == "android" and _NativeTextWatcher is not None:
                 self._ui_create(float(self.font_size), _argb(self.foreground_color),
                                 _argb(self.hint_text_color), [int(v) for v in self.padding], str(self.hint_text), str(self.text))
                 self._tick_ev = Clock.schedule_interval(self._tick, 0.12)
@@ -6637,6 +7048,160 @@ class NativeInput(EmojiInput):
             pass
 
 
+def pin_hash(pin, salt_hex, iters=120000):
+    import hashlib
+    return hashlib.pbkdf2_hmac("sha256", str(pin).encode("utf-8"), bytes.fromhex(salt_hex), int(iters)).hex()
+
+
+class PinPad(FloatLayout):
+    """A full-screen number pad. mode: 'unlock' (open the app), 'check' (confirm the current PIN), 'set' (new PIN + repeat)."""
+
+    def __init__(self, app, mode="unlock", on_done=None, on_cancel=None, **kwargs):
+        super().__init__(size_hint=(1, 1), **kwargs)
+        self.app = app
+        self.mode = mode
+        self.on_done = on_done
+        self.on_cancel = on_cancel
+        self.entry = ""
+        self.first = None
+        self.busy_until = 0
+        theme = THEMES[app.theme_index]
+        self.theme = theme
+        bg = hex_color(theme["background"])
+        with self.canvas.before:
+            Color(bg[0] * 0.6, bg[1] * 0.6, bg[2] * 0.6, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=lambda *_: setattr(self._bg, "pos", self.pos), size=lambda *_: setattr(self._bg, "size", self.size))
+        col = BoxLayout(orientation="vertical", spacing=dp(10), size_hint=(None, None), width=dp(300), height=dp(560),
+                        pos_hint={"center_x": 0.5, "center_y": 0.5})
+        self.title = make_label("", 20, theme["text"], True, size_hint_y=None, height=dp(34))
+        self.dots = make_label("", 28, theme["text"], False, size_hint_y=None, height=dp(48))
+        self.note = make_label("", 13, "#FFB4B4", False, size_hint_y=None, height=dp(40))
+        self.note.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        col.add_widget(self.title)
+        col.add_widget(self.dots)
+        col.add_widget(self.note)
+        grid = GridLayout(cols=3, spacing=dp(10), size_hint_y=None, height=dp(300))
+        accent = hex_color(theme["accent"])[:3]
+        for key in ("1", "2", "3", "4", "5", "6", "7", "8", "9", "<", "0", "ok"):
+            b = FrostButton(tint=accent, alpha=0.14, radius=30, font_size=dp(24), halign="center", color=hex_color(theme["text"]),
+                            text={"<": "\u2039", "ok": "OK"}.get(key, key))
+            b.bind(on_release=lambda inst, k=key: self._key(k))
+            grid.add_widget(b)
+        self._grid = grid
+        col.add_widget(grid)
+        row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(10))
+        self.extra = FrostButton(tint=accent, alpha=0.06, radius=16, font_size=dp(13), halign="center", color=hex_color(theme["text"]),
+                                 text="")
+        self.extra.bind(on_release=lambda *_: self._extra())
+        row.add_widget(self.extra)
+        col.add_widget(row)
+        self.add_widget(col)
+        self._set_texts()
+        Clock.schedule_interval(self._tick, 0.5)
+
+    def _set_texts(self):
+        t = self.app.t
+        if self.mode == "set":
+            self.title.text = t("pin_new") if self.first is None else t("pin_repeat")
+            self.extra.text = mk(t("pin_cancel"))
+        elif self.mode == "check":
+            self.title.text = t("pin_enter")
+            self.extra.text = mk(t("pin_cancel"))
+        else:
+            self.title.text = t("pin_enter")
+            self.extra.text = mk(t("pin_forgot"))
+        self._paint()
+
+    def _paint(self):
+        want = self.app.pin_length() if self.mode != "set" else 6
+        filled = len(self.entry)
+        self.dots.text = " ".join("\u25cf" if i < filled else "\u25cb" for i in range(max(want, filled)))
+
+    def _tick(self, dt):
+        wait = self.busy_until - time.time()
+        if wait > 0:
+            self.note.text = self.app.t("pin_wait").format(n=int(wait) + 1)
+        elif self.note.text.startswith(self.app.t("pin_wait").split("{")[0]):
+            self.note.text = ""
+        return True
+
+    def close(self):
+        try:
+            Clock.unschedule(self._tick)
+        except Exception:
+            pass
+        try:
+            Window.remove_widget(self)
+        except Exception:
+            pass
+
+    def _key(self, k):
+        if time.time() < self.busy_until:
+            return
+        if k == "<":
+            self.entry = self.entry[:-1]
+            self._paint()
+            return
+        if k == "ok":
+            if self.mode == "set" and len(self.entry) >= 4:
+                self._submit()
+            return
+        if len(self.entry) >= 6:
+            return
+        self.entry += k
+        self._paint()
+        if self.mode != "set" and len(self.entry) == self.app.pin_length():
+            Clock.schedule_once(lambda dt: self._submit(), 0.08)
+
+    def _extra(self):
+        if self.mode == "unlock":
+            self.app.pin_forgot()
+        elif self.on_cancel:
+            self.close()
+            self.on_cancel()
+
+    def _wrong(self):
+        self.entry = ""
+        self._paint()
+        wait = self.app.pin_register_fail()
+        self.note.text = self.app.t("pin_wrong")
+        if wait:
+            self.busy_until = time.time() + wait
+        try:
+            Animation.cancel_all(self.dots)
+            x = self.dots.x
+            (Animation(x=x - dp(14), d=0.05) + Animation(x=x + dp(14), d=0.08) + Animation(x=x, d=0.05)).start(self.dots)
+        except Exception:
+            pass
+
+    def _submit(self):
+        pin = self.entry
+        if self.mode == "set":
+            if self.first is None:
+                self.first = pin
+                self.entry = ""
+                self.note.text = ""
+                self._set_texts()
+                return
+            if pin != self.first:
+                self.first = None
+                self.entry = ""
+                self.note.text = self.app.t("pin_mismatch")
+                self._set_texts()
+                return
+            self.close()
+            if self.on_done:
+                self.on_done(pin)
+            return
+        if self.app.pin_verify(pin):
+            self.close()
+            if self.on_done:
+                self.on_done()
+        else:
+            self._wrong()
+
+
 class JarvisApp(App):
     def build(self):
         self.title = "S.A.I"
@@ -6646,6 +7211,7 @@ class JarvisApp(App):
         self._err_count = 0
         self.store = JsonStore(os.path.join(self.user_data_dir, "jarvis_settings.json"))
         self.profile = ProfileStore(os.path.join(self.user_data_dir, "user_profile.json"))
+        self.library = LibraryStore(os.path.join(self.user_data_dir, "library.json"))
         self.profile.on_save = self._profile_changed
         self._profile_quiet = False
         self.language = "tg"
@@ -6858,7 +7424,7 @@ class JarvisApp(App):
         self.root_layout.clear_widgets()
         theme = THEMES[self.theme_index]
         tint = hex_color(theme["accent"])[:3]
-        main = BoxLayout(orientation="vertical", padding=[dp(6), dp(12), dp(6), dp(12)], spacing=dp(8))   # ~2 mm wider bars
+        main = BoxLayout(orientation="vertical", padding=[dp(4), dp(8), dp(4), dp(6)], spacing=dp(5))        # small gaps like in messengers
         self.root_layout.add_widget(main)
 
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
@@ -6904,13 +7470,13 @@ class JarvisApp(App):
         main.add_widget(chat_panel)
         self.render_chat()
 
-        row_min = max(dp(58), min(dp(74), Window.height * 0.072))       # taller on bigger phones: room under the hint text
+        row_min = max(dp(64), min(dp(90), Window.height * 0.085))       # taller on bigger phones: room under the hint text
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=row_min)
         glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
-        self.command_input = NativeInput(
-            self, hint_text=self.t("input"), multiline=True, size_hint_x=1,
-            font_size=dp(15), foreground_color=hex_color(theme["text"]),
+        self.command_input = (NativeInput if NATIVE_INPUT else EmojiInput)(
+            *([self] if NATIVE_INPUT else []), hint_text=self.t("input"), multiline=True, size_hint_x=1,
+            font_size=dp(16), foreground_color=hex_color(theme["text"]),
             hint_text_color=(*hex_color(theme["accent"])[:3], 0.52),
             cursor_color=hex_color(theme["accent"]),
             background_normal="", background_active="",
@@ -6955,8 +7521,7 @@ class JarvisApp(App):
         command_row.add_widget(pinned(self.action_btn))
         self.send_strip = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=0, opacity=0,
                                     padding=(dp(12), dp(2)))
-        self._send_state = "idle"
-        main.add_widget(self.send_strip)
+        self._send_state = "idle"          # the strip is placed in the chat, right under the user's message
         self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
         frost(self.attach_strip, 20, tint, 0.10, 0.30)
@@ -7284,6 +7849,8 @@ class JarvisApp(App):
         for m in messages:
             self.chat_box.add_widget(self.make_bubble(m["role"], m["text"]))
         self.response_title.text = self.chat_title(chat)
+        if getattr(self, "_send_state", "idle") in ("sending", "failed"):
+            self._send_render(self._send_state)
         Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.2)
         self.scroll_chat_down()
 
@@ -7507,6 +8074,31 @@ class JarvisApp(App):
         except Exception:
             pass
         self._chats_pulled = False
+
+    def _device_execute_many(self, acts):
+        """Several actions from one message. Quiet ones (alarm, timer, torch, volume ...) run first; only ONE action that takes the
+        screen (open an app, call, message, camera, settings) runs, last."""
+        screen = ("open_app", "open_settings", "take_photo", "call", "send_message")
+        quiet = [a for a in acts if str(a.get("action")) not in screen]
+        loud = [a for a in acts if str(a.get("action")) in screen]
+        results = []
+        for a in quiet:
+            try:
+                results.append(self._device_execute(a))
+            except Exception:
+                save_crash("Action failed:\n" + traceback.format_exc())
+        if loud:
+            results.append(self._device_execute(loud[0]))
+            if len(loud) > 1:
+                results.append(self.t("multi_skip"))
+        return "\n".join(r for r in results if r)
+
+    def _local_device_actions(self, text):
+        try:
+            return parse_local_device(text)
+        except Exception:
+            save_crash("Local parse failed:\n" + traceback.format_exc())
+            return []
 
     def _device_execute(self, act):
         """Runs ONE phone action from the server and returns the text to tell the user."""
@@ -8038,7 +8630,26 @@ class JarvisApp(App):
                 save_crash("Device intent request failed:\n" + traceback.format_exc())
                 err = exc
 
+            if act is None:
+                local_acts = self._local_device_actions(text)                       # no server: every simple command
+            elif str(act.get("action", "none")) == "none":
+                local_acts = self._local_device_actions(text)   # the AI missed a clear simple command (alarm, timer, torch, volume, open app)
+            else:
+                local_acts = []
+
             def done(dt):
+                if local_acts:
+                    # the server was not reached (or missed a clear alarm/timer): simple commands still work on the phone itself
+                    self._opening_say = False
+                    message = self._device_execute_many(local_acts)
+                    self.set_orb_state("speaking", 2.5)
+                    if self._opening_say:
+                        self._opening_say = False
+                        self.busy_stop()
+                        self.add_chat_message(chat_id, "jarvis", message)
+                    else:
+                        self.deliver_answer(chat_id, message)
+                    return
                 if act is None:
                     self.busy_stop()
                     self.set_orb_state("idle")
@@ -8057,7 +8668,7 @@ class JarvisApp(App):
                     return
                 if act and str(act.get("action", "none")) != "none":
                     self._opening_say = False
-                    message = self._device_execute(act)
+                    message = self._device_execute_many(act.get("actions") or [act])
                     if act.get("say") and not self._opening_say:
                         message = str(act["say"]) + "\n" + message
                     self.set_orb_state("speaking", 2.5)
@@ -8295,6 +8906,7 @@ class JarvisApp(App):
         return os.path.join(self.user_data_dir, "avatar.img")
 
     def pick_avatar(self, after=None):
+        self._external()
         """Android picker for a profile photo (own request code, the result is stored as the avatar)."""
         try:
             from jnius import autoclass
@@ -8404,6 +9016,7 @@ class JarvisApp(App):
                                      color=(1, 1, 1, 1), on_release=done))
 
     def pick_attachment(self, *_):
+        self._external()
         """Open Android document picker and send the selected image/text file to JARVIS."""
         try:
             from jnius import autoclass
@@ -8892,6 +9505,18 @@ class JarvisApp(App):
         self._bg_notify()
         Clock.schedule_once(lambda dt: self._media_done(chat_id, text, say), 0)
 
+    def open_app_details(self):
+        """The system page of this app (Permissions -> 'Installed apps' / 'App list' can be switched on there)."""
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            intent = Intent("android.settings.APPLICATION_DETAILS_SETTINGS", Uri.parse("package:" + str(activity.getPackageName())))
+            activity.startActivity(intent)
+        except Exception:
+            save_crash("App details failed:\n" + traceback.format_exc())
+
     def open_block(self, kind, payload, lang=""):
         try:
             BlockViewer(self, kind, payload, lang).open()
@@ -8901,6 +9526,7 @@ class JarvisApp(App):
             self.show_error_popup("Open block failed:\n" + detail)
 
     def save_as(self, path):
+        self._external()
         """The system 'save as' screen: the user chooses the folder and the file name."""
         import mimetypes
         try:
@@ -8963,7 +9589,7 @@ class JarvisApp(App):
     def _send_ok(self):
         if getattr(self, "_send_state", "idle") in ("sending", "failed"):
             self._send_render("sent")
-            Clock.schedule_once(lambda dt: self._send_render("idle") if self._send_state == "sent" else None, 1.2)
+            Clock.schedule_once(lambda dt: self._send_render("idle") if self._send_state == "sent" else None, 1.7)
 
     def _send_fail(self):
         if getattr(self, "_send_state", "idle") != "idle" or getattr(self, "_send_resend", None) or getattr(self, "_retry", None):
@@ -8982,45 +9608,48 @@ class JarvisApp(App):
             again()
 
     def _send_render(self, state):
+        """Under the user's message (right side): a thin progress bar while it travels, a small check that fades, or a retry icon."""
         strip = getattr(self, "send_strip", None)
         self._send_state = state
         if strip is None:
             return
         try:
             for w in list(strip.children):
-                if isinstance(w, IndeterminateBar):
-                    w.stop()
+                for sub in ([w] + list(getattr(w, "children", []))):
+                    if isinstance(sub, IndeterminateBar):
+                        sub.stop()
+            Animation.cancel_all(strip)
+            if strip.parent is not None:
+                strip.parent.remove_widget(strip)
             strip.clear_widgets()
             if state == "idle":
-                strip.height = 0
-                strip.opacity = 0
                 return
             theme = THEMES[self.theme_index]
             accent = hex_color(theme["accent"])[:3]
             strip.opacity = 1
+            strip.size_hint_y = None
+            strip.add_widget(Widget())
             if state == "sending":
-                strip.height = dp(22)
-                col = BoxLayout(orientation="vertical", spacing=dp(3))
-                col.add_widget(make_label(self.t("st_sending"), 11, "#8FA6C8", False, halign="left", size_hint_y=None, height=dp(14)))
-                col.children[0].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                strip.height = dp(20)
+                col = BoxLayout(orientation="vertical", spacing=dp(2), size_hint=(None, 1), width=dp(96), padding=(0, dp(6), 0, 0))
                 col.add_widget(IndeterminateBar(color=accent))
                 strip.add_widget(col)
             elif state == "sent":
-                strip.height = dp(26)
-                strip.add_widget(Widget())
-                mark = IconButton(kind="check", icon_rgba=hex_color("#7CE0A0"), tint=(0.3, 0.9, 0.55), alpha=0.0, size_hint=(None, None), size=(dp(24), dp(24)))
-                strip.add_widget(mark)
-                strip.add_widget(make_label(self.t("st_sent"), 11, "#7CE0A0", False, size_hint=(None, 1), width=dp(70)))
+                strip.height = dp(20)
+                strip.add_widget(IconButton(kind="check", icon_rgba=hex_color("#7CE0A0"), alpha=0.0, size_hint=(None, None), size=(dp(18), dp(18))))
+                strip.add_widget(make_label(self.t("st_sent"), 10, "#7CE0A0", False, size_hint=(None, 1), width=dp(58), halign="left"))
+                Clock.schedule_once(lambda dt: Animation(opacity=0, d=0.7, t="in_quad").start(strip) if self._send_state == "sent" else None, 0.9)
             else:                                      # failed
-                strip.height = dp(46)
-                lab = make_label(self.t("st_failed"), 12, "#FFB4B4", True, halign="left")
-                lab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
-                strip.add_widget(lab)
-                btn = IconButton(kind="retry", tint=accent, alpha=0.22, radius=18, icon_rgba=hex_color(theme["text"]),
-                                 size_hint=(None, None), size=(dp(40), dp(40)), pos_hint={"center_y": 0.5})
+                strip.height = dp(40)
+                strip.add_widget(make_label(self.t("st_failed"), 12, "#FFB4B4", True, size_hint=(None, 1), width=dp(84), halign="right"))
+                btn = IconButton(kind="retry", tint=accent, alpha=0.22, radius=16, icon_rgba=hex_color(theme["text"]),
+                                 size_hint=(None, None), size=(dp(36), dp(36)), pos_hint={"center_y": 0.5})
                 btn.bind(on_release=self._send_tap_retry)
                 strip.add_widget(btn)
-                strip.add_widget(make_label(self.t("retry_label"), 12, theme["text"], False, size_hint=(None, 1), width=dp(64)))
+            box = getattr(self, "chat_box", None)
+            if box is not None:
+                box.add_widget(strip)
+                self.scroll_chat_down()
         except Exception:
             save_crash("Send strip failed:\n" + traceback.format_exc())
 
@@ -9111,6 +9740,7 @@ class JarvisApp(App):
         return uri
 
     def share_media(self, path):
+        self._external()
         """The system 'send' list (messengers, mail, Bluetooth ...) like in any normal app."""
         import mimetypes
         name = os.path.basename(path).split("__", 1)[-1]
@@ -9717,6 +10347,138 @@ class JarvisApp(App):
         box.add_widget(self.make_button(self.t("ob_continue"), save, theme["accent"], 46))
         popup.open()
 
+    # ---------------------------------------------------------------- PIN lock (optional, set in the settings)
+    def _pin_cfg(self):
+        cfg = getattr(self, "_pin_cache", None)
+        if cfg is None:
+            cfg = {"hash": "", "salt": "", "len": 4, "after": 30, "fails": 0, "until": 0, "secure": False}
+            try:
+                path = os.path.join(self.user_data_dir, "pin.json")
+                if os.path.exists(path):
+                    with open(path, "r", encoding="utf-8") as handle:
+                        cfg.update(json.load(handle))
+            except Exception:
+                pass
+            self._pin_cache = cfg
+        return cfg
+
+    def _pin_save(self):
+        try:
+            path = os.path.join(self.user_data_dir, "pin.json")
+            with open(path + ".tmp", "w", encoding="utf-8") as handle:
+                json.dump(self._pin_cfg(), handle)
+            os.replace(path + ".tmp", path)
+        except Exception:
+            save_crash("PIN settings not saved:\n" + traceback.format_exc())
+
+    def pin_enabled(self):
+        return bool(self._pin_cfg().get("hash"))
+
+    def pin_length(self):
+        return int(self._pin_cfg().get("len", 4) or 4)
+
+    def pin_set(self, pin):
+        import binascii
+        cfg = self._pin_cfg()
+        cfg["salt"] = binascii.hexlify(os.urandom(16)).decode()
+        cfg["hash"] = pin_hash(pin, cfg["salt"])
+        cfg["len"] = len(pin)
+        cfg["fails"] = 0
+        cfg["until"] = 0
+        self._pin_save()
+
+    def pin_clear(self):
+        cfg = self._pin_cfg()
+        cfg["hash"], cfg["salt"], cfg["fails"], cfg["until"] = "", "", 0, 0
+        self._pin_save()
+
+    def pin_verify(self, pin):
+        cfg = self._pin_cfg()
+        if time.time() < float(cfg.get("until", 0)):
+            return False
+        try:
+            import hmac
+            ok = hmac.compare_digest(pin_hash(pin, cfg["salt"]), cfg["hash"])
+        except Exception:
+            ok = False
+        if ok:
+            cfg["fails"], cfg["until"] = 0, 0
+            self._pin_save()
+        return ok
+
+    def pin_register_fail(self):
+        """After 5 wrong tries the pad waits 30 s, then longer; returns the seconds to wait now."""
+        cfg = self._pin_cfg()
+        cfg["fails"] = int(cfg.get("fails", 0)) + 1
+        wait = 0
+        if cfg["fails"] >= 5:
+            wait = min(900, 30 * (2 ** (cfg["fails"] - 5)))
+            cfg["until"] = time.time() + wait
+        self._pin_save()
+        return wait
+
+    def lock_now(self, force=False):
+        """Puts the number pad over everything when a PIN is set."""
+        try:
+            if not self.pin_enabled() or getattr(self, "_locked_pad", None) is not None or getattr(self, "_ob_active", False):
+                return
+            wait = float(self._pin_cfg().get("until", 0)) - time.time()
+
+            def opened():
+                self._locked_pad = None
+                self._last_unlocked = time.time()
+                try:
+                    Clock.schedule_once(lambda dt: self.greet_user(), 0.6)
+                except Exception:
+                    pass
+            pad = PinPad(self, "unlock", on_done=opened)
+            if wait > 0:
+                pad.busy_until = time.time() + wait
+            self._locked_pad = pad
+            Window.add_widget(pad)
+        except Exception:
+            save_crash("Lock failed:\n" + traceback.format_exc())
+
+    def pin_forgot(self):
+        """No way back by guessing: signing out removes the PIN; after signing in the chats come back from the account."""
+        theme = THEMES[self.theme_index]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        sheet = GlassSheet(self, self.t("pin_forgot"), body, anchor="menu", height=250)
+        body.add_widget(make_label(self.t("pin_forgot_ask"), 14, theme["text"], False, size_hint_y=None, height=dp(96)))
+
+        def go(*_):
+            sheet.dismiss()
+            pad = getattr(self, "_locked_pad", None)
+            if pad is not None:
+                pad.close()
+                self._locked_pad = None
+            self.pin_clear()
+            self.logout_account()
+        self.frost_row(body, self.t("pin_forgot_yes"), False, go, 52, tint=(1.0, 0.36, 0.42), center=True)
+        sheet.open()
+
+    def pin_apply_secure(self):
+        """Hides the app in the recent-apps list and blocks screenshots while on."""
+        try:
+            from android.runnable import run_on_ui_thread
+            from jnius import autoclass
+            on = bool(self._pin_cfg().get("secure"))
+
+            @run_on_ui_thread
+            def apply():
+                window = autoclass("org.kivy.android.PythonActivity").mActivity.getWindow()
+                if on:
+                    window.addFlags(8192)
+                else:
+                    window.clearFlags(8192)
+            apply()
+        except Exception:
+            pass
+
+    def _external(self):
+        """A system picker is about to open: coming back from it must not lock the app."""
+        self._external_until = time.time() + 300
+
     def logout_account(self, *_):
         if getattr(self, "settings_popup", None) is not None:
             self.settings_popup.dismiss()
@@ -9811,6 +10573,11 @@ class JarvisApp(App):
             if media is not None:
                 self._start_media_job(chat_id, media[0], media[1])
                 return
+            if not self.server_token.strip() and looks_like_device_command(command_text):
+                local = self._local_device_actions(command_text)
+                if local:
+                    self.deliver_answer(chat_id, self._device_execute_many(local))
+                    return
             awaiting = time.monotonic() < getattr(self, "_intent_ask_until", 0)       # the assistant has just asked a question about a plan
             if self.server_token.strip() and (awaiting or looks_like_device_command(command_text) or looks_like_plan(command_text)):
                 self._start_device_intent(chat_id, command_text, history)
@@ -10898,8 +11665,8 @@ class JarvisApp(App):
         accent = theme["accent"].lstrip("#")
         body = BoxLayout(orientation="vertical", spacing=dp(8))
         sheet = GlassSheet(self, dotted_name(self.assistant_name or "S.A.I"), body,
-                           anchor="menu", height=452)
-        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat),
+                           anchor="menu", height=520)
+        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat), ("menu_library", self.show_library),
                  ("menu_settings", self.show_settings), ("menu_about", self.show_about))
         for i, (key, action) in enumerate(items, 1):
             def go(inst, f=action):
@@ -10930,6 +11697,97 @@ class JarvisApp(App):
         me_wrap.add_widget(me_avatar)
         body.add_widget(me_wrap)
         sheet.open()
+
+    # ---------------------------------------------------------------- Library
+    def library_add(self, kind, payload, lang=""):
+        self.library.add(kind, payload, "", lang)
+        self._library_push()
+
+    def _library_push(self):
+        def job():
+            try:
+                self._json_call("POST", "/library", {"data": self.library.dump()}, timeout=40)
+            except Exception:
+                pass                                  # offline: it goes at the next change or start
+        threading.Thread(target=job, daemon=True).start()
+
+    def sync_library(self):
+        def job():
+            try:
+                result = self._json_call("GET", "/library", None, timeout=40)
+                raw = str(result.get("data", ""))
+                remote = json.loads(raw) if raw else []
+            except Exception:
+                return
+
+            def apply(dt):
+                changed = self.library.merge(remote if isinstance(remote, list) else [])
+                if len(self.library.items) > len(remote) or changed:
+                    self._library_push()
+            Clock.schedule_once(apply, 0)
+        threading.Thread(target=job, daemon=True).start()
+
+    def show_library(self, *_):
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        scroll = ScrollView(do_scroll_x=False)
+        grid = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        items = self.library.alive()
+        kind_name = {"text": "lib_text", "code": "lib_code", "table": "lib_table"}
+        sheet_ref = {}
+        for it in items:
+            row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(64))
+            label = "[b]" + mk(str(it.get("title", "-"))[:48]) + "[/b]\n[size=11sp][color=" + muted() + "]" + \
+                    mk(self.t(kind_name.get(it.get("kind"), "lib_text")) + "  \u00b7  " + format_time(time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(it.get("t", 0))))) + "[/color][/size]"
+            open_btn = FrostButton(tint=tint, alpha=0.10, text=label, font_size=dp(14), color=hex_color(theme["text"]))
+            open_btn.bind(on_release=lambda inst, i=it: (sheet_ref["s"].dismiss(), Clock.schedule_once(lambda dt: self.open_library_item(i), 0.15)))
+            del_btn = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, text="\u00d7", font_size=dp(26), halign="center",
+                                  size_hint_x=None, width=dp(56), color=hex_color(theme["text"]))
+            del_btn.bind(on_release=lambda inst, i=it: self._library_delete(i, sheet_ref))
+            row.add_widget(open_btn)
+            row.add_widget(del_btn)
+            grid.add_widget(row)
+        if not items:
+            grid.add_widget(make_label(self.t("lib_empty"), 13, theme["text"], False, size_hint_y=None, height=dp(90),
+                                       text_size=(Window.width * 0.7, None)))
+        scroll.add_widget(grid)
+        body.add_widget(scroll)
+        last = self._last_ai_text()
+        if last:
+            self.frost_row(body, self.t("lib_save_last"), False, lambda *_: self._library_save_last(sheet_ref), 50, center=True)
+        sheet_ref["s"] = GlassSheet(self, self.t("lib_title"), body)
+        sheet_ref["s"].open()
+
+    def _last_ai_text(self):
+        try:
+            for m in reversed(self.chats.current().get("messages", [])):
+                if m.get("role") != "user" and str(m.get("text", "")).strip():
+                    return str(m["text"])
+        except Exception:
+            pass
+        return ""
+
+    def _library_save_last(self, sheet_ref):
+        text = self._last_ai_text()
+        if text:
+            self.library_add("text", text[:20000])
+        sheet_ref["s"].dismiss()
+        Clock.schedule_once(lambda dt: self.show_library(), 0.2)
+
+    def _library_delete(self, item, sheet_ref):
+        self.library.remove(item["id"])
+        self._library_push()
+        sheet_ref["s"].dismiss()
+        Clock.schedule_once(lambda dt: self.show_library(), 0.2)
+
+    def open_library_item(self, item):
+        kind = item.get("kind")
+        if kind == "table":
+            self.open_block("table", item.get("payload") or [], "")
+        else:
+            self.open_block("code" if kind == "code" else "text", item.get("payload") or "", item.get("lang", ""))
 
     def show_chats(self, *_):
         theme = THEMES[self.theme_index]
@@ -11065,14 +11923,14 @@ class JarvisApp(App):
         content = BoxLayout(orientation="vertical", spacing=dp(8))
         titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
                   "voice": "title_voice", "account": "title_account", "mode": "title_mode",
-                  "profile": "title_profile", "me": "title_me", "apps": "title_apps"}
+                  "profile": "title_profile", "me": "title_me", "apps": "title_apps", "security": "title_security"}
 
         def option(text, active, callback, height=54):
             self.frost_row(content, text, active, callback, height)
 
         if section == "main":
             for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
-                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_apps", "apps"), ("sec_account", "account")):
+                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_apps", "apps"), ("sec_security", "security"), ("sec_account", "account")):
                 option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
             option(self.t("live_title"), self.live_mode,
                    lambda inst: (self.settings_popup.dismiss(), self.show_response(self.toggle_live())), height=56)
@@ -11140,8 +11998,8 @@ class JarvisApp(App):
             if self.server_token.strip() and (not self.profile.note or len(self.profile.facts) != self.profile.note_count):
                 Clock.schedule_once(lambda dt: self.refresh_profile_note(), 0.4)
         elif section == "apps":
-            content.add_widget(make_label(self.t("apps_header").format(a=self.assistant_name or "S.A.I"), 19, theme["text"], True,
-                                          halign="left", size_hint_y=None, height=dp(78)))
+            content.add_widget(make_label(self.t("apps_header").format(a=self.assistant_name or "S.A.I"), 18, theme["text"], True,
+                                          halign="left", size_hint_y=None, height=dp(64)))
             content.children[0].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
             row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(10))
             row.add_widget(Widget())
@@ -11154,6 +12012,46 @@ class JarvisApp(App):
                 content.add_widget(AppsPicker(self))
             else:
                 content.add_widget(Widget())
+        elif section == "security":
+            accent = hex_color(theme["accent"])[:3]
+            cfg = self._pin_cfg()
+            row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
+            row.add_widget(make_label(self.t("pin_title"), 17, theme["text"], True, halign="left"))
+            row.children[0].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+
+            def toggled(value):
+                if value:
+                    def done(pin):
+                        self.pin_set(pin)
+                        Clock.schedule_once(lambda dt: self.open_section("security"), 0.1)
+                    self.settings_popup.dismiss()
+                    pad = PinPad(self, "set", on_done=done, on_cancel=lambda: self.open_section("security"))
+                    Window.add_widget(pad)
+                else:
+                    self.settings_popup.dismiss()
+                    def off():
+                        self.pin_clear()
+                        self.open_section("security")
+                    pad = PinPad(self, "check", on_done=off, on_cancel=lambda: self.open_section("security"))
+                    Window.add_widget(pad)
+            row.add_widget(PillSwitch(active=self.pin_enabled(), tint=accent, size=(dp(70), dp(36)), on_change=toggled))
+            content.add_widget(row)
+            content.add_widget(make_label(self.t("pin_note"), 12, muted(), False, halign="left", size_hint_y=None, height=dp(56)))
+            content.children[0].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+            if self.pin_enabled():
+                content.add_widget(make_label(self.t("pin_after"), 13, muted(), False, halign="left", size_hint_y=None, height=dp(26)))
+                for sec, key in ((0, "pin_after_0"), (30, "pin_after_30"), (120, "pin_after_120"), (600, "pin_after_600")):
+                    option(self.t(key), int(cfg.get("after", 30)) == sec,
+                           lambda inst, v=sec: (cfg.__setitem__("after", v), self._pin_save(), self.open_section("security")), height=48)
+                srow = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(52), spacing=dp(10))
+                lab = make_label(self.t("pin_secure"), 14, theme["text"], False, halign="left")
+                lab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                srow.add_widget(lab)
+                srow.add_widget(PillSwitch(active=bool(cfg.get("secure")), tint=accent, size=(dp(70), dp(36)),
+                                           on_change=lambda v: (cfg.__setitem__("secure", bool(v)), self._pin_save(), self.pin_apply_secure())))
+                content.add_widget(srow)
+                self.frost_row(content, self.t("pin_change"), False, lambda *_: toggled(True), 50, center=True)
+            content.add_widget(Widget())
         elif section == "mode":
             for key, code in (("mode_auto", "auto"), ("mode_dark", "dark"), ("mode_light", "light")):
                 option(self.t(key), self.ui_mode == code,
@@ -11186,7 +12084,8 @@ class JarvisApp(App):
             self.frost_row(content, self.t("acct_delete"), False, self.delete_account_ask, 52, tint=(1.0, 0.36, 0.42))
             content.add_widget(Widget())
 
-        self.settings_popup = GlassSheet(self, self.t(titles[section]), content,
+        sheet_h = int(min(Window.height / dp(1) * 0.9, 760)) if section in ("apps", "security") else None
+        self.settings_popup = GlassSheet(self, self.t(titles[section]), content, height=sheet_h,
                                          back=(lambda: self.open_section("main")) if section != "main" else None)
         self.settings_popup.open()
 
@@ -11219,8 +12118,12 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
             Clock.schedule_once(lambda dt: self.refresh_session(), 5.0)
             Clock.schedule_once(lambda dt: self.sync_profile(), 6.0)
+            Clock.schedule_once(lambda dt: self.sync_library(), 8.0)
+        self.pin_apply_secure()
         if not self.onboarded or not self.server_token.strip():
             Clock.schedule_once(lambda dt: self.start_onboarding(), 0.5)
+        elif self.pin_enabled():
+            Clock.schedule_once(lambda dt: self.lock_now(), 0.2)           # the greeting comes after the PIN
         else:
             Clock.schedule_once(lambda dt: self.greet_user(), 1.8)
 
@@ -11228,7 +12131,7 @@ class JarvisApp(App):
         """The AI writes a short, respectful welcome for the time of day when the app opens; it is shown and read aloud.
         No fixed offline phrases: if the server does not answer in time, nothing is said."""
         try:
-            if getattr(self, "_ob_active", False) or not self.server_token.strip():
+            if getattr(self, "_ob_active", False) or not self.server_token.strip() or getattr(self, "_locked_pad", None) is not None:
                 return
             now = datetime.now()
             if time.time() - getattr(self, "_last_greet", 0) < 3 * 3600:          # not at every return to the app
@@ -11294,6 +12197,7 @@ class JarvisApp(App):
             pass
 
     def on_pause(self):
+        self._paused_at = time.time()
         self.app_paused = True
         if self.live_mode:
             self.toggle_live(False)
@@ -11305,6 +12209,14 @@ class JarvisApp(App):
 
     def on_resume(self):
         self.app_paused = False
+        try:
+            if self.pin_enabled() and getattr(self, "_locked_pad", None) is None:
+                away = time.time() - getattr(self, "_paused_at", time.time())
+                limit = float(self._pin_cfg().get("after", 30))
+                if time.time() > getattr(self, "_external_until", 0) and away >= limit:
+                    self.lock_now()
+        except Exception:
+            pass
         try:
             if time.time() - getattr(self, "_last_greet", 0) >= 3 * 3600 and not getattr(self, "_ob_active", False):
                 Clock.schedule_once(lambda dt: self.greet_user(), 0.8)
