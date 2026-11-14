@@ -136,6 +136,7 @@ def init_database() -> None:
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(40)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS library TEXT",
                 "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower ON users (LOWER(username))",
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL",
@@ -790,11 +791,29 @@ def _clean_device_action(obj) -> dict:
     if isinstance(obj, dict) and str(obj.get("action", "")).lower() == "ask":
         question = " ".join(str(obj.get("question", "")).split())[:300]
         return {"action": "ask", "question": question} if question else {"action": "none"}
+    if isinstance(obj, dict) and isinstance(obj.get("actions"), list):
+        # several actions in one message (e.g. an alarm AND a timer): each one is validated, at most 5
+        cleaned = []
+        for item in obj["actions"][:5]:
+            one = _clean_device_action_core(item)
+            if one.get("action") not in ("none", None):
+                cleaned.append(one)
+        if cleaned:
+            first = dict(cleaned[0])
+            say = " ".join(str(obj.get("say", "")).split())[:500]
+            if say:
+                first["say"] = say
+            first["actions"] = cleaned
+            return first
+        return {"action": "none"}
     result = _clean_device_action_core(obj)
     if result.get("action") != "none" and isinstance(obj, dict):
         say = " ".join(str(obj.get("say", "")).split())[:500]
         if say:
             result["say"] = say
+        result["actions"] = [dict(result)]
+        result["actions"][0].pop("say", None)
+        result["actions"][0].pop("actions", None)
     return result
 
 
@@ -807,7 +826,9 @@ def device_intent(data: DeviceIntentRequest, http_request: Request, x_jarvis_tok
     if not ai_tools.provider_chain(language=data.language):
         raise HTTPException(status_code=503, detail="No AI provider key is configured")
     system = (
-        "You turn the user's message into ONE phone action. Reply with a single JSON object and nothing else. Allowed actions:\n"
+        "You turn the user's message into phone actions. Reply with a single JSON object and nothing else. If the message asks for SEVERAL things "
+        "(for example an alarm AND a timer), reply {\"actions\":[action1, action2, ...],\"say\":\"\"} with at most 5 actions in the order asked; "
+        "for one thing reply just that one action object. Allowed actions:\n"
         '{"action":"alarm","hour":0-23,"minute":0-59,"label":""}  (set an alarm / wake the user)\n'
         '{"action":"timer","seconds":integer,"label":""}\n'
         '{"action":"flashlight","state":"on"|"off"|"toggle"}\n'
@@ -898,6 +919,41 @@ def greeting(data: GreetingRequest, http_request: Request, x_jarvis_token: str |
         raise HTTPException(status_code=502, detail=("AI failed: " + str(exc))[:200])
     text = result["answer"].strip().strip('"').split("\n")[0][:200]
     return {"greeting": text}
+
+
+class LibrarySyncRequest(BaseModel):
+    data: str = Field(default="", max_length=900000)
+
+
+@app.get("/library")
+def library_get(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """The user's library (saved texts, code, tables) so it follows the account to a new phone."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            row = conn.execute("SELECT library FROM users WHERE id = %s", (user["id"],)).fetchone()
+    except Exception as exc:
+        print("Library read failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"data": (row[0] if row and row[0] else "")}
+
+
+@app.post("/library")
+def library_set(data: LibrarySyncRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        parsed = json.loads(data.data) if data.data else []
+        if not isinstance(parsed, list):
+            raise ValueError("not a list")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Library must be a JSON list")
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            conn.execute("UPDATE users SET library = %s WHERE id = %s", (data.data, user["id"]))
+    except Exception as exc:
+        print("Library save failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"saved": True}
 
 
 @app.post("/profile/summarize")
