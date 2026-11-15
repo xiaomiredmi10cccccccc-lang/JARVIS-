@@ -525,6 +525,12 @@ TEXTS = {
         "menu_new": "Чати нав",
         "menu_settings": "Танзимот",
         "menu_about": "Маълумот дар бораи JARVIS",
+        "xlsx_making": "Ҷадвали рангин сохта истодааст…",
+        "video_too_big": "Видео аз 100 МБ калон аст.",
+        "attach_max": "Як бор ҳадди аксар 8 файл.",
+        "attach_many": "{} файл омода аст",
+        "video_prompt": "Ин 4 кадр аз як видео аст (аз аввал то охир). Бигӯ, ки дар видео чӣ мегузарад.",
+        "video_noai": "Видео қабул шуд. AI аз ин видео кадр гирифта натавонист, аммо файл дар чат мондааст.",
         "menu_library": "Китобхона",
         "lib_title": "Китобхона",
         "lib_empty": "Китобхона холӣ аст. Дар экрани код ё ҷадвал: се нуқта → «Ба китобхона».",
@@ -824,6 +830,12 @@ TEXTS = {
         "menu_new": "Новый чат",
         "menu_settings": "Настройки",
         "menu_about": "О JARVIS",
+        "xlsx_making": "Готовлю цветную таблицу…",
+        "video_too_big": "Видео больше 100 МБ.",
+        "attach_max": "За раз не больше 8 файлов.",
+        "attach_many": "Готово файлов: {}",
+        "video_prompt": "Это 4 кадра из одного видео (от начала до конца). Скажи, что происходит в видео.",
+        "video_noai": "Видео принято. ИИ не смог взять кадры из этого видео, но файл остался в чате.",
         "menu_library": "Библиотека",
         "lib_title": "Библиотека",
         "lib_empty": "Библиотека пуста. На экране кода или таблицы: три точки → «В библиотеку».",
@@ -1123,6 +1135,12 @@ TEXTS = {
         "menu_new": "New chat",
         "menu_settings": "Settings",
         "menu_about": "About",
+        "xlsx_making": "Making the coloured table…",
+        "video_too_big": "The video is larger than 100 MB.",
+        "attach_max": "At most 8 files at a time.",
+        "attach_many": "{} files ready",
+        "video_prompt": "These are 4 frames from one video (start to end). Say what happens in the video.",
+        "video_noai": "The video was received. The AI could not take frames from it, but the file stays in the chat.",
         "menu_library": "Library",
         "lib_title": "Library",
         "lib_empty": "The library is empty. On a code or table screen: three dots → Save to library.",
@@ -6557,16 +6575,50 @@ class BlockViewer(MediaViewer):
                 sheet.dismiss()
                 Clock.schedule_once(lambda dt: fn(), 0.15)
             return run
-        for kind, key, fn in (("download", "view_download", lambda: app.save_as(self.path)),
+        is_table = self.kind == "table"
+        for kind, key, fn in (("download", "view_download", (lambda: self._table_file(app.save_as)) if is_table else (lambda: app.save_as(self.path))),
                               ("apps", "lib_save", lambda: self._to_library()),
                               ("copy", "view_copy", lambda: self._copy()),
-                              ("share", "view_share", lambda: app.share_media(self.path))):
+                              ("share", "view_share", (lambda: self._table_file(app.share_media)) if is_table else (lambda: app.share_media(self.path)))):
             row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(52))
             row.add_widget(IconButton(kind=kind, tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
                                       size_hint=(None, 1), width=dp(52)))
             app.frost_row(row, app.t(key), False, act(fn), height=52)
             body.add_widget(row)
         sheet.open()
+
+    def _xlsx_path(self):
+        """Blocking: the table as a coloured .xlsx made by the server (None when it cannot be made)."""
+        import ssl
+        try:
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = None
+            rows = [[str(c) for c in r] for r in self.payload]
+            body = json.dumps({"rows": rows, "title": "S.A.I"}, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(SERVER_BASE + "/export/xlsx", data=body, method="POST",
+                                         headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.app.server_token})
+            with urllib.request.urlopen(req, timeout=40, context=ctx) as response:
+                raw = response.read(20 * 1024 * 1024)
+            if raw[:2] != b"PK":
+                return None
+            path = os.path.join(self.app.user_data_dir, "exports", "table_" + time.strftime("%Y%m%d_%H%M%S") + ".xlsx")
+            with open(path, "wb") as handle:
+                handle.write(raw)
+            return path
+        except Exception:
+            save_crash("XLSX export failed:\n" + traceback.format_exc())
+            return None
+
+    def _table_file(self, then):
+        """Tables go out as .xlsx (colours, widths, filter); without the server the .csv is used."""
+        def job():
+            path = self._xlsx_path()
+            Clock.schedule_once(lambda dt: then(path or self.path), 0)
+        self.toast(self.app.t("xlsx_making"))
+        threading.Thread(target=job, daemon=True).start()
 
     def _to_library(self):
         try:
@@ -9025,6 +9077,7 @@ class JarvisApp(App):
             intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.setType("*/*")
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             self._attachment_pending = True
             PythonActivity.mActivity.startActivityForResult(intent, 7412)
@@ -9103,45 +9156,136 @@ class JarvisApp(App):
             Activity = autoclass("android.app.Activity")
             if result_code != Activity.RESULT_OK or data is None:
                 return
-            uri = data.getData()
-            if uri is None:
+            uris = []
+            clip = data.getClipData()
+            if clip is not None:
+                for i in range(min(int(clip.getItemCount()), 8)):
+                    u = clip.getItemAt(i).getUri()
+                    if u is not None:
+                        uris.append(u)
+            if not uris and data.getData() is not None:
+                uris.append(data.getData())
+            if not uris:
                 Clock.schedule_once(lambda dt: self.show_response(self.t("file_not_selected")), 0)
                 return
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            resolver = PythonActivity.mActivity.getContentResolver()
-            mime = str(resolver.getType(uri) or "application/octet-stream")
-            stage = "read"
-            limit = 20 * 1024 * 1024
-            raw = self._read_uri_bytes(resolver, uri, limit)
-            if len(raw) > limit:
-                raise LocalizedError(self.t("file_too_big"))
-            if not raw:
-                raise LocalizedError(self.t("file_empty"))
-            stage = "name"
-            name = str(uri.getLastPathSegment() or "attachment")
-            try:
-                cursor = resolver.query(uri, None, None, None, None)
-                if cursor is not None:
-                    if cursor.moveToFirst():
-                        idx = cursor.getColumnIndex("_display_name")
-                        if idx >= 0 and cursor.getString(idx):
-                            name = str(cursor.getString(idx))
-                    cursor.close()
-            except Exception:
-                pass
-            Clock.schedule_once(lambda dt: self._attachment_ui(name, mime, raw), 0)
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            for uri in uris:
+                stage = "read"
+                try:
+                    item = self._read_picked(resolver, uri)
+                    Clock.schedule_once(lambda dt, it=item: self._attachment_ui(*it), 0)
+                except Exception as exc:
+                    save_crash("Attachment read failed:\n" + traceback.format_exc())
+                    message = self.friendly_error(exc)
+                    Clock.schedule_once(lambda dt, m=message: self.show_response(self.t("file_read_failed").format(m)), 0)
         except Exception as exc:
             save_crash("Attachment read failed at stage " + stage + ":\n" + traceback.format_exc())
             message = self.friendly_error(exc) + " <" + stage + ">"
             Clock.schedule_once(lambda dt: self.show_response(self.t("file_read_failed").format(message)), 0)
 
-    def _attachment_ui(self, name, mime, raw):
-        """Kivy thread: the picked picture/file waits above the input field; it goes to the AI with the send button."""
+    def _picked_name_size(self, resolver, uri):
+        name, size = str(uri.getLastPathSegment() or "attachment"), 0
+        try:
+            cursor = resolver.query(uri, None, None, None, None)
+            if cursor is not None:
+                if cursor.moveToFirst():
+                    idx = cursor.getColumnIndex("_display_name")
+                    if idx >= 0 and cursor.getString(idx):
+                        name = str(cursor.getString(idx))
+                    idx = cursor.getColumnIndex("_size")
+                    if idx >= 0:
+                        size = int(cursor.getLong(idx))
+                cursor.close()
+        except Exception:
+            pass
+        return name, size
+
+    def _read_picked(self, resolver, uri):
+        """One picked file -> (name, mime, raw, video_path, frames_jpeg). A video is copied to the app folder in pieces (up to 100 MB)
+        and the AI gets a sheet of a few frames; a picture or a file is read into memory (up to 20 MB)."""
+        from jnius import autoclass
+        mime = str(resolver.getType(uri) or "application/octet-stream")
+        name, size = self._picked_name_size(resolver, uri)
+        if mime.startswith("video/"):
+            if size > 100 * 1024 * 1024:
+                raise LocalizedError(self.t("video_too_big"))
+            path = os.path.join(self.media_dir(), uuid.uuid4().hex[:8] + "__" + os.path.basename(name).replace("]", "_"))
+            stream = resolver.openInputStream(uri)
+            out = autoclass("java.io.FileOutputStream")(path)
+            try:
+                copy_java_stream(stream, out, 100 * 1024 * 1024)
+            except RuntimeError:
+                out.close()
+                stream.close()
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+                raise LocalizedError(self.t("video_too_big"))
+            out.close()
+            stream.close()
+            sheet = b""
+            if size <= 25 * 1024 * 1024 or size == 0:
+                sheet = self._video_frames(path)
+            return name, mime, b"", path, sheet
+        limit = 20 * 1024 * 1024
+        raw = self._read_uri_bytes(resolver, uri, limit)
+        if len(raw) > limit:
+            raise LocalizedError(self.t("file_too_big"))
+        if not raw:
+            raise LocalizedError(self.t("file_empty"))
+        return name, mime, raw, None, b""
+
+    def _video_frames(self, path):
+        """Four frames of the video (start, 1/3, 2/3, end) glued into one JPEG for the AI; b"" if it cannot be done."""
+        try:
+            from jnius import autoclass
+            Retriever = autoclass("android.media.MediaMetadataRetriever")
+            Bitmap = autoclass("android.graphics.Bitmap")
+            Config = autoclass("android.graphics.Bitmap$Config")
+            Canvas = autoclass("android.graphics.Canvas")
+            Compress = autoclass("android.graphics.Bitmap$CompressFormat")
+            Rect = autoclass("android.graphics.Rect")
+            ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
+            r = Retriever()
+            r.setDataSource(path)
+            duration = int(r.extractMetadata(Retriever.METADATA_KEY_DURATION) or 0) * 1000        # microseconds
+            frames = []
+            for k in (0.05, 0.35, 0.65, 0.92):
+                f = r.getFrameAtTime(int(duration * k), Retriever.OPTION_CLOSEST_SYNC)
+                if f is not None:
+                    frames.append(f)
+            r.release()
+            if not frames:
+                return b""
+            cell_w, cell_h = 640, 360
+            sheet = Bitmap.createBitmap(cell_w * 2, cell_h * 2, Config.ARGB_8888)
+            canvas = Canvas(sheet)
+            for i, f in enumerate(frames[:4]):
+                x, y = (i % 2) * cell_w, (i // 2) * cell_h
+                canvas.drawBitmap(f, None, Rect(x, y, x + cell_w, y + cell_h), None)
+            out = ByteArrayOutputStream()
+            sheet.compress(Compress.JPEG, 80, out)
+            return java_bytes(out.toByteArray())
+        except Exception:
+            save_crash("Video frames failed:\n" + traceback.format_exc())
+            return b""
+
+    def _attachment_ui(self, name, mime, raw, vpath=None, sheet=b""):
+        """Kivy thread: picked pictures/files/videos wait above the input field; they go to the AI with the send button."""
         stage = "save"
         try:
-            path = self._save_private(raw, os.path.basename(name).replace("]", "_"))
+            path = vpath or self._save_private(raw, os.path.basename(name).replace("]", "_"))
             stage = "stage"
-            self._pending_attachment = {"chat_id": self.chats.current_id, "name": name, "mime": mime, "raw": raw, "path": path}
+            item = {"chat_id": self.chats.current_id, "name": name, "mime": mime, "raw": raw, "path": path, "sheet": sheet}
+            queue = getattr(self, "_pending_list", None)
+            if queue is None or (queue and queue[0].get("chat_id") != self.chats.current_id):
+                queue = self._pending_list = []
+            if len(queue) >= 8:
+                self.show_response(self.t("attach_max"))
+                return
+            queue.append(item)
+            self._pending_attachment = queue[0]
             self._refresh_attach_strip()
             self._sync_action_mode()
             if hasattr(self, "command_input"):
@@ -9156,7 +9300,12 @@ class JarvisApp(App):
             self.action_btn.set_mode("plane" if has else "wave")
 
     def clear_attachment(self, *_):
-        self._pending_attachment = None
+        queue = getattr(self, "_pending_list", None) or []
+        if queue:
+            queue.pop()                                  # the x removes the last added file
+        self._pending_attachment = queue[0] if queue else None
+        if not queue:
+            self._pending_list = []
         self._refresh_attach_strip()
         self._sync_action_mode()
 
@@ -9188,7 +9337,9 @@ class JarvisApp(App):
             frost(thumb, 14, tint, 0.16, 0.4)
         strip.add_widget(thumb)
         text = BoxLayout(orientation="vertical", spacing=dp(2))
-        text.add_widget(make_label(att["name"], 13, theme["text"], True, halign="left"))
+        count = len(getattr(self, "_pending_list", None) or [])
+        title = att["name"] if count <= 1 else self.t("attach_many").format(count)
+        text.add_widget(make_label(title, 13, theme["text"], True, halign="left"))
         text.add_widget(make_label(self.t("attach_ready"), 11, muted(), False, halign="left"))
         strip.add_widget(text)
         gone = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.14, radius=16, text="×", font_size=dp(24), halign="center",
@@ -9201,6 +9352,15 @@ class JarvisApp(App):
         name, mime, raw = att["name"], att["mime"], att["raw"]
         self._last_att = (chat_id, att, prompt)
         self._set_delivery(att.get("path"), "sending")
+        if mime.startswith("video/"):
+            if att.get("sheet"):
+                name, mime, raw = "frames.jpg", "image/jpeg", att["sheet"]
+                prompt = (self.t("video_prompt") + " " + (prompt or "")).strip()
+                att = dict(att, name=name, mime=mime, raw=raw)
+            else:
+                self._set_delivery(att.get("path"), "sent")
+                self._attachment_answer(chat_id, self.t("video_noai"))
+                return
         mode = "analyze"
         if force:
             mode = force
@@ -9269,6 +9429,10 @@ class JarvisApp(App):
         self._promise_redo = False
         self._status_after_answer()
         self.deliver_answer(chat_id, answer)
+        queue = getattr(self, "_att_queue", None)
+        if queue:
+            nxt = queue.pop(0)
+            Clock.schedule_once(lambda dt: self._process_attachment(*nxt), 0.6)
 
     # ------------------------------------------------------------------ media: pictures and files
     def media_dir(self):
@@ -9861,7 +10025,7 @@ class JarvisApp(App):
         self._last_spoken = text
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
         gen = self._tajik_gen
-        chunks = split_for_speech(strip_media(text)[:3500])
+        chunks = split_for_speech(strip_media(text)[:3500], first=70, rest=170)
         threading.Thread(target=self._stream_chunks, args=(chunks, self._tajik_speech_path, gen, None), daemon=True).start()
 
     def _edge_stream(self, text, force=False):
@@ -9925,6 +10089,7 @@ class JarvisApp(App):
             Clock.schedule_once(lambda dt: self._voice_ready(), 0)
             return
         got = {}
+        started_fetch = {}
 
         def fetch(i):
             got[i] = self._fetch_piece(fetch_path, chunks[i])
@@ -9942,9 +10107,11 @@ class JarvisApp(App):
                     Clock.schedule_once(lambda dt: self._voice_ready(), 0)
                 return
             following = None
-            if i + 1 < len(chunks):
-                following = threading.Thread(target=fetch, args=(i + 1,), daemon=True)
-                following.start()           # the next piece is made while this one is spoken
+            for j in (i + 1, i + 2):        # the next two pieces are made while this one is spoken
+                if j < len(chunks) and j not in started_fetch:
+                    started_fetch[j] = threading.Thread(target=fetch, args=(j,), daemon=True)
+                    started_fetch[j].start()
+            following = started_fetch.get(i + 1)
             started = threading.Event()
 
             def play(dt, path=got[i], size=len(chunks[i])):
@@ -9954,7 +10121,7 @@ class JarvisApp(App):
 
             Clock.schedule_once(play, 0)
             started.wait(5)
-            time.sleep(0.4)
+            time.sleep(0.25)
             while gen == getattr(self, "_tajik_gen", 0):
                 player = getattr(self, "_server_speech_player", None)
                 try:
@@ -9963,7 +10130,7 @@ class JarvisApp(App):
                     playing = False
                 if not playing:
                     break
-                time.sleep(0.2)
+                time.sleep(0.05)
             if following is not None:
                 following.join(timeout=100)
         if gen == getattr(self, "_tajik_gen", 0):
@@ -10534,18 +10701,23 @@ class JarvisApp(App):
         self.command_input.clear_native()
         self.ensure_notification_permission()
         chat_id = self.chats.current_id
-        if pending:                         # picture/file + the typed instruction go to the AI together
+        if pending:                         # pictures/files/videos + the typed instruction go to the AI
+            queue = list(getattr(self, "_pending_list", None) or [pending])
             self._pending_attachment = None
+            self._pending_list = []
             self._refresh_attach_strip()
             self._sync_action_mode()
-            marker = ("[[img:" if pending["mime"].startswith("image/") else "[[file:") + pending["path"] + "]]"
-            shown = (command_text + "\n" if command_text else "") + marker
-            self._set_delivery(pending["path"], "sending")
+            markers = "".join(("[[img:" if a["mime"].startswith("image/") else "[[file:") + a["path"] + "]]\n" for a in queue).rstrip("\n")
+            shown = (command_text + "\n" if command_text else "") + markers
+            for a in queue:
+                self._set_delivery(a["path"], "sending")
             self.add_chat_message(chat_id, "user", shown)
             for fact in extract_facts(command_text):
                 self.profile.add(fact)
-            self._send_begin(lambda: self._process_attachment(chat_id, pending, command_text))
-            self._process_attachment(chat_id, pending, command_text)
+            first = queue[0]
+            self._att_queue = [(chat_id, a, command_text) for a in queue[1:]]
+            self._send_begin(lambda: self._process_attachment(chat_id, first, command_text))
+            self._process_attachment(chat_id, first, command_text)
             return
         # Keep prior turns for the API before adding the current user message.
         chat = self.chats.get(chat_id) or self.chats.current()
@@ -11159,8 +11331,19 @@ class JarvisApp(App):
 
     def _tajik_speech_path(self, text, quiet=False):
         """Blocking: ask the Tajik voice service for a WAV file. Returns its path, or None on any failure."""
+        import hashlib
         import ssl
         import tempfile
+        cache_file = None
+        if len(text) <= 90:                                  # short phrases (greetings, confirmations) are kept on the phone
+            try:
+                folder = os.path.join(self.user_data_dir, "tts_cache")
+                os.makedirs(folder, exist_ok=True)
+                cache_file = os.path.join(folder, hashlib.md5(text.strip().lower().encode("utf-8")).hexdigest() + ".wav")
+                if os.path.exists(cache_file) and os.path.getsize(cache_file) > 1000:
+                    return cache_file
+            except Exception:
+                cache_file = None
         try:
             try:
                 import certifi
@@ -11175,6 +11358,13 @@ class JarvisApp(App):
                 audio = response.read(30 * 1024 * 1024)
             if not audio or audio[:4] != b"RIFF":
                 raise RuntimeError("not a WAV file")
+            if cache_file:
+                try:
+                    with open(cache_file, "wb") as out:
+                        out.write(audio)
+                    return cache_file
+                except Exception:
+                    pass
             fd, path = tempfile.mkstemp(prefix="jarvis_tg_", suffix=".wav")
             with os.fdopen(fd, "wb") as out:
                 out.write(audio)
