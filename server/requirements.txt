@@ -12,3 +12,4 @@ numpy>=1.26,<3
 pillow>=10,<12
 pypdf
 python-docx
+openpyxl>=3.1
