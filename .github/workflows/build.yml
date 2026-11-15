@@ -111,6 +111,39 @@ jobs:
           print(path.read_text(encoding="utf-8"))
           PY
 
+      - name: Prepare the message reader (optional, the build falls back without it)
+        id: reader
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f java/org/jarvis/jarvis/NotifyListener.java
+          rm -rf "$HOME/p4a_src"
+          git clone --depth 1 --branch v2024.01.21 https://github.com/kivy/python-for-android "$HOME/p4a_src"
+          python - <<'PY'
+          import glob, os, re
+          hits = glob.glob(os.path.expanduser("~/p4a_src/pythonforandroid/bootstraps/**/AndroidManifest.tmpl.xml"), recursive=True)
+          assert hits, "AndroidManifest.tmpl.xml not found"
+          service = ('<service android:name="org.jarvis.jarvis.NotifyListener" android:label="S.A.I" android:exported="true" '
+                     'android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">'
+                     '<intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter></service>')
+          done = 0
+          for path in hits:
+              text = open(path, encoding="utf-8").read()
+              if "</application>" in text and "NotifyListener" not in text:
+                  open(path, "w", encoding="utf-8").write(text.replace("</application>", service + "\n    </application>", 1))
+                  done += 1
+          assert done >= 1, "the service was not added to any manifest template"
+          spec = open("buildozer.spec", encoding="utf-8").read().split("\n")
+          spec = [l for l in spec if not re.match(r"^\s*(p4a\.branch|android\.add_src|p4a\.source_dir)\s*=", l)]
+          i = next(k for k, l in enumerate(spec) if l.strip() == "[app]")
+          spec[i + 1:i + 1] = ["android.add_src = java", "p4a.source_dir = " + os.path.expanduser("~/p4a_src")]
+          open("buildozer_reader.spec", "w", encoding="utf-8").write("\n".join(spec) + "\n")
+          print("reader spec written")
+          PY
+          cp buildozer.spec buildozer_plain.spec
+          cp buildozer_reader.spec buildozer.spec
+
       - name: Install Buildozer
         shell: bash
         run: |
@@ -129,6 +162,14 @@ jobs:
           rm -f build.log
           buildozer -v android debug 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ] && [ -f buildozer_plain.spec ]; then
+            echo "=== The build with the message reader failed; building again WITHOUT it ===" | tee -a build.log
+            cp buildozer_plain.spec buildozer.spec
+            buildozer -v android clean 2>&1 | tee -a build.log || true
+            buildozer -v android debug 2>&1 | tee -a build.log
+            status=${PIPESTATUS[0]}
+            echo "reader=off" >> "$GITHUB_OUTPUT"
+          fi
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit "$status"
 
