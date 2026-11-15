@@ -956,6 +956,69 @@ def library_set(data: LibrarySyncRequest, http_request: Request, x_jarvis_token:
     return {"saved": True}
 
 
+class XlsxRequest(BaseModel):
+    rows: list[list[str]] = Field(max_length=5000)
+    title: str = Field(default="Table", max_length=60)
+
+
+@app.post("/export/xlsx")
+def export_xlsx(data: XlsxRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """A table from the chat as a coloured, ready-to-use Excel file (header colour, zebra rows, widths, filter, frozen header)."""
+    user = require_auth(authorization, x_jarvis_token)
+    check_rate_limit(rate_key(user, http_request))
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Excel export is not installed on the server (add openpyxl to requirements.txt)")
+    import io
+    from fastapi.responses import Response
+    rows = [[str(c) for c in r][:60] for r in data.rows if r][:5000]
+    if not rows:
+        raise HTTPException(status_code=400, detail="Table is empty")
+
+    def convert(text):
+        t = text.strip().replace("\u00a0", "")
+        try:
+            if t and t.lstrip("-").replace(".", "", 1).isdigit() and not (len(t) > 1 and t[0] == "0" and not t.startswith("0.")):
+                return float(t) if "." in t else int(t)
+        except ValueError:
+            pass
+        return text
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = (data.title or "Table")[:30].replace("/", "-").replace("\\", "-").replace("*", "").replace("?", "").replace("[", "(").replace("]", ")").replace(":", "-") or "Table"
+    head_fill = PatternFill("solid", fgColor="1F4E79")
+    zebra = PatternFill("solid", fgColor="EAF2FB")
+    thin = Side(style="thin", color="BFCDDB")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for ri, row in enumerate(rows, 1):
+        for ci, value in enumerate(row, 1):
+            cell = ws.cell(row=ri, column=ci, value=value if ri == 1 else convert(value))
+            cell.border = border
+            if ri == 1:
+                cell.font = Font(bold=True, color="FFFFFF", size=12)
+                cell.fill = head_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            else:
+                cell.alignment = Alignment(vertical="top", wrap_text=True, horizontal="right" if isinstance(cell.value, (int, float)) else "left")
+                if ri % 2 == 1:
+                    cell.fill = zebra
+    columns = max(len(r) for r in rows)
+    for ci in range(1, columns + 1):
+        longest = max((len(r[ci - 1]) if ci <= len(r) else 0) for r in rows)
+        ws.column_dimensions[get_column_letter(ci)].width = max(8, min(48, longest + 3))
+    ws.row_dimensions[1].height = 24
+    ws.freeze_panes = "A2"
+    if len(rows) > 1:
+        ws.auto_filter.ref = "A1:%s%d" % (get_column_letter(columns), len(rows))
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(content=buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 @app.post("/profile/summarize")
 def profile_summarize(data: ProfileNoteRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Short biography / collaboration note about the user, written from what he told the assistant."""
