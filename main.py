@@ -27,6 +27,7 @@ from kivy.metrics import dp
 from kivy.properties import NumericProperty
 from kivy.storage.jsonstore import JsonStore
 from kivy.utils import get_color_from_hex
+from kivy.utils import platform as kv_platform
 from kivy.graphics import (Color, Ellipse, Line, Point, Rectangle,
                            RoundedRectangle, Triangle, PushMatrix, PopMatrix, Rotate,
                            RenderContext, Mesh)
@@ -400,6 +401,7 @@ def get_service(private_dir=None):
     return LocalAccountService()
 
 CRASH_FILE = "jarvis_crash_log.txt"
+APP_VERSION = "2026.11.16"
 
 def crash_dirs():
     priv = os.environ.get("ANDROID_PRIVATE")
@@ -470,7 +472,39 @@ def apply_mode(light):
 
 
 def muted():
-    return "#5E7194" if UI_LIGHT else "#8FA6C8"
+    return "#4A5B79" if UI_LIGHT else "#9BB0CF"
+
+
+def ok_color():
+    return "#1E8E4E" if UI_LIGHT else "#7CE3A1"
+
+
+def warn_color():
+    return "#B26A00" if UI_LIGHT else "#FFC66B"
+
+
+def danger_color():
+    return "#C62828" if UI_LIGHT else "#FF9AA0"
+
+
+_LAST_BUZZ = [0.0]
+
+
+def buzz():
+    """A very light tick on a button press (the system's own haptic feedback: no permission needed)."""
+    try:
+        if kv_platform != "android" or time.time() - _LAST_BUZZ[0] < 0.06:
+            return
+        _LAST_BUZZ[0] = time.time()
+        from jnius import autoclass
+        from android.runnable import run_on_ui_thread
+
+        @run_on_ui_thread
+        def tick():
+            autoclass("org.kivy.android.PythonActivity").mActivity.getWindow().getDecorView().performHapticFeedback(1)
+        tick()
+    except Exception:
+        pass
 
 
 def visible_chars(words, position_ms):
@@ -525,6 +559,64 @@ TEXTS = {
         "menu_new": "Чати нав",
         "menu_settings": "Танзимот",
         "menu_about": "Маълумот дар бораи JARVIS",
+        "menu_camera": "Камера: ин чист?",
+        "cam_prompt": "Ин чист? Дар акс чӣ мебинӣ? Кӯтоҳ шарҳ деҳ.",
+        "cam_failed": "Камера кушода нашуд.",
+        "note_saved": "Ёддошт нигоҳ дошта шуд ва дар Китобхона аст.",
+        "note_open": "Ёддоштҳо дар Китобхона кушода шуданд.",
+        "chip_short": "Кӯтоҳтар",
+        "chip_simple": "Содда фаҳмон",
+        "chip_translate": "Тарҷума",
+        "chip_save": "Ба Китобхона",
+        "p_short": "Инро кӯтоҳтар ва аниқтар бигӯ.",
+        "p_simple": "Инро содда ва фаҳмо шарҳ деҳ.",
+        "p_translate": "Ҷавоби охирини худро ба русӣ тарҷума кун.",
+        "sec_diag": "Ташхис",
+        "title_diag": "Ташхис",
+        "diag_none": "Хатогие сабт нашудааст.",
+        "diag_last": "Хатои охирин (метавонед ба барномасоз фиристед):",
+        "diag_copy": "Нусха кардан",
+        "diag_share": "Фиристодан",
+        "diag_copied": "Нусха шуд.",
+        "net_off": "Интернет нест",
+        "net_on": "Интернет баргашт",
+        "about_version": "Версия {}",
+        "about_new": "Нав дар ин версия:\n• Якчанд амал дар як фармон, бекор кардан ва таъхир\n• Қулфи PIN\n• Китобхона (худкор)\n• Якчанд файл ва видео\n• Ҷадвали рангини Excel\n• Хондани паёмҳо",
+        "ob_i1_t": "Бигӯед ё нависед",
+        "ob_i1_d": "Будилник, таймер, чароғак, кушодани барномаҳо ва паёмҳо. Якчанд амал дар як фармон ҳам мешавад.",
+        "ob_i2_t": "Ҳама чиз дар як ҷо",
+        "ob_i2_d": "Код, ҷадвал ва аксҳо худаш ба Китобхона мераванд. Якчанд файл ва видеоро якбора фиристед.",
+        "ob_i3_t": "Шахсӣ ва бехатар",
+        "ob_i3_d": "Қулфи PIN ихтиёрист. Маълумот дар телефони шумо мемонад ва худатон идора мекунед.",
+        "ob_next": "Баъдӣ",
+        "ob_skip": "Гузаштан",
+        "ob_start_use": "Оғоз кардан",
+        "msg_say": "Аз {app}, {who}паём омад: {text}",
+        "msg_more": "Ва боз {n} паём.",
+        "msg_speak_sw": "Паёми нав худаш бо овоз хонда шавад (вақте барнома кушода аст)",
+        "torch_after_on": "Чароғак пас аз {n} фурӯзон мешавад.",
+        "torch_after_off": "Чароғак пас аз {n} хомӯш мешавад.",
+        "torch_hold": "Чароғак фурӯзон шуд ва пас аз {n} хомӯш мешавад.",
+        "cancel_sent": "Дархости бекор кардан ба барномаи соат фиристода шуд. Агар соат онро дастгирӣ накунад, дар худи соат бекор кунед.",
+        "cancel_torch": "Чароғак хомӯш шуд.",
+        "cancel_none": "Чизе барои бекор кардан нест.",
+        "lib_image": "Акс",
+        "lib_file": "Файл",
+        "lib_all": "Ҳама",
+        "sec_messages": "Хондани паёмҳо",
+        "title_messages": "Хондани паёмҳо",
+        "msg_note": "Ихтиёрӣ. Барнома матни паёмҳои воридотиро (WhatsApp, Telegram, SMS...) аз огоҳиномаҳо мегирад ва танҳо дар худи телефон нигоҳ медорад. Он ба сервер намеравад. Фақат вақте ки шумо мепурсед («паёмҳои нав чӣ ҳастанд?»), ҳамон ҷо хонда мешавад. Акс ва видео хонда намешавад: танҳо матн.",
+        "msg_not_built": "Ин версияи APK хондани паёмро надорад. Версияи таҷрибавии алоҳида лозим аст.",
+        "msg_granted": "Дастрасӣ дода шудааст",
+        "msg_not_granted": "Дастрасӣ ба огоҳиномаҳо дода нашудааст",
+        "msg_open_access": "Додани дастрасӣ ба огоҳиномаҳо",
+        "msg_open_app": "Маълумоти барнома (иҷозати маҳдуд)",
+        "msg_switch": "Паёмҳоро ҷамъ кардан",
+        "msg_clear": "Нест кардани паёмҳои ҷамъшуда",
+        "msg_no_access": "Аввал дар Танзимот › «Хондани паёмҳо» дастрасӣ ба огоҳиномаҳоро диҳед.",
+        "msg_off": "Ҷамъкунии паёмҳо хомӯш аст. Онро дар Танзимот › «Хондани паёмҳо» фурӯзон кунед.",
+        "msg_none": "Паёми нав нест. (Паёмҳое ки пас аз фурӯзон кардан омадаанд, ҳисоб мешаванд.)",
+        "msg_head": "Паёмҳои нав: {}",
         "xlsx_making": "Ҷадвали рангин сохта истодааст…",
         "video_too_big": "Видео аз 100 МБ калон аст.",
         "attach_max": "Як бор ҳадди аксар 8 файл.",
@@ -533,7 +625,7 @@ TEXTS = {
         "video_noai": "Видео қабул шуд. AI аз ин видео кадр гирифта натавонист, аммо файл дар чат мондааст.",
         "menu_library": "Китобхона",
         "lib_title": "Китобхона",
-        "lib_empty": "Китобхона холӣ аст. Дар экрани код ё ҷадвал: се нуқта → «Ба китобхона».",
+        "lib_empty": "Китобхона холӣ аст. Дар экрани код ё ҷадвал: се нуқта › «Ба китобхона».",
         "lib_save_last": "Ҷавоби охирро нигоҳ доштан",
         "lib_save": "Ба китобхона",
         "lib_saved": "Ба китобхона илова шуд",
@@ -563,7 +655,7 @@ TEXTS = {
         "pin_change": "Тағйири PIN",
         "open_full": "Кушодани ҷадвали пурра",
         "multi_skip": "Амали дуюм, ки экранро мегирад, нигоҳ дошта нашуд.",
-        "apps_hidden": "Телефон рӯйхати барномаҳоро ба S.A.I намедиҳад. Дар танзимоти барнома → Иҷозатҳо иҷозати «Барномаҳои насбшуда» (ё «Рӯйхати барномаҳо»)-ро фаъол кунед, баъд «Навсозӣ»-ро пахш кунед.",
+        "apps_hidden": "Телефон рӯйхати барномаҳоро ба S.A.I намедиҳад. Дар танзимоти барнома › Иҷозатҳо иҷозати «Барномаҳои насбшуда» (ё «Рӯйхати барномаҳо»)-ро фаъол кунед, баъд «Навсозӣ»-ро пахш кунед.",
         "apps_open_settings": "Кушодани танзимоти барнома",
         "apps_refresh": "Навсозӣ",
         "block_saved": "Файл захира шуд",
@@ -575,8 +667,8 @@ TEXTS = {
         "apps_search": "Ҷустуҷӯи барнома",
         "apps_all_on": "Ҳама фаъол",
         "apps_all_off": "Ҳама хомӯш",
-        "app_blocked": "Барномаи «{a}» хомӯш аст. Ӯро дар Танзимот → Барномаҳо фаъол кунед.",
-        "apps_off": "Кушодани барномаҳо хомӯш аст. Дар Танзимот → Барномаҳо фаъол кунед.",
+        "app_blocked": "Барномаи «{a}» хомӯш аст. Ӯро дар Танзимот › Барномаҳо фаъол кунед.",
+        "apps_off": "Кушодани барномаҳо хомӯш аст. Дар Танзимот › Барномаҳо фаъол кунед.",
         "app_enable": "Фаъол кардан",
         "app_opened_say": "{a} кушода шуд.",
         "apps_none": "Барномае ёфт нашуд",
@@ -716,7 +808,7 @@ TEXTS = {
         "session_expired": "Сессия тамом шуд. Лутфан аз нав ворид шавед.",
         "server_save": "Сабт кардан",
         "server_saved": "Токен сабт шуд. Паёмро санҷед.",
-        "server_missing": "Аввал ба аккаунти худ ворид шавед (Танзимот → Ҳисоб).",
+        "server_missing": "Аввал ба аккаунти худ ворид шавед (Танзимот › Ҳисоб).",
         "server_thinking": "JARVIS фикр мекунад...",
         "server_error": "Ба сервер пайваст нашуд. Интернет ва танзимоти Render-ро санҷед.",
         "mic_denied": "Иҷозати микрофон дода нашуд.",
@@ -830,6 +922,64 @@ TEXTS = {
         "menu_new": "Новый чат",
         "menu_settings": "Настройки",
         "menu_about": "О JARVIS",
+        "menu_camera": "Камера: что это?",
+        "cam_prompt": "Что это? Что ты видишь на фото? Объясни коротко.",
+        "cam_failed": "Не удалось открыть камеру.",
+        "note_saved": "Заметка сохранена и лежит в Библиотеке.",
+        "note_open": "Заметки открыты в Библиотеке.",
+        "chip_short": "Короче",
+        "chip_simple": "Проще",
+        "chip_translate": "Перевод",
+        "chip_save": "В Библиотеку",
+        "p_short": "Скажи то же самое короче и точнее.",
+        "p_simple": "Объясни это просто и понятно.",
+        "p_translate": "Переведи свой последний ответ на английский.",
+        "sec_diag": "Диагностика",
+        "title_diag": "Диагностика",
+        "diag_none": "Ошибок не записано.",
+        "diag_last": "Последняя ошибка (можно отправить разработчику):",
+        "diag_copy": "Копировать",
+        "diag_share": "Отправить",
+        "diag_copied": "Скопировано.",
+        "net_off": "Нет интернета",
+        "net_on": "Интернет вернулся",
+        "about_version": "Версия {}",
+        "about_new": "Новое в этой версии:\n• Несколько действий в одной команде, отмена и отсрочка\n• PIN-код\n• Библиотека (автоматически)\n• Несколько файлов и видео\n• Цветная таблица Excel\n• Чтение сообщений",
+        "ob_i1_t": "Скажите или напишите",
+        "ob_i1_d": "Будильник, таймер, фонарик, открытие приложений и сообщения. Можно несколько действий в одной команде.",
+        "ob_i2_t": "Всё в одном месте",
+        "ob_i2_d": "Код, таблицы и картинки сами попадают в Библиотеку. Отправляйте несколько файлов и видео сразу.",
+        "ob_i3_t": "Личное и безопасное",
+        "ob_i3_d": "PIN-код по желанию. Данные остаются на вашем телефоне, вы ими управляете.",
+        "ob_next": "Далее",
+        "ob_skip": "Пропустить",
+        "ob_start_use": "Начать",
+        "msg_say": "Из {app}, {who}пришло сообщение: {text}",
+        "msg_more": "И ещё сообщений: {n}.",
+        "msg_speak_sw": "Читать новые сообщения вслух (пока приложение открыто)",
+        "torch_after_on": "Фонарик включится через {n}.",
+        "torch_after_off": "Фонарик выключится через {n}.",
+        "torch_hold": "Фонарик включён и выключится через {n}.",
+        "cancel_sent": "Запрос на отмену отправлен в приложение «Часы». Если оно не поддерживает отмену, отмените в самих часах.",
+        "cancel_torch": "Фонарик выключен.",
+        "cancel_none": "Нечего отменять.",
+        "lib_image": "Фото",
+        "lib_file": "Файл",
+        "lib_all": "Все",
+        "sec_messages": "Чтение сообщений",
+        "title_messages": "Чтение сообщений",
+        "msg_note": "По желанию. Приложение берёт текст входящих сообщений (WhatsApp, Telegram, SMS...) из уведомлений и хранит только на телефоне. На сервер он не уходит. Читается лишь когда вы спрашиваете («какие новые сообщения?»). Фото и видео не читаются: только текст.",
+        "msg_not_built": "В этой версии APK чтения сообщений нет. Нужна отдельная экспериментальная версия.",
+        "msg_granted": "Доступ выдан",
+        "msg_not_granted": "Доступ к уведомлениям не выдан",
+        "msg_open_access": "Дать доступ к уведомлениям",
+        "msg_open_app": "О приложении (ограниченные настройки)",
+        "msg_switch": "Собирать сообщения",
+        "msg_clear": "Удалить собранные сообщения",
+        "msg_no_access": "Сначала дайте доступ к уведомлениям: Настройки › «Чтение сообщений».",
+        "msg_off": "Сбор сообщений выключен. Включите: Настройки › «Чтение сообщений».",
+        "msg_none": "Новых сообщений нет. (Считаются сообщения, пришедшие после включения.)",
+        "msg_head": "Новые сообщения: {}",
         "xlsx_making": "Готовлю цветную таблицу…",
         "video_too_big": "Видео больше 100 МБ.",
         "attach_max": "За раз не больше 8 файлов.",
@@ -838,7 +988,7 @@ TEXTS = {
         "video_noai": "Видео принято. ИИ не смог взять кадры из этого видео, но файл остался в чате.",
         "menu_library": "Библиотека",
         "lib_title": "Библиотека",
-        "lib_empty": "Библиотека пуста. На экране кода или таблицы: три точки → «В библиотеку».",
+        "lib_empty": "Библиотека пуста. На экране кода или таблицы: три точки › «В библиотеку».",
         "lib_save_last": "Сохранить последний ответ",
         "lib_save": "В библиотеку",
         "lib_saved": "Добавлено в библиотеку",
@@ -868,7 +1018,7 @@ TEXTS = {
         "pin_change": "Сменить PIN",
         "open_full": "Открыть таблицу полностью",
         "multi_skip": "Второе действие, занимающее экран, пропущено.",
-        "apps_hidden": "Телефон не показывает S.A.I список приложений. В настройках приложения → Разрешения включите «Установленные приложения» (или «Список приложений») и нажмите «Обновить».",
+        "apps_hidden": "Телефон не показывает S.A.I список приложений. В настройках приложения › Разрешения включите «Установленные приложения» (или «Список приложений») и нажмите «Обновить».",
         "apps_open_settings": "Открыть настройки приложения",
         "apps_refresh": "Обновить",
         "block_saved": "Файл сохранён",
@@ -880,8 +1030,8 @@ TEXTS = {
         "apps_search": "Поиск приложения",
         "apps_all_on": "Включить все",
         "apps_all_off": "Выключить все",
-        "app_blocked": "Приложение «{a}» выключено. Включите его в Настройки → Приложения.",
-        "apps_off": "Открытие приложений выключено. Включите в Настройки → Приложения.",
+        "app_blocked": "Приложение «{a}» выключено. Включите его в Настройки › Приложения.",
+        "apps_off": "Открытие приложений выключено. Включите в Настройки › Приложения.",
         "app_enable": "Включить",
         "app_opened_say": "{a} открыто.",
         "apps_none": "Приложение не найдено",
@@ -1021,7 +1171,7 @@ TEXTS = {
         "session_expired": "Сессия истекла. Пожалуйста, войдите снова.",
         "server_save": "Сохранить",
         "server_saved": "Токен сохранён. Проверьте отправку сообщения.",
-        "server_missing": "Сначала войдите в свой аккаунт (Настройки → Аккаунт).",
+        "server_missing": "Сначала войдите в свой аккаунт (Настройки › Аккаунт).",
         "server_thinking": "JARVIS думает...",
         "server_error": "Не удалось подключиться к серверу. Проверьте интернет и настройки Render.",
         "mic_denied": "Доступ к микрофону не предоставлен.",
@@ -1135,6 +1285,64 @@ TEXTS = {
         "menu_new": "New chat",
         "menu_settings": "Settings",
         "menu_about": "About",
+        "menu_camera": "Camera: what is this?",
+        "cam_prompt": "What is this? What do you see in the photo? Explain briefly.",
+        "cam_failed": "Could not open the camera.",
+        "note_saved": "Note saved. It is in the Library.",
+        "note_open": "Notes opened in the Library.",
+        "chip_short": "Shorter",
+        "chip_simple": "Simpler",
+        "chip_translate": "Translate",
+        "chip_save": "To Library",
+        "p_short": "Say the same thing shorter and more precisely.",
+        "p_simple": "Explain this in a simple, clear way.",
+        "p_translate": "Translate your last answer into Russian.",
+        "sec_diag": "Diagnostics",
+        "title_diag": "Diagnostics",
+        "diag_none": "No errors recorded.",
+        "diag_last": "Last error (you can send it to the developer):",
+        "diag_copy": "Copy",
+        "diag_share": "Send",
+        "diag_copied": "Copied.",
+        "net_off": "No internet",
+        "net_on": "Back online",
+        "about_version": "Version {}",
+        "about_new": "New in this version:\n• Several actions in one command, cancel and delay\n• PIN lock\n• Library (automatic)\n• Several files and videos\n• Coloured Excel table\n• Reading messages",
+        "ob_i1_t": "Speak or type",
+        "ob_i1_d": "Alarm, timer, torch, opening apps and messages. Several actions in one command work too.",
+        "ob_i2_t": "Everything in one place",
+        "ob_i2_d": "Code, tables and pictures go to the Library by themselves. Send several files and videos at once.",
+        "ob_i3_t": "Private and safe",
+        "ob_i3_d": "The PIN lock is optional. Your data stays on your phone and you control it.",
+        "ob_next": "Next",
+        "ob_skip": "Skip",
+        "ob_start_use": "Get started",
+        "msg_say": "From {app}, {who}a message came: {text}",
+        "msg_more": "And {n} more messages.",
+        "msg_speak_sw": "Read new messages aloud (while the app is open)",
+        "torch_after_on": "The torch will turn on in {n}.",
+        "torch_after_off": "The torch will turn off in {n}.",
+        "torch_hold": "The torch is on and will turn off in {n}.",
+        "cancel_sent": "A cancel request was sent to the Clock app. If it does not support cancelling, cancel in the clock itself.",
+        "cancel_torch": "The torch is off.",
+        "cancel_none": "Nothing to cancel.",
+        "lib_image": "Picture",
+        "lib_file": "File",
+        "lib_all": "All",
+        "sec_messages": "Reading messages",
+        "title_messages": "Reading messages",
+        "msg_note": "Optional. The app takes the text of incoming messages (WhatsApp, Telegram, SMS...) from notifications and keeps it only on this phone. It does not go to the server. It is read only when you ask ('what are my new messages?'). Pictures and videos are not read: text only.",
+        "msg_not_built": "This APK does not have message reading. A separate experimental build is needed.",
+        "msg_granted": "Access granted",
+        "msg_not_granted": "Notification access not granted",
+        "msg_open_access": "Give notification access",
+        "msg_open_app": "App info (restricted settings)",
+        "msg_switch": "Collect messages",
+        "msg_clear": "Delete collected messages",
+        "msg_no_access": "First give notification access: Settings -> Reading messages.",
+        "msg_off": "Message collecting is off. Turn it on: Settings -> Reading messages.",
+        "msg_none": "No new messages. (Messages that arrived after turning it on are counted.)",
+        "msg_head": "New messages: {}",
         "xlsx_making": "Making the coloured table…",
         "video_too_big": "The video is larger than 100 MB.",
         "attach_max": "At most 8 files at a time.",
@@ -1143,7 +1351,7 @@ TEXTS = {
         "video_noai": "The video was received. The AI could not take frames from it, but the file stays in the chat.",
         "menu_library": "Library",
         "lib_title": "Library",
-        "lib_empty": "The library is empty. On a code or table screen: three dots → Save to library.",
+        "lib_empty": "The library is empty. On a code or table screen: three dots › Save to library.",
         "lib_save_last": "Save the last answer",
         "lib_save": "Save to library",
         "lib_saved": "Saved to the library",
@@ -1173,7 +1381,7 @@ TEXTS = {
         "pin_change": "Change PIN",
         "open_full": "Open the full table",
         "multi_skip": "A second action that takes the screen was skipped.",
-        "apps_hidden": "The phone hides the app list from S.A.I. In the app settings → Permissions turn on “Installed apps” (or “App list”), then tap Refresh.",
+        "apps_hidden": "The phone hides the app list from S.A.I. In the app settings › Permissions turn on “Installed apps” (or “App list”), then tap Refresh.",
         "apps_open_settings": "Open app settings",
         "apps_refresh": "Refresh",
         "block_saved": "File saved",
@@ -1185,8 +1393,8 @@ TEXTS = {
         "apps_search": "Search apps",
         "apps_all_on": "All on",
         "apps_all_off": "All off",
-        "app_blocked": "The app “{a}” is switched off. Turn it on in Settings → Apps.",
-        "apps_off": "Opening apps is switched off. Turn it on in Settings → Apps.",
+        "app_blocked": "The app “{a}” is switched off. Turn it on in Settings › Apps.",
+        "apps_off": "Opening apps is switched off. Turn it on in Settings › Apps.",
         "app_enable": "Turn on",
         "app_opened_say": "{a} opened.",
         "apps_none": "No app found",
@@ -1326,7 +1534,7 @@ TEXTS = {
         "session_expired": "The session expired. Please sign in again.",
         "server_save": "Save",
         "server_saved": "Token saved. Try sending a message.",
-        "server_missing": "First sign in to your account (Settings → Account).",
+        "server_missing": "First sign in to your account (Settings › Account).",
         "server_thinking": "JARVIS is thinking...",
         "server_error": "Could not connect to the server. Check internet and Render settings.",
         "mic_denied": "No mic permission.",
@@ -3903,6 +4111,78 @@ class ProfileStore(object):
         self.save()
 
 
+MSG_READ_RE = re.compile(r"(паём|паем|сообщени|письм|message|\bsms\b|смс|whatsapp|ватсап|телеграм|telegram)", re.I)
+MSG_ASK_RE = re.compile(r"(\bнав|\bнов[ыиоае]|\bnew\b|unread|воридот|входящ|омад|пришл|came in|incoming|"
+                        r"(хон|прочита|прочти|read).{0,25}(ман|мои|моих|my|ҳама|все|all)|"
+                        r"(паём|сообщени)\S*\s*(?:ро)?\s*(хон|прочита|прочти))", re.I)
+MSG_APPS = {"com.whatsapp": "WhatsApp", "com.whatsapp.w4b": "WhatsApp Business", "org.telegram.messenger": "Telegram",
+            "org.telegram.messenger.web": "Telegram", "com.viber.voip": "Viber", "com.google.android.apps.messaging": "SMS",
+            "com.android.mms": "SMS", "com.samsung.android.messaging": "SMS", "com.instagram.android": "Instagram",
+            "com.facebook.orca": "Messenger", "com.google.android.gm": "Gmail"}
+
+
+class IconRow(FrostButton):
+    """A list row: a drawn icon on the left, the text, and a small chevron on the right (like the settings of a professional app)."""
+
+    def __init__(self, icon="gear", chevron=True, icon_rgba=(1, 1, 1, 0.92), **kwargs):
+        super().__init__(**kwargs)
+        self._margin = dp(49)
+        self._fit_text()
+        with self.canvas.after:
+            self._ic_col = Color(*icon_rgba)
+            self._ic = Rectangle(texture=icon_texture(icon), size=(dp(24), dp(24)))
+            self._ch_col = Color(icon_rgba[0], icon_rgba[1], icon_rgba[2], 0.45)
+            self._ch = Rectangle(texture=icon_texture("chevron"), size=(dp(18), dp(18))) if chevron else None
+        self.bind(pos=self._place, size=self._place)
+        self._place()
+
+    def _place(self, *_):
+        self._ic.pos = (self.x + dp(14), self.center_y - dp(12))
+        if self._ch is not None:
+            self._ch.pos = (self.right - dp(32), self.center_y - dp(9))
+
+
+class IconBadge(Widget):
+    """A big round badge with a drawn icon (welcome pages)."""
+
+    def __init__(self, kind, tint, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(104), dp(104)))
+        super().__init__(**kwargs)
+        with self.canvas:
+            Color(tint[0], tint[1], tint[2], 0.20)
+            self._halo = Ellipse(pos=self.pos, size=self.size)
+            Color(tint[0], tint[1], tint[2], 0.34)
+            self._disc = Ellipse(pos=self.pos, size=self.size)
+            Color(1, 1, 1, 0.96)
+            self._ic = Rectangle(texture=icon_texture(kind), pos=self.pos, size=self.size)
+        self.bind(pos=self._place, size=self._place)
+        self._place()
+
+    def _place(self, *_):
+        w, h = self.size
+        self._halo.pos, self._halo.size = (self.x - dp(8), self.y - dp(8)), (w + dp(16), h + dp(16))
+        self._disc.pos, self._disc.size = self.pos, self.size
+        self._ic.size = (w * 0.5, h * 0.5)
+        self._ic.pos = (self.x + w * 0.25, self.y + h * 0.25)
+
+
+class StatusPill(Label):
+    """A small rounded message that floats over the screen (for example: no internet)."""
+
+    def __init__(self, text, rgb, **kwargs):
+        super().__init__(text=text, font_size=dp(13), color=(1, 1, 1, 1), size_hint=(None, None), **kwargs)
+        self.texture_update()
+        self.size = (self.texture_size[0] + dp(28), dp(30))
+        with self.canvas.before:
+            Color(rgb[0], rgb[1], rgb[2], 0.94)
+            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(15)])
+        self.bind(pos=lambda *_: setattr(self._bg, "pos", self.pos), size=lambda *_: setattr(self._bg, "size", self.size))
+
+
+NOTE_RE = re.compile(r"^\s*(ёддошт(?:\s+кун)?|ёддоштҳо|заметк[аиу]|заметки|запиши|notes?)\b[\s:,\-\u2014]*(.*)$", re.I | re.S)
+
+
 class LibraryStore(object):
     """Saved texts, code and tables. Items: {id, kind: text|code|table, title, payload, lang, t, del}. Deleted items stay as small
     tombstones so a deletion also reaches the account and the other phone."""
@@ -3932,19 +4212,27 @@ class LibraryStore(object):
     def alive(self):
         return sorted([i for i in self.items if not i.get("del")], key=lambda i: i.get("t", 0), reverse=True)
 
-    def add(self, kind, payload, title="", lang=""):
+    def add(self, kind, payload, title="", lang="", sig=""):
         import binascii
-        text = payload if kind != "table" else payload
+        text = payload
         if not title:
             if kind == "table":
                 title = " | ".join(str(c) for c in (payload[0] if payload else []))[:60]
+            elif kind in ("image", "file"):
+                title = re.sub(r"^[0-9a-f]{8}__", "", os.path.basename(str(payload)))[:60]
             else:
                 title = " ".join(str(text).split())[:60]
         item = {"id": binascii.hexlify(os.urandom(6)).decode(), "kind": kind, "title": title or "-", "payload": payload,
-                "lang": lang, "t": time.time(), "del": False}
+                "lang": lang, "t": time.time(), "del": False, "sig": sig}
         self.items.append(item)
+        alive = self.alive()
+        for old in alive[200:]:                      # at most 200 items: the oldest ones go
+            old["del"], old["payload"] = True, ""
         self.save()
         return item
+
+    def has_sig(self, sig):
+        return bool(sig) and any(i.get("sig") == sig and not i.get("del") for i in self.items)
 
     def remove(self, item_id):
         for i in self.items:
@@ -3969,7 +4257,8 @@ class LibraryStore(object):
         return changed
 
     def dump(self):
-        keep = [i for i in self.items if not i.get("del") or time.time() - float(i.get("t", 0)) < 90 * 86400]
+        keep = [i for i in self.items if i.get("kind") not in ("image", "file")          # pictures and files stay on this phone
+                and (not i.get("del") or time.time() - float(i.get("t", 0)) < 90 * 86400)]
         return json.dumps(keep[-400:], ensure_ascii=False)
 
 
@@ -4527,6 +4816,37 @@ def speech_lang_for(text, app_lang):
     return "en"
 
 
+def split_speech_smart(text, short_max=500, short_sent=5, first_sent=2, group_chars=380, group_sent=4):
+    """A short text (up to ~5 sentences) is read as ONE piece, so there is no pause between sentences. A longer one: the first piece is
+    2 sentences (it starts quickly), then pieces of 4-5 sentences."""
+    text = " ".join(str(text).replace("\r", "").split())
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?\u2026])\s+", text) if x.strip()]
+    if not sentences:
+        return []
+    if len(text) <= short_max and len(sentences) <= short_sent:
+        return [text]
+    flat = []
+    for sent in sentences:
+        if len(sent) > 420:
+            flat.extend(split_for_speech(sent, first=300, rest=300))
+        else:
+            flat.append(sent)
+    chunks, cur, n = [], "", 0
+    first_done = False
+    for sent in flat:
+        limit_sent = first_sent if not first_done else group_sent
+        limit_chars = 220 if not first_done else group_chars
+        if cur and (n >= limit_sent or len(cur) + 1 + len(sent) > limit_chars):
+            chunks.append(cur)
+            cur, n, first_done = "", 0, True
+            limit_sent, limit_chars = group_sent, group_chars
+        cur = (cur + " " + sent).strip()
+        n += 1
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def split_for_speech(text, first=110, rest=190):
     """Cut a text into short pieces at sentence ends so that the first piece is ready quickly."""
     text = " ".join(str(text).replace("\r", "").split("\n"))
@@ -4664,6 +4984,29 @@ ICON_DATA = {
     "check": "eNrtmD9EhGEcx78N0ZAaoqHkRENpOG44Go6GuCEaoiGSdBEncUdqaIgikmiIhmiIhmiIhmhoSA2RpIZoSA1xw3HD8Q7Rrz/3e/SHnnjvvrX8Psv7vr/n8fnyeofv8wKGYRiGYRjG/9BcxbQP30uwwNOPyRtzXL3IEFcvz11UvchtI1UvcsDVi6yx9EW9Zjj6q35310fRRzClt4VOih5Y14fzGooeONTHHY4eTXc6WKTogYQbpSh6YMQNuyl6YF6nDy0UPbCt8yOOHtVnurJB0QPteV2boeiBXrc6EFLf4dUDk7ocxML5s349sKobruvL8f+oB/Y1YK+M9+PRo+FGA1ZCBaQCkZOIb0f8SQPSoQLqkr8VhUH3DSRJlWhW/bk2UsCmBpyyeumxBmyR/K2PGsCqpT3CraUYp9bSV5aItfSdXVotLVF7Saqljiinln5AqaWfIdTSr1S8ln7H1dJlkt/V0gvW8TVRicrlo1RLR3nn+4mcFKa5vz/sD5BhGIZhGMZf8AIu1A4D",
     "speaker": "eNrtmE0oRUEUx49IWFAKCUkiFj6Tj8hHWUhYSCyUCLGxkGRFSjYKKykrFmJBkiILJUWxodiIQj42iBRFMpxzDe+963rcN0ep+e/+55z7qzt35tyZAdDS0tLS0tLSMqm5O0MRKba+wBxcFEJUKcHXvpGGXIP5b0HxUqQA34YkEeUSLaToZbLH+B4CiVTX+CqF9yM8xA8LC37oLsU3/DzCjwsrPiReUGLBA7rvvLDmQ94jZRps48PWxHd8qKDMiY9NfMKegT6y4kMD5fvs4XPODXynM7+1N/uzZokq4u3gSx8MfCM48ZFY81GURSWTNhctrtBKcOLnUbT4o2yEfInNRSuusQE48qktiJs0WRdyh37K5qI9JKrT+KwYiQBZ2YH23tsdMGXl1lEGfisaTPzgHUoNyAf9n9FWuuNvC7OWA8HMh7hTSiZJP4tuwg0+/Av8tEy6zP9sys5IW0cf5Pf8UbDgwxDl899dELmy3/L7wZIfdIWBQWkX0I39gP8Q/alAsOZDO00h6ZrQrf+Eb5E08WPpDWWbyERzrJIPG44jGInmSSm/y7HreNHbhKnkV2NkVbozdOkq+bkYOZBuE125Sn4MNR3p5tC1/Cc+9/hwf1/u+cm8vuz2B+b+xt2f//T/ovb/yP1/Z9+fcO+v/nh/yL6/Zd+fs58v2M9H7Oc79vMp+/ma/36A/X6D/X6G/X6J/X6M/X5PS0tLS0tL61/oFd0WXc0=",
 }
+ICON_EXTRA = {
+    "chat": "eNrtWU9onEUUfzPfbJoidfdbjWj1IljEP1U8JDQKsasJvUg9qXg3ZxsoCordBb1VrRQPJSAongqCt9BgWhMUJUoV8U/Bg2DEYtvsJnhQdr+ZeZ0/u+vS9pudGb+esu8Q8mDmN+/95n3vzyzASEYykpHsNCEBEgyesCRkOWVJyBlm8e5KJfWSSlrub/IjBmC6sbzR8pYrqycO71Je+PkK8OJXGCwX3hgDH04T2LuEKDMupL/wjCP+9AQwD/jJi8h5uP0iw2x+qAcUplqY2R0B9pv1XOKwAyi98xIa42UmA4znwuzhOOc+gMKytV6f0dryi56tLW43oJB/pa6PLYEXLLzAS/Wpauop1Qfnf0RpzXrf5QAl540hAk/vDfvexxrKeH1l/94FJN/8aUMkx08AGPVPP5QRWDCWZfhKfpAyeFPTI+XmBEkCk2EJ1tBcwyql+bd7xq6pe3wo1/l+UCjfJV6+NY8gAns29DXJ7NFQ83XSGv8d9QHZZN4NE6huK3yJzQqEZ3QKK9p5gbP5+GnT4LfSKPxzFv+gA79VAH5tR+EnbLC0OrQ4fDLw163F4KtcOP16/TCzldWlReETCqd0VvyyqnWXFodPySnkWZbhNyklTi0KP4HH0VSxNr4KzKXF4TM4JmwxEyuqQ3NosfhvdTHkmkbM12L5edZWyw6+pxnJ1+LwCR3/Gtucd7C1j1CXFhufUF3XNjYnNQUuLfL7orDn6Jmzx/f1GM7XIvMD6be8w7TY/MMSyvoF26Xt0Px/U/CrUfifD8ffsv1JOQr/M4v/VD5+5bLpr/65j9BgfFL6WfdXQszkdtCUfGH7w5fC+0NKHuho23B7Itd5Bidlpl28UGKhBI3BR5ae88zRnz9jmmyODQgayAktwaxub1VOfSffd0J2/yaFmXMWzDDmK2rxoU0z5Qn+kGPMTuA1m9Ulrszd4m8/2/8BmgGJ47Jriid07Fc7qak/G+e85ReBxnrJ+f3OVwIKB6SQ3WE2ROxA3sEjQwbgBOa7w6yi0lusSbKDi0MHeKYOwEyGvw9ojxeBDo06Bof+VCeE8SN1M9E+4gGvKbrj5N9mj+xtFkIMQN1AtPlLD3vB6wPg7qMrV655HnHav71+/BEA36HQTI/lA7WP7Rf/Q21uduZTewIX39eerl0rM7fbbjjgvU4vXtL4Gb6r/n27y1AbX76xSSw049JkQlcDdcRzkH6IvQeYtXE1tFwn4eVCkVmTZiBvp+Vvu68qAuuliNKTE6cNjcpx9Z519WHaK54HUhC8irVuvT77Ry8ltZ6HUlHwqr9sohyITQU/GV7WhtFvnvls6vruMSgV97rdpb8nes6CpDj4Hv1d6eDpYuEH6ddhv+j7uhxMvwn7BtBC4QfpN2GfkELhe91qP+yL/m0Ebmv2XkwLDfs+/U9a+osO+/9eGw09naLDvt/JlS9iOxNFh/3g7wCbyv4TBYf94A3fu1Cf8qzYcR7ATTO+W4NZAiMZyUj+h1wFqmr04g==",
+    "plus": "eNrtmEFOhDAUhkspxmvoIdSVkZnxAmaWHgImcTtG91xFVy7UYdQL6E2MG5MJFJ4gDDGZQifVt/L/Fmzafi1taX4qBAAAAH6kUj6nvnsw6ffjywPhsenPP4goYXoD6e19UpZpOhMsa6DEBWVEeXHH5Z+XOZGmZ54J8sWEitqfcvlPGv+Syx/CDz/88MMP/7/11xnTxI4/bvxPfmCssF02HRjbYeN/cGr8I2POT8NRuMEknFFJVRdv4XiztGoRbZFN24zpii2bNhkz14WZRlL2lOb2bNpmTFes2VSJqzpjuqILSzaV1R7Rue5hPT995XpFcTXE4Q6SXywvvex6nm0DTW8W6dLIa70/S3o3l6bpfRzYf54GKhw139ejW+vunPGlkUCuzwepzDV85eF8hh9++OGHH/4/9o+Y/cesfiWiSs7pv6b6/rNg8rfZdEUzS8Z07yDZLmO6dzC9XUQB2wV9K2bTf2dTxagHAADQ8QXnqy83",
+    "book": "eNrtmT1v1DAYxx/bOamdekkZeVHZiliQeJsQuRY2BlBHBsQXoJVghJYZ3RdgADEhMcCE4NRe2uuARMvL1KGV4Bs0x0uB3sUv2PG1UtXk7NwlS5X/kMn+2bGf/O08D0CpUqWShR2HFInffxSEPz03fxFQIXCECNz+IYSoA0FmZV131eHUH9HtUnHTpgfJsk+qbfVY9aGIhIhYwx13+6talT2w7TsgDGeffAzDdocLJRqatfHsum0kyLWc74jseunZDUDQU8EjxqV6PblZLKJibdxmmwnMiw4fYP4dsYixRcxPdinvTdp+/qpZV9wBYxQ5UFdRk1VqAMrXzS+AnM+cqR4sDH/rvlHY7h887fCvfs2dk6YtRuC11WT4P991bwg5EhWrrmeIf29iSzVlYsq0QAjcUPK52B4BuKL5TYuga8h2srVvzQ9lsNU0P0AmAyJ4OTPfBfB7fON3gyEo+UXz1VmcIHVC58Hv8w44B746ix9d82v+QdX8WXlCk6H5WJ/FyarDsHyMJuRZHFF2WJE8oWegNRzfgQfSflMUsXfD8x/zVNembBVWhlwfuCRoRJO1K+7D6tD7W08/XFqjsDx8fM68XmoGh9RsNuYqKIfvC/W9E+TgD4TgRBEHlf55NP1/7++sQP/HOfET/F97P8qFn+r/dT14Mf6vvP8W5HD+pvp/xN7mw0/xf8pW4tULCvL/XTEnfxny2N8U/2+NyJ+uXOLzsP/H3q8CFBfo/ygvf0jyfxLnEUr/LPklv+SX/JJvzfey8FGG/69tnR8bw3hK85exg/urAouaf9XM934qPv91HOCy5i9a5N/WdX5v2shHo5uqKRffguBLnEkUYWDUJ50E7ZwxLiWBF3yA/GqcMeVbFWMCmkBN528ZpayXm6VGMZ0fXpB3OfMAr8Qg6Xk5q+9jFjUGhL01oVPcWfLPrCvC81YFAAzee7U+jPG9vmbJZpsXwK4GIydx98NOxsXZWBgD2xKPKkOc8Kf95+qjoeyrP+WbNEkyFeJIvE/n1J1/V9zL0MW+AkZIRd/5W6PJic8DwoMU+eSd/83SbKWgAuH+nb8wfHzndwrElyp1xPUfn/MPEQ==",
+    "gear": "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",
+    "info": "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",
+    "user": "eNrtWF9oHEUY/2Z2L2mUNLmzrSbaB0EtxkQRSdMYKI1tzItUBEEKogjGF18uUH2wyEV8DEUIPhXSGkEhIC2+lOZPQ0pRaKAv1qQqKjTUkrbJJiq1ye3MfH4zs3eXgDZ72TkEue9hb2/Z/X3//w1AlapUpSpVqUr/NTGiioF7vqd/uO9VgocBrWtMNxT/uDUMQOfA2HwQ3J7+5HAtaeEUntCOfItFuvphDXgubQPNZxFVKKRSSoQC8fsu8B3Ct99AIUryyxDDPmcacNgbYGiRSX7zKxS6YsD5QzfRCK9CDS6kuRfY44YBhzErveYRLAt7g1ItpF0kmwevWXiJN3N7M5mWviuoLLtPXSjA2WUjsMTRZvukZoCE16642wQsufidxuACvwLwOWPcZ9BvOIb4fvIg9eFjbR6lFneyyBosBRfQuGGa8+TePWexciVZPTggSSeFt7YnNRCD+nntThU+w7xSMdp2DTWDsD2phxlkVghfYZBeJypn57VSEg8mx08HBn+pYT0+TFj87uT4jbeMff56jJV8yVKz2j5S7k+cAZxdtP59u+Rfzp7Ma564sjNxAvgwpEJtiqspv4BVAyPWPJd9B/n1kkkmgQNgGi/jKTikw5PS4njy/GKs7lclTT3rN8WULr2LpkpL8ZSDNunBB7a+KZzsuZ8M1jaMpsAJHHPRhRmv+clWZLrMT03NSTTSKyH2OOnyHPYpqaKmVegDiHnMOmpgHvRFTYtMLiwrlccTzhqwTwwwVKX+rjU5QWkAzhj0/kYcrH0UTQ+4lnUIr020a+gPg20iX5xtdQqvGcDDRydva/lXLg0+DU7HNxOmGrChvbt7/w4TtO4HaO5HoMyvAHqkBFHlFoz/xfpVoQWM0fYVuZWXbh2HDk83NqbrXAeRp0M/c/DYqfOzAdG1qdO5V3YblVyYSteBR976ehE30J1vjraAgyzWadvz+e9mJ7Lrl6IaHZrxdvyNGkg4gBJ6x7guaEJtlJ+2PLpeOZJMBR+aT+apqRTBtfyqyIK0GO/YeiGlIqbLfrQ3ShHVf20pGT2TGGa3qgJZdqDQtlTUH5eXlwNZWvVMIxvNbIkBh/rh0q6IeP30sRfb00QtL2RPzWKRc4gzj2+BAYf0JZoRonlhbeTw9g1+f35woWC5EJfKXwMYu2/GwpPwaydb7fGMp8sPt+c0D+YW7CBEbIK2chn48FkEj3iuVecw2+h6Gjx3DWFh8PrugfKiyCfX5u2nJkD+IYsYcei9YUfHECfKUsCDnsJOHXT9a44Sh6YZ+15eT9flnDgsKLv0zj17r+98SJ+JTKQOxdfAI+OHZtpZaru3WB7UzaCZ3vFHP64LODy3qlOVCkDnZlpTGP+CVtV34yrAYTpaWbKQ2lzXfXl7GhHsiNc6PXYggp+I4zMdavY0IhfPxSn40pw4yNUn4uwPzEv9oIMhzP9cH0cBD9r+pLyUeRyJZ1Af3kRbUbtifMDh9RW7QtzdE2/KZLx2Tp9ZDnamNhefs0fvUDwonL0+GjcefHhnafjl2pjvvqcLg8Av6nfHnaQYa2zSn3qx8D/S67qQF8udYVjM2O9AaoSr2M9S5VTzMvrKce3cC9sqddDP4dUzk9kUVGzMZ+uuFSHP4351SalSlapUcfobRCe6gQ==",
+    "palette": "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",
+    "globe": "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",
+    "mic": "eNrtWkFoXEUY/mfm7aaL1PSt1kotRQUPanuQECs9aJ9pjQZMQTz0oNgeSg9S2IjetIkYj1XwVCKGXgUb2oNi6u4mEQuSi1SqUhDE1JZY202MFrL75s3vPzNvt9pmk+y+WSjyfgL79u3b75/5Z+b/vv/fAKSW2v/FGFnHwLkn9IvweEeGrsHFpk05fe3eA6FvK5z6oVKZmxzZad46ht86voSxybNPAWdu4fuvIIYyUiqSIV0VnDoQcJgwFTYmoHCMCYfw+1BGBllZJ6qGI+C52pfs/nll4LUTJY2DUO11tcgCTmKoQQl9sULY9vpizs1ZY7D1bxOWCIuDm/O7x60HiS+6mYAHBTP8CN+2NwaqkdJrfNoNvoBTNFj6m6LUwJjIwqh+H+GlHDAXKS13UUdequeZ2TGcb17QEVLLjwF3Ef78nwSncCEfD5fDtJ2Akx3EwL9u8Ct+A79k8fc4wq/cil+2+EGKn+Kn+Cl+ip/i38H4MT/e5N8pp/yYXzT417sb+EWn/L5xTsuRKOyxkpnxuy4ZfRL2OhFYHL60+uokZEnvsC54Tb9XePVuF/qK9OGo1YfRgBZXANuNmpZqhjspwzjsDCMj/avvbQPYeOhyrG+POKoAYr2mbWmm/JuVzyqq3OOoFubQI01xZEsLafR/DV93VkQKUuhVg6pkXCdV8TNwWYCN1Quwevk16zssIKleH6bAyMhGicL0aR5c1vDkoP+CKbuMi9+PAjhuEXiQ3T/xq17gq8XD9zku3+MGBOQeDYLebnDffrANFFHv07gaPLttGYQQbI2HWugnree7DNrrN+lobFjf8YbbJ7V2VQrwwLFfnllrJRnzz3/wOLSxXXd/soQ4s1aK9OB9ShZnnmttQ3HWU6SdHuokllkd/okqPYX4/UArPTkODy7LGpGu/Kt3NQcC/PPEw0qGuL+lM+HBO4azSDWQA9b0KX9Wtw6IHcqtLQDj3T+bb0ZY6W9yXIkdH5m1o5C1nhYXWECfCm3TB4ezdHbZCof5wDXLazUcbjljeDCCtbjjduEF07YVlg8ZE6aRu+ML413Df9VGQtKcUrPdQsRzlDJtTGLN0DV4uoomV1OEZtthYtpvYzHXapz5icLT9+aMY7/30PhP1q+F99siA1JrJ2JKx8i8LM6VyX5csHdiQsZv/Da5hhwcCeMp6D3eIODGtaLdcyLTPpUJ2PUtRaAOrCIpYxKuo18+kIgpBWSOzmtmv9kbbvgi9OpHSZmSxrZlRC9mFP5r4DLU6zH/8Y7kTKk1ederZ67dOv4b597cQuguGpR6iPnB0cm5ZTuB8I/pDw9u19FzpFGYZcCc0ekSv+62N11KFMoJWegzfVYsged14DcewfZY/DLryA9IAoIYH1L8/8gsT2jLinh9p0TG3PA8N+Vpw3ZZ/LMrftg2/MNDx/YFzwbB3uANU2fjd0FfENCdwvCTiQtgDq8sYnM7nnAGnD10A2uU2qzVU6e1sCbxpWQJzoO3YhJe0cLo86T476qwOb6MppMFiNOeoWTfzJZxKGGPgMPxVZYXZzYk7RFweHmiWCqvYKXS5FAmeYeGJfh0nYUSb2LC69w/E9wp9g/oLQdj",
+    "lock": "eNrtmU1sVFUUgM/9YZoSsTOPQQnYmBpTwOiChaCSYsdpA2sXLowKLghxYdKFxEYNsnPhXyRxQYkNsDEuTHSBpEUo/kTITKwbiUWjiQaMgJ0fbHXa9+49vnvvK7adaXPfmzuJizmLmXT65jvnnnPuOefeAWhLW9ry/xASSsvglDP1xsybc7qisnS6Uy3DvYaQuHXo48ul0m9jRx4N/3TrJkJhy2gNF2Q8H67HpW8AXqwg+oGQUgS+RDy6DphDvPdRSJe37Q8ETm53poBSr4Dzhi4jJT6WHnakgDByEec13BfRS7gELPW4iQGDY6G5oShutazZ+qV4h4ssYvCUwQdYeTO/wdvx0hWtKfzwfQceonTjdSE07ute81HXcaPQx4HmFTA4oWkBnuDAGSGUA7ygXSTwSgdt0kOUbKkJqVjFtQvGEh5GJNA69zW7AAYnFUqKas9/KMLotyoGQk6lmqunFLZp8wN8BfhirX06SwPc39wCOLylvC/w59QST3P4UH0eyAJtag+Q1JRyRICHl9rJSL9OKlnrbWaTMdipMBKrdy/zM4VLKi4+Hlrst4TuCfD0cis5HDL/ucSasJ+EeRKYPOTLA99bk2pls5uBJM+e7pkQIfGvTXUQQosmMk8mzyAGe3Wa42R9IeNwVDnIxzeSB4DDsGGM1tvIYZ9x3ZnkCcTgPcMfrreRwWNSr624JrH/ObugbBS4p95+AhsqOjaVbNIaFzInNF/2NeJ33dT8ciphACjc9/ItqRHZBjlIyRem8h3bmShDKTxT0U03EDfTjfhwVkRN/+0EIaakZ9Z0dcQ5ryH/YjRKJNoDqgDMq9h+l8v3NXIwge0DuVO6CInTSfiHpS4w46s9FRWhC/EdxGDQ7P8JnuKkobAOvtc8cy4Bnz2+8N1VZNeCDXH9Q9bAQbP2LzNeZgXJZoZNjRhTA3bMgXnwK2nGqFK5tIKUS2ZslL88l4oVYQqbPsNY8v2uGAoo7PgddX815q0i0SM++gesFVCy8bqZAO0lkDhoq4DCmMFLS9HDtfwjazdrMXjCTODC2ngz7b5uV0gZnFI7N6ybYuXUWZxEf6PUC/gpZWU/4ZOm6559aP2Kqb9IvO531PNSzt5rs40JeGVlkPznfuuE+8EYlLeJMIFMSTem6TspJTbCybhpo7lY/JJn2ZcomUjEz9jy4bwzfqMUd8dXs2z93YkzfkjvykCdVld8CvlPb0x/8zzUnQWc8CkcMOVghLIW8Bn0Y+BLGczhq0s5jvjkjDTXEOJGeomHnPAJpP9E004E7l4CcsT3Krf5A+75QHlRBGYgnbkHSAviux/nVB2u4clWxBcoHUHd9QvrKWkBP8yZ164iVkc9IK2pDwTW7c5thvqy4ay+mY3QuvpMWIPrAJf132V/se6PELM/Tpv+nia2/fdzw++343tVxZe3ssCphYQRKRi+1XUlIZ3RndW7Kcvx5+noLusBq2MSg0+i+XDq3MR5CylEVe9ap1XAODwbc76VZr79wG5AJ6Tjx0hBYCemqgZbLU+RFB6RQsQ7X8h5HLI+wDDVyX0hreHSlzgS4wDGYM813WntRF1RDEGcayAGdx25PGNrv//r8Qch3i1TuFbWnbOUbWsh9gVHvJ/oklyyEsoshbbuN8+2tKUtq8i/GxyB3g==",
+    "bell": "eNrtWU1oXFUUPvdnRpDWZJI20UqFVAQRF/6RUYOxg4lbtUpRsGAWQxdVyKJduLGTxp1ooSt1UZONYNGCVKSddiaxYkEtVQQLAYmIMLQ1JmlNazPvvnu8P2/MiDNv7pt5gwjvLCYvvHu/83/uPecBJJRQQgnFQURTd6Ap48xCU85pzExIAN3b25th5onRONHVz/bn3jz1zbKii6XDr9zHY+Sg0AfzX13HOvJ+LNyrXpBYXAqDhUsKU3hCSEW+elD/3jx6v3JFHMK/dlmB+7JefsUEcf1ID7CO4e84qcxRA9fy1x4Vh4WRDhlwGKnU0H1P+BbY8y0HD729HTmBQ95DYcCE+bO6vLJieRieymjvQvu5wCCvLG2A1O+vH0w8uTWTyQzvOnxRMwyM9H7bJmLwmPQNvMIq7rmtTq/x2Sp6Rq8qTio12yoIZPCyld7DhRc1P1UgFDGm8bJn0ISUcsJ4exowKAZGwI/6Vfkh9QmtEAv6jfbBpQFC24HfZ00gZAH+bQJVHXYvGQ0EHmtDAUL6l812DwvAG4VIGsZs6ArcGZ0BU/p7ZvPHkG4cgWmYNAYUci5yoSBky5JOVV8uZpqeKBw+MQz86AqozLKy4QvNt1IytKpt6OGHUfEp+1oXGIFzYTu5NaKUf2yDSFlM4M41HX0CXyI8LEV23JBm2bPRFEjx57V5JFY2hZ7nFD7T6zw8wtNRrANwSCvu4Wy4XJxMoDHjWYigAIW7Jxd0aRC4J7y4ULjnT6n1vDaddfYAhZdX7Rniy8fDxSKw+QoGJ87bjkmgou46VrVUQvy+tYVUlM77VZPmAne5mYjDAVV1Ld3MtMKHc7Urhf+5K/4bquiqpPwu99QTqZaB/OBYbtb6+IybgZiqW8a3Rdd4eN3G2rTbQcNgp8WfYykHhektLIjlg674OYtfdtM3KBKmjif4CX6Cn+An+An+f4ZP2sUn3G39qMUvueIftPhTkHJYThj90uJ/4Yo/bS/plSGXDRze0/CqtXrH1V/PmA0+fntr616ewd6gbcRht/sYIZt+M224hzMtJdI9u7Bt4zHqeONm8Kq9ULbu5SkZsD27wB/6nAcXDGaMzupaORbKgDByzrR1Eq8+QNLMkXhq8wXjAukvhfqYKd8aeLH2dLR+cMvPZvAU7uM6354YGc9FoPHRQxiMQmaaRgWFh3zxjzFbG1TFfc0Y0PT5YFhlJkrRaGMsd21H43EKg6zVsTPy8EDjGNJ1U3SOX5VTjfEJ6anguggn32+xwPMx2yREKQwvdS4/5ptmAIGh/SdLpXJjKs2Vj584f+HU8dPzzZaUS6W3wvrsVuV196eLv5T385bDhebvOG1GnA0UrQF+ehTClrX7/YKexqqQ0q/ildtJjF8XatE7geu1FJ3teG7eoHKflaI2RL/aD3F/gIHevwclqnaMxq0Agb6VDXx1jMRtIMK/37DPjbsgbgdzmKpNbTycp7HHD6E9i3bq5En5cOzi67R8pGI/NHj5LsBrBtuOqvq3VszGH/21wtI3mtsOXYIPvhMCodA1Iox1ET2h/x/9Bb+j8r8=",
+    "chevron": "eNrtmTFOw0AQRWd3nAJEJFwmx0BJqJEQnCQlEvchl6DKHYCKCyCgiJAi04LjnWGyRuEC+wUR8wu7e28962J2lsjj8Xj+bUKA0pmIIw5PdHicXyD8+OZlfXtKFaj0o2e1dOc0QPCZFvoh0sp6iviCQMOViK0/aYMQBKqbzEcJOCy1VZwg0kQMjRMEumigAqYpVjBACyoXuMAFLnCBC35DwFjBjCJQ0OnbqPwBwQTvmhs7a78W5StkgpOnvnMUWQ3LHw8iHdxL6vlNXZwfqX743oCNLgOXx9/ZzublJ5mU/oEyftPjO52j8ZXjHe94xzve8X8Oz3u9+kBjKH47/+xg+Dz//MThd/NPDP5n/mmt5hwxwN3OP60+qcXgt/PPpMka2WvMfNsqdPmo+npFFegGIFKcnR0R7oqEdw9QAjP0gsfj8Xj2M18JnqXd",
+    "key": "eNrtV0toVFcY/s9jRl2ZCTWYal3VIumum7QISuIjCKVF6aYbS8CuRJi0uz60KC7FfcSgghTBx8qNhmgLXZjSbqqVbgottMZHJtgSbec8/v7nnJncm5l7ZwbmBro4H0zyz8nN9z/O/7oAEREREREREREREf8XMMJacXMpuNchJC+eXQj3c2NlYCDoKDguxLd1cubuk1qtdu9adYROivSB2Pdceo4rULcO+8PC6F+dIVattCVorejL7Cjwgq5awsSfaJRN7LekQlULUiDgY4pIg5gQJG1xuhAFjl6bYLX2zMETWycFogD6fc5Wx+s+S0svGiJiHb+i2PVZVHzzgjWB/t+LkyOVyrZDZx+jj5JVdm+/Hgi4EGJv8MqbzcOhU0Tuz34p93cFAnYb7UOPU5RIkjPGBcVkYtF7oPCz/hwQ8LU3X2MVkq7DSvCONqTA2F839NPwGAz/7QzVeBVKaZ4SVP0lG3xXlkUGpEwkknMr67Cjsfbl68BX9yPxkMhR2fO9pUleeC658Ci83BpmCUe8Zvz98/1j42MtGB+bOrHPH5P0xafHRyE7iJx951g0fsRkq0Hb66mG0Q1nMj1gMPDEJaJ9+Ubb31n5gQsQFYE2GVArx0qpusZDWXnGoLJE/BYXN7Y5yOF2o4x7gDI3c/gXA/9ABv9s7/za3M0KEIPBYP9fW9r4mbiHofLaYZpdvCm56szqVEz+4IKs8WDrwGWwdRl7vWCD36zPLEMB152RCs+2qpfsvZCfz+fa8aNPCqw1JIPfl7ITVMKUy39rFwZb+pgI4Vf2Rsa/vR2cvp2SRE7Z7fDDRONpagmrR6bPTo2TvMxXo8T3BNY7fEXK2zY4u2P9XDF70w1IwtAjNxWsfbqpzXMBY4F1DhKJ5zWgD33/tPbZTvrmg8RpjRue9+YrPNfueZp/vAs/LYXfhjTEerXs55lTceCPULumNtyeF2n+XV354a0wz+nz05ERl0XbDt5CT08D+GjGxYnE6tDFO/HT01XiCSMM9c9zc/PLGMYvHV/NqhqRWA0nXXS16cBPj09jaJWm0Q90c32Yr2RNX5lYDaNu6fsHP+mwZ1BqTTcWIAo4VX+oWuvoM82SidUlOOOezaneRMEJ1wLTFW+J4Mpgttc8ZTWHD27MVnOqN6Vg4r7b24xtOoH4+Fju1OMpq1mjW3XbcMtfPvRXQHC/F85t6bB8pq0WgkvWw54C696febDkuJd/uzY51Hn9783q1hcYEK/sopH92gYnsi5vU71Y3aJhxWIh1+YlkjG3MPE1e0ONiIiIiIiIiIiIKBr/AazS7T8=",
+    "sparkle": "eNrtmc1rE0EYxmd216bEDzD0IJTmJCnEo6n3bkC82Ra8CTboWYJnITkLkp5Vmhy9GPEPaCreDLWeCg2CEPWkBoptIGV353Vms7tONks+NvMehLyXQCDPs3l+M7Mz7xAyr3nNa6KiJGMSDU9fJ49qxMDTN8iLr5Qi5qMdsmuE4sW//Afu8pTQ4t8AqOABMMgOwIGGl49+AOxsBWuE8vjPmAW3sQCI+G0LSlgARPyWDQ2q4cXvMOikcGaAiB8Yd1jHAeDGD2BBGQeAGz9wi4amocUPPKFfVzAAePFzA+smxgzz4hcAihgAvPgFgLcYA8iLXwD4cVE9gCB+bmAjAAjiRwIQxI8EIIgf+Mf3pGoAUvwcQC+jGoAUvwhoWzUAKX4BuKYagBS/AHC8QPHi5wDOV9UCGIhfOQCqL1IpfgGgShM6VaNtuElI8QsALfGdZszm4Wun8qWGlI7rsF/Kp2bxCLTN8l4HIquzVzZjeQxpO5YdFrctJ+yhxdVm0c/Pwh50jMcU2kMe7yub6VEeMbTDHt1mZcv3iOSRMkvTaksetu+xEiGtpe89//A7nnbY4/Tw5cMbi4P/wMg9+9zz5J2Y+uB4BtaXV3cuD58zL+WKb9r+4Js2H67NvMG0fjUqoD7e5Fqx3ran82D+9PhWf5r3BqoWPYTct0YyW9g96m+lJhmf/adp14tryfGT2fcwhEd3tEegfbRbyLra+kQLBdX6Hnp6s9Lsjl4fuh8rhawxuXbYg6S3Ks2T6Oc/8ecT145zKKaabrg/WzJL+87Q+mwu9VEaMx24fY9WxPuFTrhmjl9TE7SK9H70tz/biO93nhJZPZdGqfL9CaELx/L+qqV4f8U3QDV5f1hVvT8cAGDBY9X72wEAzM4pPyBJAFAOeBIAlPORBADlfCcBwGkQBACQGhwBAKQGTQAAqcEUAMBqkHkA0Bp8HgC0BqUHAK3B6gFw0BrELgAGaA1uF4CN16B3AViwg9XfdgFYsIF2QSIAsNNltAseAQA+6Wj3IwKA+taPDCDTYw8QL/DohRZcR7yA1Mnrnwbi/aBBnrzDi18AuHUfU5//gwT5v4uSec3rX/0F9Mz8Fw==",
+    "grid": "eNrtl89Kw0AQh2e3uSdpD4KgL6HorVB9EgXfQ19E8C1EPYi33nr14lHwX0UQwbTZMR5qdrOZZJOb+vuOzTe/nTKQzRABAAD4RSiH/k49A11JilQvR+qLKE6SdEWSFj/q7o4UT3R49Ti3eJkex25xiCN2Pzpnj9sduzjEkdD6krOlccgzflhTupMjjZYO+NPvLeOz4lEHR2xf3ZilX2vM24hUB0ccbvLExq/lPB+vmgtx5Pz0tb6W98r8dqchfy7UTqz8Vgf5yEf+X8wfSu+W/TK/3ZEPiGb1796PzZ/bKcSRiOikuCg8FnytdRdH7F/Hd5xV/r1ZGLNVthbiyBcYbd9/XxU2RW9HdmmI03DA+umz29v7xa47uBCn4QAajic2G1QtDXHkGQz8qfRxmk5w0H0dALB/Yf/C/oX9C9+fyEc+8rF/Yf/C/oX9CwAA/jdfQlSmWQ==",
+    "camera": "eNrtWU9oXEUc/s3M22Bq2+zbzUYURME/GLEo2kSrNHRpi6CHooeCoGAuXkpvEbzI9m71IJ48pOClNCjoQbBN3CZSD8lBoVhogxRT6mHT7G6a1uruezPj/Hlvzb6d97Kd97ztB0s28977Zt5vfvP9vpkFGGCAAQawByJGoKzo4y7gTOgxoImyAVO7gWRCX/yJG/HHRAYdYPTEKqcmeLz2RvoOCCzwtnn8Pr81hnFa+hNx9Jx7fA6ctNHZokxQMT8Cqjs4ni5CMjq+efCyV0prqSIko+NJLvZ3tQsXq3+qDvxUEepEx+MnotdebPssbYTC6Ph8AXIEb0cOTqk3kxFC9xshpOGE0aF3n8QEdQE7Q79yGkYoaOxXzMKvj+vo+PwD04377gWxe6vzvg7qIybik8+7rjua/1hFh/JL7qgbRX5092c6eOy8W5QN+eHg8SQ4MHRs9kpDotlsMZ2Kt5vNRhTN5uZGuI6DprVvpsdETiRL8eu/8RSonUyQc/F2qCKG41EWIFxKMeDd16kvsuFcMX6eHZF0euHbgrX5PCKxU3uEtVnSgJOhemjxSswkIzR8TaV0nOLsBC2EtD1uLpwE3gyZ7xkSZgeIfApF+7RZkgicYWrJs5lHC+79o/T2htQ8yq/mkDk8qzI8Pv/QVq9ebcnwstazpgAhKNwW/TO+VSIRsekTOViWAab8iGmGEbh1xV/Pxy+RRBXDaEHzH4rhbyj+RiGGHzsk+BNzHS5q/nIyv2vkV8IynHdHIE7GMFTt+cUT4zPn1xqNW4ufHCBGGUvBL0rUKxe8zkq6/I7pFez5xf+nBLvnS+XzPZHlZ93eHLTmR8g9JxzQNiXw+S8v9HRgze+gr3lQa0JRbvPrxegc2PITqAhZVCZOrE/mMd3BfJTFkh/DS9rryM9mU1XkwBORTPjxotJVxr3Zw6XCZKWmOmC0UUIoPT+Gp1VEGKu/plseWQmcz/vdQmzH78BH0mUx2jogTJxwVjko/M6k0LLvu72t7fgvyKd8Pgs53ZKD92QL4xt7I3da8CPYc0OVDXYQk3A57FWVhHndGzBL/sKmam6WOs0YL2miw1nwB83bygKGeRORJX9+XQfjedSJzwNrMoMonUrPL5T4kp7fSji/BA5RuZBFJU0/vyI/P1X5yTbGQBoD6d+XdI/LTgb5SeBlme3isZWinFrR9KVaX54wGhmsL0BDV4MOVqdFDw8eXQj0wXsKMhi/uPe42iZJ1vpS9UbgHz3+RTb6Jm6e03t46muV1h71+p5IAbDlR6RwOTgkYMHGXfD8tT9awKzrF4Z9q9xj22y+x7fe7SGxr+8Yij/I8q43B3Kbcm2y1ySn8CciEidrKmnkyuL/fD6SqT+RmgAPTX+3Lse/+fPMM8azt1T+TT0yMlEuT42qjWDW/lDcEKoBcjBY+c96In94EBp/XIl+TPTnYSHJY7uTUwKLprLzXyG8qQvhMXCwBRx4uCntHfMnjf6dwLdy6TO2ftBu+/XYMldl4eYuY4AdmA58FFupWmDpjnJ4HvvKvP1AqNSgoQ+022BrZSrHbOA7Z509h5H9IfC9cxB/ANHx4bYQvr0Qm35iHyFljNp2QT1R4/YnHNvLfVBLnQraQA7rbDHxVwEhY8+dvmJ5fsLXzhzd8UcHMTdkvGyFiV0AOy99nOJEnPR1lIswsUNWP/gMMMAAAwzw/+NfTaB41w==",
+    "bolt": "eNrtmT2IE0EUx2dmNyqHJ9m7s7a4xkoULSxELh6KgliJjYVge8LZCkoULbQV7K3NaWkhJyI2NnrYWMhZWvhxCZzgx2Z3nvM2u5vZLCG7w3vCQf5Fyv++/N5nskJMNdV/luS2Z32AJy6cMR9s0avgy1lGf188g318hDxxEb432fyVXNzSW3Ns/r5YB8b4fbECf+C1VEx0xKHtqA8vBY+/9BobEEXwisnfF7ehDxG84PH3xLKOwDzhnnkSB53ZTYjRv83i74tHhg363+Hwx8btQ+J/k8Ffyf3fdIz+MZxmGG++6CR00H+J3t8zjZvQQf9T5P5KLG5HOvXXJ8n9Pbme0gENvQXq8eaLdkbH+Hepx6cnjoQZHYw/oPU3jfsBYsj9qcc/Nm5GB0waiMe/GWuWvfGnHf9SzW3q2PanHf++eJKVZupPOv49ccmmQz3+8R6JddGfcvzjPWLTIR7//nCsDf1vyYYsy/ke0UV/HJ+k9wiM+p8P5oOimkFzYY/rPVLSz26vW1TvR/ddUBtReo9U04naTZHdIyXpkkJYrb9ysntksiJYq1+y+T0yUbH+HChZu3Gze2SSdBQdd6HTqUinD9dd6KxUpOME375HGODb9wgP/HZFOk7wlX2P0MOXcmYjDuOSyOCrx9Vmjht884DWUmtUy63LvzUF/LE6NjrsnOAPvkBZu73VkZJygz++ZB8W/V3hj6tZ9abYcbTwpZj9CpoE/piWO1goH1r4OE/P2eVDDB/Te8NOLy38JP6nVnqJ4WN+G++HfKjhY/kEvbx8yOFj+RwONRt8TO/VHD89fPR/kP/9QA4/4fM8jZ8BPuZ318e0fBjgY/gHfmnNBR+7qzUInwU+pvdakl4e+MPlwgJ/uFx44OfLhQl+tly44GfLhQt+uly44KfL5S8X/HS5hFzwB8tFs8Ef/ByADpu9Mb4Cn9jgG395H44yvnFU4m2bj45J7/xdxRe90cxe/lfWO9l+qh2rf1u67hQ=",
+    "doc": "eNrtmT9v00AYxt+7c1DLksRhhEqwFbHxZ8Yp8AFQVyTEJ2gkRkS6o/ABGJCYkBjYEFQlSdMBiRbGDq0E36AOLVVp7PuDz2YwUuK8d3Ulgu5Zc/7d67s3z1n3ADg5zaQIXuZw6pk8xJghXo+v1eoo1WrJaGpSDqFw7dnnEK2dl/eSGQwWHtojZabXPn4CRl4oGQuJloi52mpgt5lBW42kYf0jtU5xL0BhMeIaj69fTxCph4DqIg86KjYrXk/A5TbuBYj3VQr9lAiHmOYZhsfpHPJoAbPFBPyhLkj+CuoNVP/7l/dUUpBQS5gFIlAPE75U+3Pohl5TXPMDI37YIBRlPoz2rfh1IMiG6zm+4/+PfOp5rFDJ76fgo/yWWvMJXGk9vRs0g0lqBivtWwnUjn8BHvxAmH8H7PgH5xeOVRRzUaQ44moZBjb8n7CSHHpTFYv3tvwnEnFOcrEJGzb8w3PXFY/5NJ2ox7Bpub/PMYf7YB76tv25/PZjt1egbnetVSHW/y/cBxOz9wfG6BQxjzh/dv7v/N/5v/N/5//On2ff/7Xnl8Nnk0sugz/W/zPPJyXwC/y/k38DWrL/a8+/n0NZ8gv8PxbvyuBP9H8uNnILZMkv8P8T1QKvhP2d6P+Dudxl5yn6c5z/p56fb1B6Bv5PyvGH8f7P/r67d/48m3wfyyeG3z/72f1wlU79ekhVgfWMfxvH9w80Xx5eRN8/b2f323dQfDK/q4dL9a3X76H0JQsBRldRH2QMXknDfCFNC+ReBbVfDJpZfiE4UiLLR1Zznlo8wRtlGk8lFX2vIjM2Qv0tlUU82PxFRCq8gQ7AKPgf9PqglQzevQn4DDIp5NGnI4PF2VmtgknEqU+nSwFai8wkfvyTEZ7l8HSRGFrUImB2cvoH9BvgaQHI",
+    "trash": "eNrtmU9P1EAYxudPu2JiQna5Igne9CxqPBC64BcwHD35CYDERDwgcCfxK3D1oCcTEXZBEz2o6MkDJBK/AAUNKux25rUzU9tZaEu7HS9mnmw2b2Y7v51OJ0/nfQchKyur/1mYpgqbwmf9QAzh8ZiXovFLyMQdYDz0BlL1bczEHRD3LQQsRQH4o7jyH1B0G7rp4+/AQ+RU5TtogWfwA75RfYIctKjGzwJNTPKhbZCfMn6DfA577c12rE9hg1F+Fx7prbeAmeYvkRqJ5JLJvvnEcXpM5gJdVvzlMIxUoxF/k7o9F4d9z8OfbZpX/Hm97abivyrrSQRdmV244zUTl5nyVkNQ+FkNw7htTjxfBp+9Sc2Qmt7M4xu5nkTQvUOoppWcOyB49Cd0uqfchquOvKcxrY2xbieAu4hmr5UHoalUUpe9yOMvZXlNUQVsK3uCSLgugm5sMrw4NdYxzOZ4KkErFR8vvB7AOG8BTT/baCmPWT+EgncQbKkerdbarJv/0tR+HDnkgs9zpeZ8ushuIHpfUeUxNfwECjxrLn16OzQG2Ys6RV/52NkGucqZf+Bn6MD/Jf+DH42UNTqMGgdicPy3Vx+qZ6kxuisGwWAS0bL8uh/yOewP5F63JsyJgdc33x/CBGMs17SDpZKYks3K/LpYEcJX/3qjFhPUNsKPfFV6Y29shK98VXmjHpviR74qvVGPzfHlHi6A0Bv12BSfoin1vm0hosfm+BPxfkSPzfE9je9ZvuVbvuVbvuVbvuUX4Dc1fvMf8Mc1/rhxvoNmVI2jLfaHSWyOL2tAAZP8JDa2P1d5/THMIUePDeYXK3Fu3hu3TeVH0883ZtwoKYpjE/yGhGItN0++Ca6Q3+2r/HSQiNSc1ly3FqX2SeyidcWfKM9vfBd8/mM497oPKr+eKs3HF3dEVw5f9brtaX1URYiTa6ULoRStFq1lMb7rlj7JED5ztm5+WkydAyz2cQ5A0VM4KVTSg71BUv4kBpPGe+icV4TjrAP+9b7K3AQ1Xor5yVV4wc5Y2cWTlJLvvzs6Z3K+LA72iReLFKHLXq6u0krHbAXOACseExKaK2LqENLKyqq8/gBsWpRU",
+}
+ICON_DATA.update(ICON_EXTRA)
+
 _ICON_TEXTURES = {}
 
 
@@ -4793,10 +5136,10 @@ def frost(widget, radius=22, tint=(0.55, 0.78, 1.0), alpha=0.13, edge=0.34):
     with widget.canvas.before:
         widget._fr_body_c = Color(*body)
         widget._fr_body = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[r])
-        Color(*sheen)
+        widget._fr_sheen_c = Color(*sheen)
         widget._fr_sheen = RoundedRectangle(pos=(widget.x, widget.y + widget.height * 0.55),
                                             size=(widget.width, widget.height * 0.45), radius=[r, r, 0, 0])
-        Color(*line)
+        widget._fr_edge_c = Color(*line)
         widget._fr_edge = Line(rounded_rectangle=(widget.x, widget.y, widget.width, widget.height, r), width=dp(1))
 
     def update(w, *_):
@@ -4823,12 +5166,14 @@ class FrostButton(Button):
         self._base_alpha = alpha
         self._margin = dp(36) if marker else dp(18)
         frost(self, radius, tint, alpha, edge)
+        self._fr_edge_a = self._fr_edge_c.a
+        self._fr_sheen_a = self._fr_sheen_c.a
         if marker:
             with self.canvas.after:
                 Color(tint[0] * 0.4 + 0.6, tint[1] * 0.4 + 0.6, tint[2] * 0.4 + 0.6, 1)
                 self._dot = Ellipse(size=(dp(9), dp(9)), pos=(self.x + dp(15), self.center_y - dp(4.5)))
             self.bind(pos=self._move_dot, size=self._move_dot)
-        self.bind(size=self._fit_text, state=self._feedback)
+        self.bind(size=self._fit_text, state=self._feedback, disabled=self._dim, on_press=lambda *_: buzz())
         self._fit_text()
 
     def _move_dot(self, *_):
@@ -4838,7 +5183,20 @@ class FrostButton(Button):
         self.text_size = (max(0, self.width - 2 * self._margin), self.height)
 
     def _feedback(self, *_):
-        self._fr_body_c.a = min(1.0, self._fr_a0 + (0.16 if self.state == "down" else 0.0))
+        """Pressed: the glass gets denser, the edge brighter, the sheen softer; released: it eases back."""
+        down = self.state == "down"
+        try:
+            Animation.cancel_all(self._fr_body_c)
+            Animation.cancel_all(self._fr_edge_c)
+            Animation(a=min(1.0, self._fr_a0 + (0.22 if down else 0.0)), d=0.07 if down else 0.18, t="out_quad").start(self._fr_body_c)
+            Animation(a=(0.95 if down else self._fr_edge_a), d=0.07 if down else 0.2).start(self._fr_edge_c)
+            self._fr_sheen_c.a = 0.04 if down else self._fr_sheen_a
+        except Exception:
+            self._fr_body_c.a = min(1.0, self._fr_a0 + (0.16 if down else 0.0))
+
+    def _dim(self, *_):
+        """A button that cannot be used now is clearly faded."""
+        self.opacity = 0.42 if self.disabled else 1.0
 
 
 class Hair(Widget):
@@ -5284,7 +5642,7 @@ class TableBlock(TapOpenMixin, BoxLayout):
 SMS_DIRECT_SEND = False
 CALL_DIRECT = False      # True (and CALL_PHONE in buildozer.spec): the call starts at once; False: the dialer opens with the number
 
-DEVICE_HINTS = ("будилник", "будильник", "alarm", "хезон", "бедор", "ҳушдор", "разбуди", "разбудить", "wake me", "wake up", "проснуть",
+DEVICE_HINTS = ("выключи всё", "выключи все", "ҳамаро хомӯш", "turn everything off", "отмени", "бекор кун", "cancel", "будилник", "будильник", "alarm", "хезон", "бедор", "ҳушдор", "разбуди", "разбудить", "wake me", "wake up", "проснуть",
                 "таймер", "timer", "фонарик", "чароғак", "чирог", "flashlight", "torch", "вай-фай", "вайфай", "wi-fi", "wifi",
                 "блютус", "блютуз", "bluetooth", "овозро", "овозашро", "звук", "громкост", "volume", "mute", "bluetooth",
                 "акс гир", "расм гир", "сфотографируй", "сделай фото", "сделай снимок", "take a photo", "take a picture", "take photo",
@@ -6807,13 +7165,57 @@ def _norm_digits(text):
     return text
 
 
+_TORCH_RE = re.compile(r"фонарик|фонарь|чароғак|чирог|flashlight|torch", re.I)
+_ON_RE = re.compile(r"включ|зажги|фурӯз|фуруз|равшан|гирён|turn on|switch on|\bon\b", re.I)
+_OFF_RE = re.compile(r"выключ|погаси|хомӯш|хомуш|ӯчир|учир|turn off|switch off|\boff\b", re.I)
+_DELAY_RE = re.compile(r"(?:через|баъд\s+аз|пас\s+аз|after|in)\s*(\d+)\s*([^\W\d_]+)", re.I)
+_CANCEL_RE = re.compile(r"бекор|хомӯш|хомуш|ӯчир|учир|нест\s*кун|удали|отмени|отключи|выключи|cancel|delete|remove|turn off|\bstop\b|\boff\b", re.I)
+
+
+def parse_torch_timing(raw):
+    """'turn on the torch, off after 2 seconds' / 'on in 5 seconds' -> one flashlight action with after/hold seconds."""
+    low = raw.lower()
+    if not _TORCH_RE.search(low):
+        return None
+    m = _DELAY_RE.search(low)
+    if not m:
+        return None
+    secs = 0
+    for rx, mult in LOCAL_UNITS:
+        if rx.match(m.group(2)):
+            secs = int(m.group(1)) * mult
+            break
+    if not 1 <= secs <= 24 * 3600:
+        return None
+    on, off = bool(_ON_RE.search(low)), bool(_OFF_RE.search(low))
+    if on and off:
+        return {"action": "flashlight", "state": "on", "hold": secs}
+    if off:
+        return {"action": "flashlight", "state": "off", "after": secs}
+    if on:
+        return {"action": "flashlight", "state": "on", "after": secs}
+    return None
+
+
 def parse_local_device(text, app_labels=()):
     """Simple phone commands understood without the server (alarm, timer, torch, volume, open app). Returns a list of actions."""
     out = []
     raw = _norm_digits(" ".join(str(text).split()))
+    timed = parse_torch_timing(raw)
+    if timed:
+        return [timed]
     for part in [p for p in LOCAL_SPLIT_RE.split(raw) if p and p.strip()]:
         low = part.lower()
         act = None
+        if _CANCEL_RE.search(low) and re.search(r"будилник|будильник|alarm|таймер|timer|\bвсё\b|\bвсе\b|ҳама|everything|\ball\b", low) \
+                and not _TORCH_RE.search(low):
+            what = "alarm" if re.search(r"будилник|будильник|alarm", low) else ("timer" if re.search(r"таймер|timer", low) else "all")
+            act = {"action": "cancel", "what": what}
+            tm = re.search(r"(\d{1,2})\s*(?:[:.]|\s)\s*(\d{2})\b", low)
+            if tm and what == "alarm" and int(tm.group(1)) < 24 and int(tm.group(2)) < 60:
+                act["hour"], act["minute"] = int(tm.group(1)), int(tm.group(2))
+            out.append(act)
+            continue
         if re.search(r"будилник|будильник|alarm|бедор\s*кун|хезон|разбуди", low):
             m = re.search(r"(\d{1,2})\s*(?:[:.]|\s)\s*(\d{2})\b", low) or re.search(r"(?:соати|в|at|ба)?\s*(\d{1,2})\b()", low)
             if m:
@@ -7128,7 +7530,7 @@ class PinPad(FloatLayout):
                         pos_hint={"center_x": 0.5, "center_y": 0.5})
         self.title = make_label("", 20, theme["text"], True, size_hint_y=None, height=dp(34))
         self.dots = make_label("", 28, theme["text"], False, size_hint_y=None, height=dp(48))
-        self.note = make_label("", 13, "#FFB4B4", False, size_hint_y=None, height=dp(40))
+        self.note = make_label("", 13, danger_color(), False, size_hint_y=None, height=dp(40))
         self.note.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
         col.add_widget(self.title)
         col.add_widget(self.dots)
@@ -7891,6 +8293,7 @@ class JarvisApp(App):
         Clock.schedule_once(finish_scroll, 0.15)
 
     def render_chat(self):
+        self._chips_row = None
         self.chat_box.clear_widgets()
         chat = self.chats.current()
         messages = chat["messages"][-100:]
@@ -8186,6 +8589,7 @@ class JarvisApp(App):
                     activity.startActivity(intent)
                 try:
                     fire(True)
+                    self._made_alarms = (list(getattr(self, "_made_alarms", [])) + [(hour, minute)])[-6:]
                     return M["alarm"].format(t=shown)
                 except Exception:
                     save_crash("Alarm (silent) failed, asking the Clock app:\n" + traceback.format_exc())
@@ -8212,21 +8616,21 @@ class JarvisApp(App):
                     fire_timer(False)
                 return M["timer"].format(d=format_duration(seconds, lang))
             if kind == "flashlight":
-                manager = cast("android.hardware.camera2.CameraManager", activity.getSystemService(Context.CAMERA_SERVICE))
                 state = str(act.get("state", "toggle"))
                 target = (state == "on") or (state == "toggle" and not getattr(self, "_torch_on", False))
-                done, last = False, None
-                for cid in list(manager.getCameraIdList()):
-                    try:
-                        manager.setTorchMode(str(cid), bool(target))
-                        done = True
-                        break
-                    except Exception as exc:
-                        last = exc
-                if not done:
-                    raise RuntimeError(str(last) if last else "no flash")
-                self._torch_on = bool(target)
+                after, hold = int(act.get("after", 0) or 0), int(act.get("hold", 0) or 0)
+                if after > 0:
+                    threading.Timer(after, lambda: self._torch_set(bool(target))).start()
+                    if hold > 0:
+                        threading.Timer(after + hold, lambda: self._torch_set(False)).start()
+                    return self.t("torch_after_on" if target else "torch_after_off").format(n=format_duration(after, lang))
+                self._torch_set(bool(target))
+                if target and hold > 0:
+                    threading.Timer(hold, lambda: self._torch_set(False)).start()
+                    return self.t("torch_hold").format(n=format_duration(hold, lang))
                 return M["flash_on" if target else "flash_off"]
+            if kind == "cancel":
+                return self._cancel_things(act, activity, Intent)
             if kind == "open_settings":
                 page = str(act.get("page", "main"))
                 action = SETTINGS_ACTIONS.get(page, SETTINGS_ACTIONS["main"])
@@ -8339,6 +8743,137 @@ class JarvisApp(App):
             return M["fail"].format(e=str(exc)[:120])
         return M["fail"].format(e=kind)
 
+    def _peek_crash(self):
+        """The last error text without removing it (the error log stays for the next look)."""
+        try:
+            for d in crash_dirs():
+                for name in (CRASH_FILE, CRASH_FILE + ".old"):
+                    path = os.path.join(d, name)
+                    if os.path.exists(path):
+                        with open(path, "r", encoding="utf-8") as handle:
+                            return handle.read()
+        except Exception:
+            pass
+        return ""
+
+    def _copy_text(self, text):
+        try:
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(text)
+            self.show_response(self.t("diag_copied"))
+        except Exception:
+            pass
+
+    def share_text(self, text):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType("text/plain")
+            intent.putExtra(Intent.EXTRA_TEXT, text)
+            self._external()
+            activity.startActivity(Intent.createChooser(intent, "S.A.I"))
+        except Exception:
+            save_crash("Share text failed:\n" + traceback.format_exc())
+
+    def _net_ok(self):
+        if kv_platform != "android":
+            return True
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            manager = activity.getSystemService("connectivity")
+            info = manager.getActiveNetworkInfo()
+            return info is not None and bool(info.isConnected())
+        except Exception:
+            return True
+
+    def _net_tick(self, dt):
+        """Floating 'No internet' pill; when the network is back a short 'Back online' and the server is woken up."""
+        ok = self._net_ok()
+        prev = getattr(self, "_net_prev", True)
+        if ok == prev:
+            return
+        self._net_prev = ok
+        old = getattr(self, "_net_pillw", None)
+        if old is not None and old.parent is not None:
+            Window.remove_widget(old)
+        pill = StatusPill(self.t("net_on" if ok else "net_off"), (0.12, 0.62, 0.36) if ok else (0.80, 0.22, 0.26))
+        pill.pos = ((Window.width - pill.width) / 2, Window.height - dp(112))
+        Window.add_widget(pill)
+        self._net_pillw = pill
+        if ok:
+            self._wake_server()
+            Clock.schedule_once(lambda d: Window.remove_widget(pill) if pill.parent is not None else None, 2.2)
+
+    def _wake_server(self):
+        """The free server sleeps when unused: a quiet ping wakes it while the user is still reading or typing."""
+        def job():
+            try:
+                self._json_call("GET", "/health", None, timeout=60)
+            except Exception:
+                pass
+        threading.Thread(target=job, daemon=True).start()
+
+    def _torch_set(self, target):
+        from jnius import autoclass, cast
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        Context = autoclass("android.content.Context")
+        manager = cast("android.hardware.camera2.CameraManager", activity.getSystemService(Context.CAMERA_SERVICE))
+        done, last = False, None
+        for cid in list(manager.getCameraIdList()):
+            try:
+                manager.setTorchMode(str(cid), bool(target))
+                done = True
+                break
+            except Exception as exc:
+                last = exc
+        if not done:
+            raise RuntimeError(str(last) if last else "no flash")
+        self._torch_on = bool(target)
+
+    def _cancel_things(self, act, activity, Intent):
+        """Cancels what the assistant set: alarms and timers (a request to the Clock app), the torch."""
+        from jnius import autoclass
+        what = str(act.get("what", "all"))
+        AlarmClock = autoclass("android.provider.AlarmClock")
+        sent = False
+        if what in ("alarm", "all"):
+            made = [tuple(x) for x in getattr(self, "_made_alarms", [])][-3:]
+            if act.get("hour") is not None:
+                made = [(int(act["hour"]), int(act["minute"]))]
+            for item in (made or [None]):
+                try:
+                    intent = Intent(AlarmClock.ACTION_DISMISS_ALARM)
+                    if item is None:
+                        intent.putExtra("android.intent.extra.alarm.SEARCH_MODE", "android.next")
+                    else:
+                        intent.putExtra("android.intent.extra.alarm.SEARCH_MODE", "android.time")
+                        intent.putExtra(AlarmClock.EXTRA_HOUR, int(item[0]))
+                        intent.putExtra(AlarmClock.EXTRA_MINUTES, int(item[1]))
+                    activity.startActivity(intent)
+                    sent = True
+                except Exception:
+                    save_crash("Dismiss alarm failed:\n" + traceback.format_exc())
+            self._made_alarms = []
+        if what in ("timer", "all"):
+            try:
+                activity.startActivity(Intent(AlarmClock.ACTION_DISMISS_TIMER))
+                sent = True
+            except Exception:
+                save_crash("Dismiss timer failed:\n" + traceback.format_exc())
+        parts = []
+        if what == "all" or (what == "alarm" and False):
+            try:
+                self._torch_set(False)
+                parts.append(self.t("cancel_torch"))
+            except Exception:
+                pass
+        if sent:
+            parts.append(self.t("cancel_sent"))
+        return "\n".join(parts) or self.t("cancel_none")
+
     def _perm_ok(self, permission):
         """True when the permission is already given; otherwise the system dialog is shown and False is returned."""
         try:
@@ -8436,7 +8971,7 @@ class JarvisApp(App):
         share.putExtra(Intent.EXTRA_TEXT, text)
         share.setPackage("com.whatsapp" if app == "whatsapp" else "org.telegram.messenger")
         activity.startActivity(share)
-        return M["msg_ready"].format(a=label + (" → " + to if to else ""))
+        return M["msg_ready"].format(a=label + (" › " + to if to else ""))
 
     # ---- which apps the assistant may open (the user decides; stored only on this phone) ----
     def _apps_cfg(self):
@@ -8674,12 +9209,16 @@ class JarvisApp(App):
         def job():
             nonlocal err
             try:
+                pre = self._local_device_actions(text)
+                if any(a.get("action") == "cancel" or a.get("after") or a.get("hold") for a in pre):
+                    raise RuntimeError("local-first")          # delays and cancelling are done on the phone, not by the AI
                 act = self._json_call("POST", "/device/intent", {"text": text[:400], "language": self._lang_code(), "now": now,
                                                                   "apps": self.allowed_app_labels()[:300],
                                                                   "context": context}, timeout=45)
             except Exception as exc:
                 act = None
-                save_crash("Device intent request failed:\n" + traceback.format_exc())
+                if str(exc) != "local-first":
+                    save_crash("Device intent request failed:\n" + traceback.format_exc())
                 err = exc
 
             if act is None:
@@ -8825,9 +9364,50 @@ class JarvisApp(App):
             label.opacity = 1
 
     def append_bubble(self, role, text):
+        self._chips_hide()
         self.chat_box.add_widget(self.make_bubble(role, text))
+        if role == "jarvis" and len(str(text)) >= 160 and RETRY_MARK not in str(text) and not getattr(self, "_ob_active", False):
+            self._chips_show(str(text))
         Clock.schedule_once(lambda dt: self.update_chat_fades(), 0.1)
         self.scroll_chat_down()
+
+    def _chips_hide(self):
+        row = getattr(self, "_chips_row", None)
+        if row is not None and row.parent is not None:
+            row.parent.remove_widget(row)
+        self._chips_row = None
+
+    def _chips_show(self, answer):
+        """Small quick actions under a long answer: shorter, simpler, translate, keep."""
+        try:
+            theme = THEMES[self.theme_index]
+            tint = hex_color(theme["accent"])[:3]
+            inner = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint=(None, 1), padding=(dp(4), 0))
+            inner.bind(minimum_width=inner.setter("width"))
+            for key, action in (("chip_short", lambda: self._chip_ask("p_short")), ("chip_simple", lambda: self._chip_ask("p_simple")),
+                                ("chip_translate", lambda: self._chip_ask("p_translate")), ("chip_save", lambda: self._chip_save(answer))):
+                label = self.t(key)
+                chip = FrostButton(tint=tint, alpha=0.10, radius=15, text=mk(label), font_size=dp(12.5), halign="center",
+                                   size_hint=(None, 1), width=dp(len(label) * 7.4 + 30), color=hex_color(theme["text"]))
+                chip.bind(on_release=lambda inst, f=action: f())
+                inner.add_widget(chip)
+            row = ScrollView(do_scroll_y=False, size_hint_y=None, height=dp(34), bar_width=0)
+            row.add_widget(inner)
+            self.chat_box.add_widget(row)
+            self._chips_row = row
+        except Exception:
+            save_crash("Chips failed:\n" + traceback.format_exc())
+
+    def _chip_ask(self, key):
+        self._chips_hide()
+        self.command_input.text = self.t(key)
+        Clock.schedule_once(lambda dt: self.send_command(), 0.05)
+
+    def _chip_save(self, answer):
+        self._chips_hide()
+        self._library_auto(answer)
+        self.library_add("text", clean_md(strip_media(answer))[:20000])
+        self.show_response(self.t("lib_saved"))
 
     NOTIFY_ID = 4107
 
@@ -8917,9 +9497,39 @@ class JarvisApp(App):
         except Exception:
             self._wakelock = None
 
+    def _library_auto(self, text):
+        """Everything the assistant makes (code, tables, pictures, files) is also kept in the Library, without a tap."""
+        import hashlib
+        try:
+            added = False
+            for b in parse_blocks(text):
+                kind = b[0]
+                if kind == "code":
+                    lang, payload = b[1], b[2]
+                    if len(str(payload).strip()) < 30:
+                        continue
+                    lib_kind, extra = "code", lang or ""
+                elif kind == "table":
+                    payload, lib_kind, extra = b[1], "table", ""
+                elif kind in ("img", "file"):
+                    payload, lib_kind, extra = b[1], ("image" if kind == "img" else "file"), ""
+                else:
+                    continue
+                sig = hashlib.md5((lib_kind + json.dumps(payload, ensure_ascii=False, default=str)).encode("utf-8")).hexdigest()
+                if self.library.has_sig(sig):
+                    continue
+                self.library.add(lib_kind, payload, "", extra, sig)
+                added = True
+            if added:
+                self._library_push()
+        except Exception:
+            save_crash("Library auto-save failed:\n" + traceback.format_exc())
+
     def add_chat_message(self, chat_id, role, text):
         text = self.brand(text)
         self.chats.add_message(chat_id, role, text)
+        if role == "jarvis" and RETRY_MARK not in str(text):
+            self._library_auto(text)
         if role == "user":
             self.hide_intro()
         if role == "jarvis":
@@ -9123,8 +9733,65 @@ class JarvisApp(App):
         stream.close()
         return java_bytes(output.toByteArray())
 
+    def open_camera_ask(self, *_):
+        """Menu 'Camera': a photo is taken and goes to the AI with the question 'what is this?'. The picture is removed from the gallery."""
+        try:
+            from jnius import autoclass, cast
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            MediaStore = autoclass("android.provider.MediaStore")
+            ContentValues = autoclass("android.content.ContentValues")
+            values = ContentValues()
+            values.put("_display_name", "sai_camera_%d.jpg" % int(time.time()))
+            values.put("mime_type", "image/jpeg")
+            values.put("relative_path", "Pictures/SAI")
+            uri = activity.getContentResolver().insert(autoclass("android.provider.MediaStore$Images$Media").EXTERNAL_CONTENT_URI, values)
+            if uri is None:
+                raise RuntimeError("MediaStore refused the file")
+            self._cam_uri, self._cam_pending = uri, True
+            intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, cast("android.os.Parcelable", uri))
+            self._external()
+            activity.startActivityForResult(intent, 7415)
+        except Exception:
+            save_crash("Camera ask failed:\n" + traceback.format_exc())
+            self.show_response(self.t("cam_failed"))
+
+    def _camera_result(self, result_code):
+        from jnius import autoclass
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = activity.getContentResolver()
+        uri, self._cam_uri = getattr(self, "_cam_uri", None), None
+        if uri is None:
+            return
+        try:
+            Activity = autoclass("android.app.Activity")
+            if result_code != Activity.RESULT_OK:
+                return
+            raw = self._read_uri_bytes(resolver, uri, 20 * 1024 * 1024)
+            if not raw:
+                raise RuntimeError("empty photo")
+
+            def go(dt):
+                self._attachment_ui("photo_%d.jpg" % int(time.time()), "image/jpeg", raw)
+                self.command_input.text = self.t("cam_prompt")
+                Clock.schedule_once(lambda d2: self.send_command(), 0.25)
+            Clock.schedule_once(go, 0)
+        except Exception:
+            save_crash("Camera result failed:\n" + traceback.format_exc())
+            Clock.schedule_once(lambda dt: self.show_response(self.t("cam_failed")), 0)
+        finally:
+            try:
+                resolver.delete(uri, None, None)          # the picture is not left in the gallery
+            except Exception:
+                pass
+
     def on_activity_result(self, request_code, result_code, data):
         """Runs on the Android thread: only the file is read here, everything on screen happens in the Kivy thread."""
+        if request_code == 7415 and getattr(self, "_cam_pending", False):
+            self._cam_pending = False
+            self._camera_result(result_code)
+            return
         if request_code == 7413 and getattr(self, "_avatar_pending", False):
             self._avatar_pending = False
             self._avatar_picked(result_code, data)
@@ -9800,12 +10467,12 @@ class JarvisApp(App):
                 strip.add_widget(col)
             elif state == "sent":
                 strip.height = dp(20)
-                strip.add_widget(IconButton(kind="check", icon_rgba=hex_color("#7CE0A0"), alpha=0.0, size_hint=(None, None), size=(dp(18), dp(18))))
-                strip.add_widget(make_label(self.t("st_sent"), 10, "#7CE0A0", False, size_hint=(None, 1), width=dp(58), halign="left"))
+                strip.add_widget(IconButton(kind="check", icon_rgba=hex_color(ok_color()), alpha=0.0, size_hint=(None, None), size=(dp(18), dp(18))))
+                strip.add_widget(make_label(self.t("st_sent"), 10, ok_color(), False, size_hint=(None, 1), width=dp(58), halign="left"))
                 Clock.schedule_once(lambda dt: Animation(opacity=0, d=0.7, t="in_quad").start(strip) if self._send_state == "sent" else None, 0.9)
             else:                                      # failed
                 strip.height = dp(40)
-                strip.add_widget(make_label(self.t("st_failed"), 12, "#FFB4B4", True, size_hint=(None, 1), width=dp(84), halign="right"))
+                strip.add_widget(make_label(self.t("st_failed"), 12, danger_color(), True, size_hint=(None, 1), width=dp(84), halign="right"))
                 btn = IconButton(kind="retry", tint=accent, alpha=0.22, radius=16, icon_rgba=hex_color(theme["text"]),
                                  size_hint=(None, None), size=(dp(36), dp(36)), pos_hint={"center_y": 0.5})
                 btn.bind(on_release=self._send_tap_retry)
@@ -10025,7 +10692,7 @@ class JarvisApp(App):
         self._last_spoken = text
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
         gen = self._tajik_gen
-        chunks = split_for_speech(strip_media(text)[:3500], first=70, rest=170)
+        chunks = split_speech_smart(strip_media(text)[:3500])
         threading.Thread(target=self._stream_chunks, args=(chunks, self._tajik_speech_path, gen, None), daemon=True).start()
 
     def _edge_stream(self, text, force=False):
@@ -10033,7 +10700,7 @@ class JarvisApp(App):
         """Long ru/en text: read piece by piece (sentences), the next piece is made while the current one is spoken."""
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1
         gen = self._tajik_gen
-        chunks = split_for_speech(strip_media(text)[:4000], first=150, rest=260)
+        chunks = split_speech_smart(strip_media(text)[:4000])
 
         def rest_by_phone(remaining):
             Clock.schedule_once(lambda dt: self._speak_local_fallback(" ".join(remaining), force), 0)
@@ -10188,7 +10855,7 @@ class JarvisApp(App):
             self.language = code
             self.save_settings()
             screen.stepbar_labels(code)
-            self.cover_transition(self._ob_name_step, 1.2)
+            self.cover_transition(self._ob_intro_step, 1.0)
 
         for label, code, hello in (("Тоҷикӣ", "tg", "Салом"), ("Русский", "ru", "Привет"), ("English", "en", "Hello")):
             btn = FrostButton(tint=screen.acc, alpha=0.12, radius=20, markup=True,
@@ -10197,6 +10864,51 @@ class JarvisApp(App):
                               color=hex_color(theme["text"]))
             btn.bind(on_release=lambda inst, c=code: pick(c))
             panel.add_widget(btn)
+
+    def _ob_intro_step(self, index=0):
+        """Three short welcome pages (what the assistant can do); each one has a big drawn icon, a title, a text and page dots."""
+        theme = THEMES[self.theme_index]
+        screen = self._ob_screen_get()
+        screen.set_step(0)
+        slides = (("mic", "ob_i1_t", "ob_i1_d"), ("book", "ob_i2_t", "ob_i2_d"), ("lock", "ob_i3_t", "ob_i3_d"))
+        kind, title, desc = slides[index]
+        panel = screen.new_panel(430)
+        row = BoxLayout(size_hint_y=None, height=dp(128))
+        row.add_widget(Widget())
+        row.add_widget(IconBadge(kind, screen.acc2))
+        row.add_widget(Widget())
+        panel.add_widget(row)
+        panel.add_widget(make_label(self.t(title), 21, theme["text"], True, size_hint_y=None, height=dp(44)))
+        panel.add_widget(make_label(self.t(desc), 14, theme["text"], False, size_hint_y=None, height=dp(96)))
+        dots = Widget(size_hint_y=None, height=dp(14))
+
+        def paint(*_):
+            dots.canvas.clear()
+            with dots.canvas:
+                for i in range(3):
+                    on = i == index
+                    w = dp(22) if on else dp(8)
+                    Color(screen.acc2[0], screen.acc2[1], screen.acc2[2], 0.95 if on else 0.35)
+                    x = dots.center_x + (i - 1) * dp(18) - w / 2
+                    RoundedRectangle(pos=(x, dots.center_y - dp(4)), size=(w, dp(8)), radius=[dp(4)])
+        dots.bind(pos=paint, size=paint)
+        paint()
+        panel.add_widget(dots)
+        panel.add_widget(Widget())
+        last = index == len(slides) - 1
+
+        def nxt(*_):
+            if last:
+                self.cover_transition(self._ob_name_step, 1.0)
+            else:
+                self._ob_intro_step(index + 1)
+        panel.add_widget(FrostButton(tint=screen.acc2, alpha=0.60, edge=0.65, radius=22,
+                                     text="[b]" + mk(self.t("ob_start_use") if last else self.t("ob_next")) + "[/b]", font_size=dp(16),
+                                     halign="center", size_hint_y=None, height=dp(54), color=(1, 1, 1, 1), on_release=nxt))
+        if not last:
+            panel.add_widget(FrostButton(tint=screen.acc, alpha=0.06, edge=0.2, radius=18, text=mk(self.t("ob_skip")), font_size=dp(13),
+                                         halign="center", size_hint_y=None, height=dp(40), color=hex_color(theme["text"]),
+                                         on_release=lambda *_: self.cover_transition(self._ob_name_step, 1.0)))
 
     def _ob_name_step(self):
         theme = THEMES[self.theme_index]
@@ -10697,6 +11409,7 @@ class JarvisApp(App):
         pending = getattr(self, "_pending_attachment", None)
         if not command_text and not pending:
             return
+        self._chips_hide()
         self.command_input.text = ""
         self.command_input.clear_native()
         self.ensure_notification_permission()
@@ -10744,6 +11457,21 @@ class JarvisApp(App):
                     media = ("search", earlier[-1][:200])
             if media is not None:
                 self._start_media_job(chat_id, media[0], media[1])
+                return
+            note = NOTE_RE.match(command_text)
+            if note and len(command_text) < 4000:
+                body = note.group(2).strip()
+                if body:
+                    self.library_add("text", body)
+                    self.deliver_answer(chat_id, self.t("note_saved"))
+                else:
+                    self._lib_filter = "text"
+                    Clock.schedule_once(lambda dt: self.show_library(), 0.1)
+                    self.deliver_answer(chat_id, self.t("note_open"))
+                return
+            if MSG_READ_RE.search(command_text) and MSG_ASK_RE.search(command_text) and len(command_text) < 120 \
+                    and not re.search(r"(фирист|навис|send|write|отправ|напиши)", command_text, re.I):
+                self.deliver_answer(chat_id, self.msg_answer())
                 return
             if not self.server_token.strip() and looks_like_device_command(command_text):
                 local = self._local_device_actions(command_text)
@@ -10991,7 +11719,8 @@ class JarvisApp(App):
             guess = re.sub(r"[_\-]+", " ", stem).strip()
             if guess and len(answer) < 400:
                 self._status_after_answer()
-                self.add_chat_message(chat_id, "jarvis", answer or self.t("busy_image") if "busy_image" in LANG_HAS else answer)
+                if answer:
+                    self.add_chat_message(chat_id, "jarvis", answer)
                 self._start_media_job(chat_id, "image", guess)
                 return
         answer = strip_media(answer) if fake else answer
@@ -11850,23 +12579,30 @@ class JarvisApp(App):
         content.add_widget(btn)
         return btn
 
+    def icon_row(self, content, icon, text, callback, height=56, active=False, tint=None):
+        theme = THEMES[self.theme_index]
+        accent = hex_color(theme["accent"])
+        btn = IconRow(icon=icon, icon_rgba=(accent[0] * 0.55 + 0.45, accent[1] * 0.55 + 0.45, accent[2] * 0.55 + 0.45, 1.0),
+                      tint=tint or accent[:3], alpha=0.24 if active else 0.10, size_hint_y=None, height=dp(height),
+                      font_size=dp(16), color=hex_color(theme["text"]), text=("[b]" + mk(text) + "[/b]") if active else mk(text))
+        btn.bind(on_release=callback)
+        content.add_widget(btn)
+        return btn
+
     def show_menu(self, *_):
         theme = THEMES[self.theme_index]
         accent = theme["accent"].lstrip("#")
         body = BoxLayout(orientation="vertical", spacing=dp(8))
         sheet = GlassSheet(self, dotted_name(self.assistant_name or "S.A.I"), body,
-                           anchor="menu", height=520)
-        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat), ("menu_library", self.show_library),
-                 ("menu_settings", self.show_settings), ("menu_about", self.show_about))
-        for i, (key, action) in enumerate(items, 1):
+                           anchor="menu", height=590)
+        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat), ("menu_camera", self.open_camera_ask),
+                 ("menu_library", self.show_library), ("menu_settings", self.show_settings), ("menu_about", self.show_about))
+        icons = {"menu_chats": "chat", "menu_new": "plus", "menu_camera": "camera", "menu_library": "book", "menu_settings": "gear", "menu_about": "info"}
+        for key, action in items:
             def go(inst, f=action):
                 sheet.dismiss()
                 Clock.schedule_once(lambda dt: f(), 0.14)
-            btn = FrostButton(tint=hex_color(theme["accent"])[:3], alpha=0.11, size_hint_y=None, height=dp(60),
-                              font_size=dp(16), color=hex_color(theme["text"]),
-                              text="[color=#%s][b]%02d[/b][/color]   %s" % (accent, i, mk(self.t(key))))
-            btn.bind(on_release=go)
-            body.add_widget(btn)
+            self.icon_row(body, icons.get(key, "gear"), self.t(key), go, 60)
         body.add_widget(Widget())
         me_row = BoxLayout(orientation="horizontal", spacing=dp(12), size_hint_y=None, height=dp(64), padding=(dp(6), 0))
         me_btn = FrostButton(tint=hex_color(theme["accent"])[:3], alpha=0.08, radius=22, size_hint_y=None, height=dp(64),
@@ -11887,6 +12623,154 @@ class JarvisApp(App):
         me_wrap.add_widget(me_avatar)
         body.add_widget(me_wrap)
         sheet.open()
+
+    # ---------------------------------------------------------------- Incoming messages (needs the message-reader build)
+    def _files_dir(self):
+        from jnius import autoclass
+        return str(autoclass("org.kivy.android.PythonActivity").mActivity.getFilesDir().getAbsolutePath())
+
+    def msg_reader_built(self):
+        """True only in the APK that has the Java service inside."""
+        try:
+            from jnius import autoclass
+            autoclass("org.jarvis.jarvis.NotifyListener")
+            return True
+        except Exception:
+            return False
+
+    def msg_access_granted(self):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            value = autoclass("android.provider.Settings$Secure").getString(activity.getContentResolver(), "enabled_notification_listeners")
+            return bool(value) and str(activity.getPackageName()) in str(value)
+        except Exception:
+            return False
+
+    def msg_reader_on(self):
+        try:
+            return os.path.exists(os.path.join(self._files_dir(), "reader_on"))
+        except Exception:
+            return False
+
+    def msg_set_on(self, on):
+        try:
+            flag = os.path.join(self._files_dir(), "reader_on")
+            if on:
+                open(flag, "w").close()
+            elif os.path.exists(flag):
+                os.remove(flag)
+        except Exception:
+            save_crash("Reader switch failed:\n" + traceback.format_exc())
+
+    def msg_clear(self):
+        try:
+            for name in ("incoming.jsonl",):
+                path = os.path.join(self._files_dir(), name)
+                if os.path.exists(path):
+                    os.remove(path)
+            seen = os.path.join(self.user_data_dir, "msg_seen.txt")
+            if os.path.exists(seen):
+                os.remove(seen)
+        except Exception:
+            save_crash("Reader clear failed:\n" + traceback.format_exc())
+
+    def msg_open_access_settings(self):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            self._external()
+            activity.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+        except Exception:
+            save_crash("Open listener settings failed:\n" + traceback.format_exc())
+
+    def msg_read_new(self, mark=True):
+        """New messages since the last reading: a list of dicts (pkg, title, text, ts)."""
+        path = os.path.join(self._files_dir(), "incoming.jsonl")
+        seen_path = os.path.join(self.user_data_dir, "msg_seen.txt")
+        try:
+            seen = float(open(seen_path).read().strip() or 0)
+        except Exception:
+            seen = 0.0
+        items = []
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        d = json.loads(line)
+                    except Exception:
+                        continue
+                    if float(d.get("ts", 0)) > seen:
+                        items.append(d)
+        except Exception:
+            return []
+        if items and mark:
+            try:
+                with open(seen_path, "w") as handle:
+                    handle.write(str(max(float(d.get("ts", 0)) for d in items)))
+            except Exception:
+                pass
+        return items[-40:]
+
+    def msg_speak_on(self):
+        return os.path.exists(os.path.join(self.user_data_dir, "msg_speak"))
+
+    def msg_set_speak(self, on):
+        flag = os.path.join(self.user_data_dir, "msg_speak")
+        try:
+            if on:
+                open(flag, "w").close()
+            elif os.path.exists(flag):
+                os.remove(flag)
+        except Exception:
+            pass
+
+    def _msg_poll(self, dt):
+        """While the app is open: a new message is read aloud: 'From WhatsApp, Father, a message came: ...'."""
+        try:
+            if self.app_paused or getattr(self, "_locked_pad", None) is not None or not self.msg_speak_on():
+                return
+            if not (self.msg_reader_built() and self.msg_reader_on() and self.msg_access_granted()):
+                return
+            if getattr(self, "_busy", False) or getattr(self, "_stream_active", False):
+                return                                  # the assistant is busy: the message waits for the next tick
+            items = self.msg_read_new()
+            if not items:
+                return
+            lines = []
+            for d in items[:3]:
+                app = MSG_APPS.get(d.get("pkg", ""), str(d.get("pkg", "")).split(".")[-1].capitalize())
+                who = str(d.get("title", "")).strip()
+                body = " ".join(str(d.get("text", "")).split())[:300]
+                lines.append(self.t("msg_say").format(app=app, who=(who + ", ") if who else "", text=body))
+            if len(items) > 3:
+                lines.append(self.t("msg_more").format(n=len(items) - 3))
+            self.deliver_answer(self.chats.current_id, "\n".join(lines))
+        except Exception:
+            save_crash("Message poll failed:\n" + traceback.format_exc())
+
+    def msg_answer(self):
+        """The text for 'what are my new messages': grouped by app and sender, newest last."""
+        if not self.msg_reader_built():
+            return self.t("msg_not_built")
+        if not self.msg_access_granted():
+            return self.t("msg_no_access")
+        if not self.msg_reader_on():
+            return self.t("msg_off")
+        items = self.msg_read_new()
+        if not items:
+            return self.t("msg_none")
+        groups = {}
+        for d in items:
+            app = MSG_APPS.get(d.get("pkg", ""), str(d.get("pkg", "")).split(".")[-1].capitalize())
+            groups.setdefault((app, d.get("title", "")), []).append(str(d.get("text", "")).strip())
+        lines = [self.t("msg_head").format(len(items))]
+        for (app, who), texts in groups.items():
+            lines.append("**" + app + " \u00b7 " + (who or "?") + "**")
+            for t in texts[-4:]:
+                lines.append("\u2022 " + t[:300])
+        return "\n".join(lines)
 
     # ---------------------------------------------------------------- Library
     def library_add(self, kind, payload, lang=""):
@@ -11924,9 +12808,23 @@ class JarvisApp(App):
         scroll = ScrollView(do_scroll_x=False)
         grid = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
-        items = self.library.alive()
-        kind_name = {"text": "lib_text", "code": "lib_code", "table": "lib_table"}
         sheet_ref = {}
+        filt = getattr(self, "_lib_filter", "all")
+        items = [i for i in self.library.alive() if filt == "all" or i.get("kind") == filt]
+        kind_name = {"text": "lib_text", "code": "lib_code", "table": "lib_table", "image": "lib_image", "file": "lib_file"}
+        chips = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint=(None, 1))
+        chips.bind(minimum_width=chips.setter("width"))
+        for code, key in (("all", "lib_all"), ("image", "lib_image"), ("code", "lib_code"), ("table", "lib_table"),
+                          ("text", "lib_text"), ("file", "lib_file")):
+            on = filt == code
+            chip = FrostButton(tint=tint, alpha=0.30 if on else 0.08, radius=16, text=mk(self.t(key)), font_size=dp(13), halign="center",
+                               size_hint=(None, 1), width=dp(84), color=hex_color(theme["text"]))
+            chip.bind(on_release=lambda inst, c=code: self._lib_set_filter(c, sheet_ref))
+            chips.add_widget(chip)
+        chip_scroll = ScrollView(do_scroll_y=False, size_hint_y=None, height=dp(40), bar_width=0)
+        chip_scroll.add_widget(chips)
+        body.add_widget(chip_scroll)
+        body.children[0]
         for it in items:
             row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(64))
             label = "[b]" + mk(str(it.get("title", "-"))[:48]) + "[/b]\n[size=11sp][color=" + muted() + "]" + \
@@ -11949,6 +12847,11 @@ class JarvisApp(App):
             self.frost_row(body, self.t("lib_save_last"), False, lambda *_: self._library_save_last(sheet_ref), 50, center=True)
         sheet_ref["s"] = GlassSheet(self, self.t("lib_title"), body)
         sheet_ref["s"].open()
+
+    def _lib_set_filter(self, code, sheet_ref):
+        self._lib_filter = code
+        sheet_ref["s"].dismiss()
+        Clock.schedule_once(lambda dt: self.show_library(), 0.15)
 
     def _last_ai_text(self):
         try:
@@ -11974,6 +12877,10 @@ class JarvisApp(App):
 
     def open_library_item(self, item):
         kind = item.get("kind")
+        if kind in ("image", "file"):
+            if os.path.exists(str(item.get("payload", ""))):
+                self.open_media(item["payload"])
+            return
         if kind == "table":
             self.open_block("table", item.get("payload") or [], "")
         else:
@@ -12039,7 +12946,11 @@ class JarvisApp(App):
         body.add_widget(make_label(self.t("about_body"), 13, theme["text"], False))
         body.add_widget(make_label(self.t("about_chats").format(len(self.chats.chats)), 12, theme["accent"], False,
                                    size_hint_y=None, height=dp(28)))
-        GlassSheet(self, self.t("about_title"), body, anchor="menu", height=330).open()
+        body.add_widget(make_label(self.t("about_version").format(APP_VERSION), 12, muted(), False, size_hint_y=None, height=dp(24)))
+        news = make_label(self.t("about_new"), 12, theme["text"], False, halign="left", size_hint_y=None, height=dp(150))
+        news.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        body.add_widget(news)
+        GlassSheet(self, self.t("about_title"), body, anchor="menu", height=560).open()
 
     def set_language(self, code):
         if code in TEXTS:
@@ -12113,17 +13024,20 @@ class JarvisApp(App):
         content = BoxLayout(orientation="vertical", spacing=dp(8))
         titles = {"main": "settings", "theme": "title_theme", "language": "title_lang",
                   "voice": "title_voice", "account": "title_account", "mode": "title_mode",
-                  "profile": "title_profile", "me": "title_me", "apps": "title_apps", "security": "title_security"}
+                  "profile": "title_profile", "me": "title_me", "apps": "title_apps", "security": "title_security", "messages": "title_messages", "diag": "title_diag"}
 
         def option(text, active, callback, height=54):
             self.frost_row(content, text, active, callback, height)
 
         if section == "main":
             for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
-                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_apps", "apps"), ("sec_security", "security"), ("sec_account", "account")):
-                option(self.t(key), False, lambda inst, s=target: self.open_section(s), height=56)
-            option(self.t("live_title"), self.live_mode,
-                   lambda inst: (self.settings_popup.dismiss(), self.show_response(self.toggle_live())), height=56)
+                                ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_apps", "apps"), ("sec_security", "security"),
+                                ("sec_messages", "messages"), ("sec_account", "account"), ("sec_diag", "diag")):
+                ic = {"profile": "user", "theme": "palette", "mode": "gear", "language": "globe", "voice": "mic", "apps": "grid",
+                      "security": "lock", "messages": "bell", "account": "key", "diag": "doc"}[target]
+                self.icon_row(content, ic, self.t(key), lambda inst, s=target: self.open_section(s), 54)
+            self.icon_row(content, "bolt", self.t("live_title"),
+                          lambda inst: (self.settings_popup.dismiss(), self.show_response(self.toggle_live())), 54, active=self.live_mode)
             content.add_widget(Widget())
         elif section == "me":
             first, last = profile_person([f["text"] for f in self.profile.facts])
@@ -12202,6 +13116,54 @@ class JarvisApp(App):
                 content.add_widget(AppsPicker(self))
             else:
                 content.add_widget(Widget())
+        elif section == "messages":
+            accent = hex_color(theme["accent"])[:3]
+            built = self.msg_reader_built()
+            granted = built and self.msg_access_granted()
+            note = self.t("msg_note") + ("" if built else "\n\n" + self.t("msg_not_built"))
+            lab = make_label(note, 12, muted(), False, halign="left", size_hint_y=None, height=dp(150))
+            lab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+            content.add_widget(lab)
+            if built:
+                st = make_label(self.t("msg_granted") if granted else self.t("msg_not_granted"), 13,
+                                ok_color() if granted else danger_color(), True, halign="left", size_hint_y=None, height=dp(28))
+                st.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                content.add_widget(st)
+                self.frost_row(content, self.t("msg_open_access"), False, lambda *_: self.msg_open_access_settings(), 50, center=True)
+                self.frost_row(content, self.t("msg_open_app"), False, lambda *_: self.open_app_details(), 50, center=True)
+                row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
+                lbl = make_label(self.t("msg_switch"), 16, theme["text"], True, halign="left")
+                lbl.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                row.add_widget(lbl)
+                row.add_widget(PillSwitch(active=self.msg_reader_on(), tint=accent, size=(dp(70), dp(36)),
+                                          on_change=lambda v: self.msg_set_on(bool(v))))
+                content.add_widget(row)
+                srow = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
+                slab = make_label(self.t("msg_speak_sw"), 15, theme["text"], False, halign="left")
+                slab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                srow.add_widget(slab)
+                srow.add_widget(PillSwitch(active=self.msg_speak_on(), tint=accent, size=(dp(70), dp(36)),
+                                           on_change=lambda v: self.msg_set_speak(bool(v))))
+                content.add_widget(srow)
+                self.frost_row(content, self.t("msg_clear"), False, lambda *_: (self.msg_clear(), self.open_section("messages")), 48,
+                               tint=(1.0, 0.36, 0.42), center=True)
+            content.add_widget(Widget())
+        elif section == "diag":
+            crash = self._peek_crash()
+            info = "S.A.I " + APP_VERSION + "\n" + (self.t("diag_none") if not crash else self.t("diag_last"))
+            head = make_label(info, 13, muted(), False, halign="left", size_hint_y=None, height=dp(46))
+            head.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+            content.add_widget(head)
+            box = ScrollView(do_scroll_x=False)
+            body_label = Label(text=mk(crash[-1800:]) if crash else "", font_size=dp(11), color=hex_color(theme["text"]), halign="left",
+                               valign="top", size_hint_y=None, markup=False)
+            body_label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+            body_label.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1] + dp(10)))
+            box.add_widget(body_label)
+            content.add_widget(box)
+            if crash:
+                self.frost_row(content, self.t("diag_copy"), False, lambda *_: self._copy_text(crash[-4000:]), 48, center=True)
+                self.frost_row(content, self.t("diag_share"), False, lambda *_: self.share_text(crash[-4000:]), 48, center=True)
         elif section == "security":
             accent = hex_color(theme["accent"])[:3]
             cfg = self._pin_cfg()
@@ -12274,7 +13236,7 @@ class JarvisApp(App):
             self.frost_row(content, self.t("acct_delete"), False, self.delete_account_ask, 52, tint=(1.0, 0.36, 0.42))
             content.add_widget(Widget())
 
-        sheet_h = int(min(Window.height / dp(1) * 0.9, 760)) if section in ("apps", "security") else None
+        sheet_h = int(min(Window.height / dp(1) * 0.9, 760)) if section in ("apps", "security", "messages", "diag") else None
         self.settings_popup = GlassSheet(self, self.t(titles[section]), content, height=sheet_h,
                                          back=(lambda: self.open_section("main")) if section != "main" else None)
         self.settings_popup.open()
@@ -12304,6 +13266,9 @@ class JarvisApp(App):
         Clock.schedule_once(lambda dt: self.show_pending_errors(), 1.0)
         Clock.schedule_interval(self.chat_sync_tick, 10)
         Clock.schedule_interval(self._live_tick, 0.8)
+        Clock.schedule_interval(self._msg_poll, 4.0)
+        Clock.schedule_interval(self._net_tick, 5.0)
+        Clock.schedule_once(lambda dt: self._wake_server(), 1.0)
         if self.server_token.strip():
             Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
             Clock.schedule_once(lambda dt: self.refresh_session(), 5.0)
@@ -12399,6 +13364,7 @@ class JarvisApp(App):
 
     def on_resume(self):
         self.app_paused = False
+        self._wake_server()
         try:
             if self.pin_enabled() and getattr(self, "_locked_pad", None) is None:
                 away = time.time() - getattr(self, "_paused_at", time.time())
