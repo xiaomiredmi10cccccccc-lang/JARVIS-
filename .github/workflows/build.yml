@@ -127,11 +127,16 @@ jobs:
           service = ('<service android:name="org.jarvis.jarvis.NotifyListener" android:label="S.A.I" android:exported="true" '
                      'android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">'
                      '<intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter></service>')
+          queries = ('<queries><intent><action android:name="android.intent.action.MAIN"/>'
+                     '<category android:name="android.intent.category.LAUNCHER"/></intent></queries>')
           done = 0
           for path in hits:
               text = open(path, encoding="utf-8").read()
               if "</application>" in text and "NotifyListener" not in text:
-                  open(path, "w", encoding="utf-8").write(text.replace("</application>", service + "\n    </application>", 1))
+                  text = text.replace("</application>", service + "\n    </application>", 1)
+                  if "<queries>" not in text and "<application" in text:
+                      text = text.replace("<application", queries + "\n    <application", 1)
+                  open(path, "w", encoding="utf-8").write(text)
                   done += 1
           assert done >= 1, "the service was not added to any manifest template"
           spec = open("buildozer.spec", encoding="utf-8").read().split("\n")
