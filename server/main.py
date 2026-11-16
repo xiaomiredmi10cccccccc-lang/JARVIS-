@@ -1033,10 +1033,10 @@ def profile_summarize(data: ProfileNoteRequest, http_request: Request, x_jarvis_
         return {"note": ""}
     lang_name = {"tg": "Tajik (Cyrillic)", "ru": "Russian", "en": "English"}[data.language]
     system = (
-        "You keep a private 'about the user' note for an AI assistant. Write a SHORT biography and collaboration note (4-8 sentences, "
-        "one or two short paragraphs, no lists, no headings) in " + lang_name + ". Write in the third person about the user, "
-        "or neutrally. Cover only what is actually known: who the user is (name, age, place, work or study if stated), interests, goals and projects, "
-        "preferences, and how the assistant should cooperate with him (tone, language, level of detail). "
+        "You keep the user's own 'About me' note for his AI assistant. Write it AS IF THE USER WROTE IT HIMSELF: first person ('I am ...', 'I like ...', "
+        "'I want the assistant to ...'), natural and personal, a SHORT text (4-8 sentences, one or two short paragraphs, no lists, no headings) in " + lang_name + ". "
+        "Never write in the third person and never say 'the user'. Cover only what is actually known: who the user is (name, age, place, work or study if stated), interests, goals and projects, "
+        "preferences, and how he wants the assistant to cooperate with him (tone, language, level of detail). "
         "Do NOT list his commands, orders or one-off requests, do NOT write lines like 'the user asked what his name is', do NOT invent anything, "
         "and do not include secrets such as passwords, card numbers or ID numbers. If a previous note is given, keep what is still true and merge the new information. "
         "Output only the note text.")
