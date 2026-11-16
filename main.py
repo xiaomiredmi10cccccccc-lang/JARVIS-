@@ -401,7 +401,7 @@ def get_service(private_dir=None):
     return LocalAccountService()
 
 CRASH_FILE = "jarvis_crash_log.txt"
-APP_VERSION = "2026.11.16"
+APP_VERSION = "2026.11.17"
 
 def crash_dirs():
     priv = os.environ.get("ANDROID_PRIVATE")
@@ -600,6 +600,24 @@ TEXTS = {
         "cancel_sent": "Дархости бекор кардан ба барномаи соат фиристода шуд. Агар соат онро дастгирӣ накунад, дар худи соат бекор кунед.",
         "cancel_torch": "Чароғак хомӯш шуд.",
         "cancel_none": "Чизе барои бекор кардан нест.",
+        "al_set": "Инҳоро ман танзим кардам:",
+        "al_none_set": "Ман ягон будилник ё таймер танзим накардаам.",
+        "al_timer": "таймер {d} (боқӣ {r})",
+        "al_sys": "Будилники навбатии система: {t}",
+        "al_sys_none": "Дар система будилники фаъол нест.",
+        "al_note": "Эзоҳ: Android рӯйхати пурраи будилникҳоро намедиҳад, бинобар ин танҳо он чиро нишон медиҳам, ки худам танзим кардаам ва будилники навбатии система.",
+        "cancel_ask": "Ман будилник ё таймер танзим накардаам. Ҳамаи будилникҳо ва таймерҳоро хомӯш кунам? (ҳа / не)",
+        "cancel_no": "Хуб, ҳеҷ чиз хомӯш нашуд.",
+        "msg_mode_title": "Хондани паём бо овоз:",
+        "msg_mode_off": "Хомӯш",
+        "msg_mode_always": "Ҳамеша",
+        "msg_mode_hp": "Бо гӯшмонак",
+        "msg_mode_note": "Бо интернет: овози S.A.I (тоҷикӣ ҳам). Бе интернет: овози телефон (тоҷикиро бо забони русӣ мехонад).",
+        "msg_notif_sys": "Садои огоҳиро хомӯш кунед (танзимоти система)",
+        "msg_intro": "Аз {app}, {who}паём омад:",
+        "art_run": "Иҷро кардан",
+        "art_close": "Пӯшидан",
+        "art_fail": "Намоишро кушода натавонистам.",
         "lib_image": "Акс",
         "lib_file": "Файл",
         "lib_all": "Ҳама",
@@ -963,6 +981,24 @@ TEXTS = {
         "cancel_sent": "Запрос на отмену отправлен в приложение «Часы». Если оно не поддерживает отмену, отмените в самих часах.",
         "cancel_torch": "Фонарик выключен.",
         "cancel_none": "Нечего отменять.",
+        "al_set": "Это поставил я:",
+        "al_none_set": "Я не ставил ни будильников, ни таймеров.",
+        "al_timer": "таймер {d} (осталось {r})",
+        "al_sys": "Ближайший будильник в системе: {t}",
+        "al_sys_none": "Активных будильников в системе нет.",
+        "al_note": "Примечание: Android не отдаёт полный список будильников, поэтому показываю только то, что поставил сам, и ближайший будильник системы.",
+        "cancel_ask": "Я не ставил будильников и таймеров. Выключить все будильники и таймеры? (да / нет)",
+        "cancel_no": "Хорошо, ничего не выключено.",
+        "msg_mode_title": "Читать сообщения вслух:",
+        "msg_mode_off": "Выкл",
+        "msg_mode_always": "Всегда",
+        "msg_mode_hp": "В наушниках",
+        "msg_mode_note": "С интернетом: голос S.A.I (и таджикский). Без интернета: голос телефона (таджикский читает по-русски).",
+        "msg_notif_sys": "Выключить звук уведомления (настройки системы)",
+        "msg_intro": "Из {app}, {who}пришло сообщение:",
+        "art_run": "Запустить",
+        "art_close": "Закрыть",
+        "art_fail": "Не удалось открыть.",
         "lib_image": "Фото",
         "lib_file": "Файл",
         "lib_all": "Все",
@@ -1326,6 +1362,24 @@ TEXTS = {
         "cancel_sent": "A cancel request was sent to the Clock app. If it does not support cancelling, cancel in the clock itself.",
         "cancel_torch": "The torch is off.",
         "cancel_none": "Nothing to cancel.",
+        "al_set": "These I set:",
+        "al_none_set": "I have not set any alarm or timer.",
+        "al_timer": "timer {d} ({r} left)",
+        "al_sys": "Next alarm in the system: {t}",
+        "al_sys_none": "No active alarm in the system.",
+        "al_note": "Note: Android gives no full list of alarms, so I show only what I set myself and the system's next alarm.",
+        "cancel_ask": "I have not set any alarm or timer. Switch off all alarms and timers? (yes / no)",
+        "cancel_no": "OK, nothing was switched off.",
+        "msg_mode_title": "Read messages aloud:",
+        "msg_mode_off": "Off",
+        "msg_mode_always": "Always",
+        "msg_mode_hp": "Headphones",
+        "msg_mode_note": "Online: the S.A.I voice (Tajik too). Offline: the phone's voice (Tajik is read in Russian).",
+        "msg_notif_sys": "Mute the notification sound (system settings)",
+        "msg_intro": "From {app}, {who}a message came:",
+        "art_run": "Run",
+        "art_close": "Close",
+        "art_fail": "Could not open it.",
         "lib_image": "Picture",
         "lib_file": "File",
         "lib_all": "All",
@@ -5419,6 +5473,11 @@ class CodeBlock(TapOpenMixin, BoxLayout):
             except Exception:
                 save_crash("Code copy failed:\n" + traceback.format_exc())
         copy.bind(on_release=do_copy)
+        if is_html_doc(code, lang):
+            run = IconButton(kind="play", tint=hex_color(theme["accent"])[:3], alpha=0.18, radius=8, icon_rgba=hex_color(theme["text"]),
+                             size_hint=(None, None), size=(dp(48), dp(26)))
+            run.bind(on_release=lambda *_: app.open_artifact(code))
+            head.add_widget(run)
         head.add_widget(copy)
         self.add_widget(head)
         lines = code.replace("\t", "    ").split("\n")
@@ -5879,13 +5938,13 @@ class GlassSheet(FloatLayout):
         self.panel = panel
         head = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(8))
         if back is not None:
-            b = FrostButton(tint=tint, alpha=0.12, radius=14, text="‹", font_size=dp(26), halign="center",
-                            size_hint_x=None, width=dp(44), color=hex_color(theme["text"]))
+            b = IconButton(kind="back", tint=tint, alpha=0.12, radius=14, icon_rgba=hex_color(theme["text"]),
+                           size_hint_x=None, width=dp(44))
             b.bind(on_release=lambda *_: back())
             head.add_widget(b)
         head.add_widget(make_label(title, 17, theme["accent"], True, halign="left"))
-        x = FrostButton(tint=tint, alpha=0.12, radius=14, text="×", font_size=dp(28), halign="center",
-                        size_hint_x=None, width=dp(44), color=hex_color(theme["text"]))
+        x = IconButton(kind="cross", tint=tint, alpha=0.12, radius=14, icon_rgba=hex_color(theme["text"]),
+                       size_hint_x=None, width=dp(44))
         x.bind(on_release=lambda *_: self.dismiss())
         head.add_widget(x)
         panel.add_widget(head)
@@ -6478,6 +6537,14 @@ class IconButton(FrostButton):
             elif kind == "cross":
                 items.append(Line(points=[cx - u * 0.75, cy - u * 0.75, cx + u * 0.75, cy + u * 0.75], width=w * 1.2, cap="round"))
                 items.append(Line(points=[cx - u * 0.75, cy + u * 0.75, cx + u * 0.75, cy - u * 0.75], width=w * 1.2, cap="round"))
+            elif kind == "back":
+                items.append(Line(points=[cx + u * 0.35, cy + u * 0.9, cx - u * 0.45, cy, cx + u * 0.35, cy - u * 0.9], width=w * 1.2, cap="round", joint="round"))
+            elif kind == "trash":
+                items.append(Line(points=[cx - u * 0.95, cy + u * 0.55, cx + u * 0.95, cy + u * 0.55], width=w, cap="round"))
+                items.append(Line(points=[cx - u * 0.3, cy + u * 0.55, cx - u * 0.3, cy + u * 0.85, cx + u * 0.3, cy + u * 0.85, cx + u * 0.3, cy + u * 0.55], width=w, cap="round", joint="round"))
+                items.append(Line(points=[cx - u * 0.7, cy + u * 0.4, cx - u * 0.55, cy - u * 0.9, cx + u * 0.55, cy - u * 0.9, cx + u * 0.7, cy + u * 0.4], width=w, cap="round", joint="round"))
+            elif kind == "play":
+                items.append(Triangle(points=[cx - u * 0.55, cy + u * 0.85, cx - u * 0.55, cy - u * 0.85, cx + u * 0.9, cy]))
             elif kind == "apps":
                 for gx in (-0.8, 0.1):
                     for gy in (-0.8, 0.1):
@@ -6728,8 +6795,8 @@ class MediaViewer(FloatLayout):
         self.mime = mimetypes.guess_type(self.name)[0] or "application/octet-stream"
         bar = BoxLayout(orientation="horizontal", size_hint=(1, None), height=dp(56), padding=(dp(8), dp(6)), spacing=dp(8),
                         pos_hint={"top": 1})
-        back = FrostButton(tint=tint, alpha=0.14, radius=18, text="‹", font_size=dp(28), halign="center",
-                           size_hint=(None, 1), width=dp(46), color=hex_color(theme["text"]))
+        back = IconButton(kind="back", tint=tint, alpha=0.14, radius=18, icon_rgba=hex_color(theme["text"]),
+                          size_hint=(None, 1), width=dp(46))
         back.bind(on_release=lambda *_: self.dismiss())
         bar.add_widget(back)
         bar.add_widget(make_label(self.name, 15, theme["text"], True, halign="left"))
@@ -6926,7 +6993,8 @@ class BlockViewer(MediaViewer):
         theme = THEMES[app.theme_index]
         tint = hex_color(theme["accent"])[:3]
         body = BoxLayout(orientation="vertical", spacing=dp(8))
-        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=300)
+        html_ok = self.kind == "code" and is_html_doc(self.payload, self.lang)
+        sheet = GlassSheet(app, app.t("view_actions"), body, anchor="menu", height=300 + (56 if html_ok else 0))
 
         def act(fn):
             def run(*_):
@@ -6934,10 +7002,11 @@ class BlockViewer(MediaViewer):
                 Clock.schedule_once(lambda dt: fn(), 0.15)
             return run
         is_table = self.kind == "table"
-        for kind, key, fn in (("download", "view_download", (lambda: self._table_file(app.save_as)) if is_table else (lambda: app.save_as(self.path))),
+        extra = [("play", "art_run", lambda: app.open_artifact(self.payload))] if html_ok else []
+        for kind, key, fn in extra + [("download", "view_download", (lambda: self._table_file(app.save_as)) if is_table else (lambda: app.save_as(self.path))),
                               ("apps", "lib_save", lambda: self._to_library()),
                               ("copy", "view_copy", lambda: self._copy()),
-                              ("share", "view_share", (lambda: self._table_file(app.share_media)) if is_table else (lambda: app.share_media(self.path)))):
+                              ("share", "view_share", (lambda: self._table_file(app.share_media)) if is_table else (lambda: app.share_media(self.path)))]:
             row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(52))
             row.add_widget(IconButton(kind=kind, tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
                                       size_hint=(None, 1), width=dp(52)))
@@ -7172,6 +7241,35 @@ _DELAY_RE = re.compile(r"(?:через|баъд\s+аз|пас\s+аз|after|in)\s
 _CANCEL_RE = re.compile(r"бекор|хомӯш|хомуш|ӯчир|учир|нест\s*кун|удали|отмени|отключи|выключи|cancel|delete|remove|turn off|\bstop\b|\boff\b", re.I)
 
 
+_YES_RE = re.compile(r"^\s*(ҳа|ха|бале|оре|да|ага|ок|окей|yes|yep|yeah|sure|ok|okay|конечно|давай)(?!\w)", re.I)
+_NO_RE = re.compile(r"^\s*(не|нет|no|nope|нахер|на|бас|стоп|cancel)(?!\w)", re.I)
+_LIST_Q_RE = re.compile(r"кадом|кай\b|чанд|чӣ\s*хел|руйхат|рӯйхат|which|what|list|show|how many|какие|какой|какая|сколько|список|покажи|есть ли|ҳастанд|ҳаст\b|барои\s*ман", re.I)
+_ALARM_WORD_RE = re.compile(r"будилник|будильник|alarm|таймер|timer", re.I)
+_SET_VERB_RE = re.compile(r"гузор|танзим|насб|постав|заведи|\bset\b|create|разбуди|бедор\s*кун", re.I)
+
+
+_LIST_STRONG_RE = re.compile(r"кадом|руйхат|рӯйхат|which|\blist\b|how many|какие|какой|сколько|список|чанд", re.I)
+
+
+def is_alarm_list_question(text):
+    t = str(text)
+    if not (len(t) < 140 and _ALARM_WORD_RE.search(t) and _LIST_Q_RE.search(t)):
+        return False
+    if _CANCEL_RE.search(t) or re.search(r"\d{1,2}\s*[:.]\d{2}", t):
+        return False
+    return bool(_LIST_STRONG_RE.search(t) or not _SET_VERB_RE.search(t))
+
+
+def is_html_doc(code, lang=""):
+    """A single-file web page / app the AI wrote (shown with a 'Run' button)."""
+    c = str(code or "")
+    if len(c) < 40:
+        return False
+    if re.match(r"\s*(<!doctype\s+html|<html)", c, re.I):
+        return True
+    return str(lang or "").strip().lower() in ("html", "htm") and "<" in c
+
+
 def parse_torch_timing(raw):
     """'turn on the torch, off after 2 seconds' / 'on in 5 seconds' -> one flashlight action with after/hold seconds."""
     low = raw.lower()
@@ -7210,7 +7308,7 @@ def parse_local_device(text, app_labels=()):
         if _CANCEL_RE.search(low) and re.search(r"будилник|будильник|alarm|таймер|timer|\bвсё\b|\bвсе\b|ҳама|everything|\ball\b", low) \
                 and not _TORCH_RE.search(low):
             what = "alarm" if re.search(r"будилник|будильник|alarm", low) else ("timer" if re.search(r"таймер|timer", low) else "all")
-            act = {"action": "cancel", "what": what}
+            act = {"action": "cancel", "what": what, "every": bool(re.search(r"ҳама|\bвсё\b|\bвсе\b|everything|\ball\b|every", low))}
             tm = re.search(r"(\d{1,2})\s*(?:[:.]|\s)\s*(\d{2})\b", low)
             if tm and what == "alarm" and int(tm.group(1)) < 24 and int(tm.group(2)) < 60:
                 act["hour"], act["minute"] = int(tm.group(1)), int(tm.group(2))
@@ -8589,7 +8687,7 @@ class JarvisApp(App):
                     activity.startActivity(intent)
                 try:
                     fire(True)
-                    self._made_alarms = (list(getattr(self, "_made_alarms", [])) + [(hour, minute)])[-6:]
+                    self._made_add({"k": "alarm", "h": hour, "m": minute, "t": time.time()})
                     return M["alarm"].format(t=shown)
                 except Exception:
                     save_crash("Alarm (silent) failed, asking the Clock app:\n" + traceback.format_exc())
@@ -8614,6 +8712,7 @@ class JarvisApp(App):
                     fire_timer(True)
                 except Exception:
                     fire_timer(False)
+                self._made_add({"k": "timer", "sec": seconds, "end": time.time() + seconds, "t": time.time()})
                 return M["timer"].format(d=format_duration(seconds, lang))
             if kind == "flashlight":
                 state = str(act.get("state", "toggle"))
@@ -8833,38 +8932,117 @@ class JarvisApp(App):
             raise RuntimeError(str(last) if last else "no flash")
         self._torch_on = bool(target)
 
+    # ---- what the assistant has set (alarms, timers), kept in a file so it survives a restart
+    def _made_path(self):
+        return os.path.join(self.user_data_dir, "made_things.json")
+
+    def _made_load(self):
+        try:
+            with open(self._made_path(), "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception:
+            data = []
+        now, keep = time.time(), []
+        for d in data if isinstance(data, list) else []:
+            try:
+                if d.get("k") == "timer" and float(d.get("end", 0)) < now:
+                    continue
+                if d.get("k") == "alarm" and now - float(d.get("t", 0)) > 26 * 3600:
+                    continue
+                keep.append(d)
+            except Exception:
+                continue
+        return keep
+
+    def _made_save(self, items):
+        try:
+            with open(self._made_path(), "w", encoding="utf-8") as handle:
+                json.dump(items[-20:], handle)
+        except Exception:
+            pass
+
+    def _made_add(self, item):
+        items = self._made_load()
+        items.append(item)
+        self._made_save(items)
+
+    def _alarms_list_text(self):
+        """What the assistant has set and what it has not, plus the system's next alarm (Android gives no full list of alarms)."""
+        lang = self._lang_code()
+        made = self._made_load()
+        now = time.time()
+        lines = []
+        mine = [d for d in made if d.get("k") in ("alarm", "timer")]
+        if mine:
+            lines.append(self.t("al_set"))
+            for d in mine:
+                if d.get("k") == "alarm":
+                    lines.append("\u2022 %02d:%02d" % (int(d.get("h", 0)), int(d.get("m", 0))))
+                else:
+                    lines.append("\u2022 " + self.t("al_timer").format(d=format_duration(int(d.get("sec", 0)), lang),
+                                                                  r=format_duration(max(1, int(float(d.get("end", now)) - now)), lang)))
+        else:
+            lines.append(self.t("al_none_set"))
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            info = activity.getSystemService("alarm").getNextAlarmClock()
+            if info is not None:
+                lines.append(self.t("al_sys").format(t=time.strftime("%d.%m %H:%M", time.localtime(info.getTriggerTime() / 1000.0))))
+            else:
+                lines.append(self.t("al_sys_none"))
+        except Exception:
+            pass
+        lines.append(self.t("al_note"))
+        return "\n".join(lines)
+
     def _cancel_things(self, act, activity, Intent):
-        """Cancels what the assistant set: alarms and timers (a request to the Clock app), the torch."""
+        """Cancels alarms and timers. What the assistant set is cancelled at once; when it set nothing the user is asked first,
+        and after a 'yes' everything is switched off (the Clock app decides what it supports)."""
         from jnius import autoclass
         what = str(act.get("what", "all"))
         AlarmClock = autoclass("android.provider.AlarmClock")
+        made = self._made_load()
+        mine = [d for d in made if what == "all" or d.get("k") == what]
+        confirmed = bool(act.get("confirmed"))
+        every = bool(act.get("every")) or confirmed
+        if not mine and not every and act.get("hour") is None and what in ("alarm", "timer", "all"):
+            self._confirm_act = (dict(act, confirmed=True), time.monotonic() + 120)
+            return self.t("cancel_ask")
         sent = False
         if what in ("alarm", "all"):
-            made = [tuple(x) for x in getattr(self, "_made_alarms", [])][-3:]
+            items = [(int(d.get("h", 0)), int(d.get("m", 0))) for d in mine if d.get("k") == "alarm"]
             if act.get("hour") is not None:
-                made = [(int(act["hour"]), int(act["minute"]))]
-            for item in (made or [None]):
+                items = [(int(act["hour"]), int(act["minute"]))]
+            for item in items:
                 try:
                     intent = Intent(AlarmClock.ACTION_DISMISS_ALARM)
-                    if item is None:
-                        intent.putExtra("android.intent.extra.alarm.SEARCH_MODE", "android.next")
-                    else:
-                        intent.putExtra("android.intent.extra.alarm.SEARCH_MODE", "android.time")
-                        intent.putExtra(AlarmClock.EXTRA_HOUR, int(item[0]))
-                        intent.putExtra(AlarmClock.EXTRA_MINUTES, int(item[1]))
+                    intent.putExtra("android.intent.extra.alarm.SEARCH_MODE", "android.time")
+                    intent.putExtra(AlarmClock.EXTRA_HOUR, int(item[0]))
+                    intent.putExtra(AlarmClock.EXTRA_MINUTES, int(item[1]))
                     activity.startActivity(intent)
                     sent = True
                 except Exception:
                     save_crash("Dismiss alarm failed:\n" + traceback.format_exc())
-            self._made_alarms = []
-        if what in ("timer", "all"):
+            if every and act.get("hour") is None:
+                try:
+                    intent = Intent(AlarmClock.ACTION_DISMISS_ALARM)
+                    intent.putExtra("android.intent.extra.alarm.SEARCH_MODE", "android.all")
+                    activity.startActivity(intent)
+                    sent = True
+                except Exception:
+                    save_crash("Dismiss all alarms failed:\n" + traceback.format_exc())
+        if what in ("timer", "all") and (every or any(d.get("k") == "timer" for d in mine)):
             try:
                 activity.startActivity(Intent(AlarmClock.ACTION_DISMISS_TIMER))
                 sent = True
             except Exception:
                 save_crash("Dismiss timer failed:\n" + traceback.format_exc())
+        self._made_save([d for d in made if d not in mine] if act.get("hour") is None else made)
         parts = []
-        if what == "all" or (what == "alarm" and False):
+        if what == "all" and not mine and not confirmed:
+            pass
+        if what == "all":
             try:
                 self._torch_set(False)
                 parts.append(self.t("cancel_torch"))
@@ -10009,9 +10187,8 @@ class JarvisApp(App):
         text.add_widget(make_label(title, 13, theme["text"], True, halign="left"))
         text.add_widget(make_label(self.t("attach_ready"), 11, muted(), False, halign="left"))
         strip.add_widget(text)
-        gone = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.14, radius=16, text="×", font_size=dp(24), halign="center",
-                           size_hint=(None, None), size=(dp(44), dp(44)), pos_hint={"center_y": 0.5},
-                           color=hex_color(theme["text"]))
+        gone = IconButton(kind="cross", tint=(1.0, 0.42, 0.48), alpha=0.14, radius=16, icon_rgba=hex_color(theme["text"]),
+                          size_hint=(None, None), size=(dp(44), dp(44)), pos_hint={"center_y": 0.5})
         gone.bind(on_release=self.clear_attachment)
         strip.add_widget(gone)
 
@@ -11445,6 +11622,19 @@ class JarvisApp(App):
         self.add_chat_message(chat_id, "user", command_text)
 
         def route():
+            conf = getattr(self, "_confirm_act", None)
+            if conf:
+                self._confirm_act = None
+                if time.monotonic() < conf[1]:
+                    if _YES_RE.match(command_text):
+                        self.deliver_answer(chat_id, self._device_execute_many([conf[0]]))
+                        return
+                    if _NO_RE.match(command_text):
+                        self.deliver_answer(chat_id, self.t("cancel_no"))
+                        return
+            if is_alarm_list_question(command_text):
+                self.deliver_answer(chat_id, self._alarms_list_text())
+                return
             if parse_chats_analysis(command_text):
                 self._start_chat_analysis(chat_id, command_text)
                 return
@@ -12263,8 +12453,8 @@ class JarvisApp(App):
         back = GlassButton(text="\u232b", tint=tint, active=False, radius=12, font_size=dp(22),
                            color=hex_color(theme["text"]), size_hint_x=None, width=dp(52))
         back.bind(on_release=lambda *_: self.command_input.do_backspace())
-        close = GlassButton(text="\u00d7", tint=tint, active=False, radius=12, font_size=dp(26),
-                            color=hex_color(theme["text"]), size_hint_x=None, width=dp(52))
+        close = IconButton(kind="cross", tint=tint, alpha=0.12, radius=12, icon_rgba=hex_color(theme["text"]),
+                           size_hint_x=None, width=dp(52))
         close.bind(on_release=lambda *_: popup.dismiss())
         tabs.add_widget(back)
         tabs.add_widget(close)
@@ -12558,9 +12748,100 @@ class JarvisApp(App):
         self.open_popups.discard(sheet)
         self.update_pause()
 
+    def open_artifact(self, html):
+        """Runs a one-file web app in a full-screen Android WebView: JavaScript on, no file access, no bridge to the app."""
+        try:
+            from jnius import autoclass, PythonJavaClass, java_method
+            from android.runnable import run_on_ui_thread
+        except Exception:
+            self.toast_msg(self.t("art_fail"))
+            return
+        if getattr(self, "_art_root", None) is not None:
+            return
+        page = str(html)
+        close_text = self.t("art_close")
+        app = self
+
+        class _Click(PythonJavaClass):
+            __javainterfaces__ = ["android/view/View$OnClickListener"]
+            __javacontext__ = "app"
+
+            @java_method("(Landroid/view/View;)V")
+            def onClick(self, view):
+                app.close_artifact()
+
+        @run_on_ui_thread
+        def build():
+            try:
+                activity = autoclass("org.kivy.android.PythonActivity").mActivity
+                WebView = autoclass("android.webkit.WebView")
+                WebViewClient = autoclass("android.webkit.WebViewClient")
+                LinearLayout = autoclass("android.widget.LinearLayout")
+                LP = autoclass("android.widget.LinearLayout$LayoutParams")
+                VLP = autoclass("android.view.ViewGroup$LayoutParams")
+                Button = autoclass("android.widget.Button")
+                Color = autoclass("android.graphics.Color")
+                root = LinearLayout(activity)
+                root.setOrientation(1)
+                root.setBackgroundColor(Color.parseColor("#0b1220"))
+                btn = Button(activity)
+                btn.setText(close_text)
+                click = _Click()
+                app._art_click = click
+                btn.setOnClickListener(click)
+                web = WebView(activity)
+                st = web.getSettings()
+                st.setJavaScriptEnabled(True)
+                st.setDomStorageEnabled(True)
+                st.setAllowFileAccess(False)
+                st.setAllowContentAccess(False)
+                st.setAllowFileAccessFromFileURLs(False)
+                st.setAllowUniversalAccessFromFileURLs(False)
+                web.setWebViewClient(WebViewClient())
+                web.setBackgroundColor(Color.WHITE)
+                root.addView(btn, LP(-1, -2))
+                root.addView(web, LP(-1, 0, 1.0))
+                activity.addContentView(root, VLP(-1, -1))
+                web.loadDataWithBaseURL("https://artifact.local/", page, "text/html", "utf-8", None)
+                app._art_root, app._art_web = root, web
+            except Exception:
+                save_crash("Artifact open failed:\n" + traceback.format_exc())
+        self._external()
+        build()
+
+    def close_artifact(self):
+        root, web = getattr(self, "_art_root", None), getattr(self, "_art_web", None)
+        self._art_root = self._art_web = None
+        if root is None:
+            return
+        try:
+            from android.runnable import run_on_ui_thread
+
+            @run_on_ui_thread
+            def kill():
+                try:
+                    parent = root.getParent()
+                    if parent is not None:
+                        parent.removeView(root)
+                    web.destroy()
+                except Exception:
+                    save_crash("Artifact close failed:\n" + traceback.format_exc())
+            kill()
+        except Exception:
+            pass
+
+    def toast_msg(self, text):
+        try:
+            self.deliver_answer(self.chats.current_id, str(text))
+        except Exception:
+            pass
+
     def _on_back_key(self, window, key, *args):
         if key != 27:
             return False
+        if getattr(self, "_art_root", None) is not None:
+            self.close_artifact()
+            return True
         for widget in Window.children:          # the first child is the top one
             if isinstance(widget, (GlassSheet, MediaViewer)) and not widget.closing:
                 widget.dismiss()
@@ -12685,7 +12966,7 @@ class JarvisApp(App):
         except Exception:
             save_crash("Open listener settings failed:\n" + traceback.format_exc())
 
-    def msg_read_new(self, mark=True):
+    def msg_read_new(self, mark=True, skip_spoken=False):
         """New messages since the last reading: a list of dicts (pkg, title, text, ts)."""
         path = os.path.join(self._files_dir(), "incoming.jsonl")
         seen_path = os.path.join(self.user_data_dir, "msg_seen.txt")
@@ -12693,6 +12974,11 @@ class JarvisApp(App):
             seen = float(open(seen_path).read().strip() or 0)
         except Exception:
             seen = 0.0
+        if skip_spoken:                                  # already read aloud by the background service
+            try:
+                seen = max(seen, float(open(os.path.join(self._files_dir(), "spoken_ts.txt")).read().strip() or 0))
+            except Exception:
+                pass
         items = []
         try:
             with open(path, "r", encoding="utf-8") as handle:
@@ -12713,6 +12999,65 @@ class JarvisApp(App):
                 pass
         return items[-40:]
 
+    def msg_mode(self):
+        """off / always / headphones: when a new message is read aloud (app open or closed)."""
+        try:
+            with open(os.path.join(self.user_data_dir, "msg_mode"), "r") as handle:
+                value = handle.read().strip()
+            if value in ("off", "always", "headphones"):
+                return value
+        except Exception:
+            pass
+        return "always" if os.path.exists(os.path.join(self.user_data_dir, "msg_speak")) else "off"
+
+    def msg_set_mode(self, mode):
+        try:
+            with open(os.path.join(self.user_data_dir, "msg_mode"), "w") as handle:
+                handle.write(mode)
+        except Exception:
+            pass
+        self._msg_cfg_write()
+
+    def _msg_cfg_write(self):
+        """The settings the Java reader needs while the app is closed (mode, server address, token, language, the spoken intro)."""
+        try:
+            cfg = {"mode": self.msg_mode(), "token": self.server_token.strip(), "url": SERVER_BASE + "/speak",
+                   "lang": self._lang_code(), "intro": self.t("msg_intro")}
+            text = json.dumps(cfg, ensure_ascii=False)
+            if text == getattr(self, "_msg_cfg_last", None):
+                return
+            with open(os.path.join(self._files_dir(), "reader_cfg.json"), "w", encoding="utf-8") as handle:
+                handle.write(text)
+            self._msg_cfg_last = text
+        except Exception:
+            pass
+
+    def _headphones_on(self):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            am = activity.getSystemService("audio")
+            wanted = (3, 4, 7, 8, 11, 22, 26, 27)
+            for dev in am.getDevices(2):
+                if int(dev.getType()) in wanted:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def msg_open_notif_settings(self):
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            Intent = autoclass("android.content.Intent")
+            self._external()
+            try:
+                activity.startActivity(Intent("android.settings.ALL_APPS_NOTIFICATION_SETTINGS"))
+            except Exception:
+                activity.startActivity(Intent("android.settings.APPLICATION_SETTINGS"))
+        except Exception:
+            save_crash("Open notification settings failed:\n" + traceback.format_exc())
+
     def msg_speak_on(self):
         return os.path.exists(os.path.join(self.user_data_dir, "msg_speak"))
 
@@ -12729,13 +13074,24 @@ class JarvisApp(App):
     def _msg_poll(self, dt):
         """While the app is open: a new message is read aloud: 'From WhatsApp, Father, a message came: ...'."""
         try:
-            if self.app_paused or getattr(self, "_locked_pad", None) is not None or not self.msg_speak_on():
+            if self.app_paused:
+                return
+            self._msg_cfg_write()
+            try:
+                with open(os.path.join(self._files_dir(), "app_fg"), "w") as handle:
+                    handle.write("1")                    # tells the background reader the app is open and reads by itself
+            except Exception:
+                pass
+            mode = self.msg_mode()
+            if getattr(self, "_locked_pad", None) is not None or mode == "off":
+                return
+            if mode == "headphones" and not self._headphones_on():
                 return
             if not (self.msg_reader_built() and self.msg_reader_on() and self.msg_access_granted()):
                 return
             if getattr(self, "_busy", False) or getattr(self, "_stream_active", False):
                 return                                  # the assistant is busy: the message waits for the next tick
-            items = self.msg_read_new()
+            items = self.msg_read_new(skip_spoken=True)
             if not items:
                 return
             lines = []
@@ -12831,8 +13187,8 @@ class JarvisApp(App):
                     mk(self.t(kind_name.get(it.get("kind"), "lib_text")) + "  \u00b7  " + format_time(time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(it.get("t", 0))))) + "[/color][/size]"
             open_btn = FrostButton(tint=tint, alpha=0.10, text=label, font_size=dp(14), color=hex_color(theme["text"]))
             open_btn.bind(on_release=lambda inst, i=it: (sheet_ref["s"].dismiss(), Clock.schedule_once(lambda dt: self.open_library_item(i), 0.15)))
-            del_btn = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, text="\u00d7", font_size=dp(26), halign="center",
-                                  size_hint_x=None, width=dp(56), color=hex_color(theme["text"]))
+            del_btn = IconButton(kind="trash", tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, icon_rgba=hex_color(theme["text"]),
+                                 size_hint_x=None, width=dp(56))
             del_btn.bind(on_release=lambda inst, i=it: self._library_delete(i, sheet_ref))
             row.add_widget(open_btn)
             row.add_widget(del_btn)
@@ -12902,8 +13258,8 @@ class JarvisApp(App):
             open_btn = FrostButton(tint=tint, alpha=0.24 if active else 0.10, marker=active, text=text,
                                    font_size=dp(14), color=hex_color(theme["text"]))
             open_btn.bind(on_release=lambda inst, cid=chat["id"]: self.open_chat(cid))
-            del_btn = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, text="×", font_size=dp(26),
-                                  halign="center", size_hint_x=None, width=dp(56), color=hex_color(theme["text"]))
+            del_btn = IconButton(kind="trash", tint=(1.0, 0.42, 0.48), alpha=0.12, radius=16, icon_rgba=hex_color(theme["text"]),
+                                 size_hint_x=None, width=dp(56))
             del_btn.bind(on_release=lambda inst, cid=chat["id"]: self.confirm_delete(cid))
             row.add_widget(open_btn)
             row.add_widget(del_btn)
@@ -12952,11 +13308,30 @@ class JarvisApp(App):
         body.add_widget(news)
         GlassSheet(self, self.t("about_title"), body, anchor="menu", height=560).open()
 
+    def _note_autoregen(self):
+        """The 'About me' note is written again once after an update and after a language change (marker file)."""
+        try:
+            key = APP_VERSION + "|" + self._lang_code()
+            path = os.path.join(self.user_data_dir, "note_ver.txt")
+            try:
+                old = open(path, encoding="utf-8").read().strip()
+            except Exception:
+                old = ""
+            if old == key or getattr(self, "_bio_busy", False) or not self.server_token.strip():
+                return
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(key)
+            if self.profile.note:
+                self.refresh_profile_note()
+        except Exception:
+            save_crash("Note regeneration failed:\n" + traceback.format_exc())
+
     def set_language(self, code):
         if code in TEXTS:
             self.language = code
             self.save_settings()
             self.build_interface()
+            Clock.schedule_once(lambda dt: self._note_autoregen(), 1.5)
 
     def set_theme(self, index):
         self.theme_index = index % len(THEMES)
@@ -13121,7 +13496,7 @@ class JarvisApp(App):
             built = self.msg_reader_built()
             granted = built and self.msg_access_granted()
             note = self.t("msg_note") + ("" if built else "\n\n" + self.t("msg_not_built"))
-            lab = make_label(note, 12, muted(), False, halign="left", size_hint_y=None, height=dp(150))
+            lab = make_label(note, 12, muted(), False, halign="left", size_hint_y=None, height=dp(130))
             lab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
             content.add_widget(lab)
             if built:
@@ -13138,13 +13513,19 @@ class JarvisApp(App):
                 row.add_widget(PillSwitch(active=self.msg_reader_on(), tint=accent, size=(dp(70), dp(36)),
                                           on_change=lambda v: self.msg_set_on(bool(v))))
                 content.add_widget(row)
-                srow = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
-                slab = make_label(self.t("msg_speak_sw"), 15, theme["text"], False, halign="left")
-                slab.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
-                srow.add_widget(slab)
-                srow.add_widget(PillSwitch(active=self.msg_speak_on(), tint=accent, size=(dp(70), dp(36)),
-                                           on_change=lambda v: self.msg_set_speak(bool(v))))
-                content.add_widget(srow)
+                content.add_widget(make_label(self.t("msg_mode_title"), 14, theme["text"], True, halign="left", size_hint_y=None, height=dp(24)))
+                mrow = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(46), spacing=dp(8))
+                cur = self.msg_mode()
+                for mode_key, label_key in (("off", "msg_mode_off"), ("always", "msg_mode_always"), ("headphones", "msg_mode_hp")):
+                    mb = FrostButton(tint=accent, alpha=0.30 if cur == mode_key else 0.10, marker=(cur == mode_key), text=self.t(label_key),
+                                     font_size=dp(14), color=hex_color(theme["text"]), halign="center")
+                    mb.bind(on_release=lambda inst, k=mode_key: (self.msg_set_mode(k), self.open_section("messages")))
+                    mrow.add_widget(mb)
+                content.add_widget(mrow)
+                mnote = make_label(self.t("msg_mode_note"), 11, muted(), False, halign="left", size_hint_y=None, height=dp(48))
+                mnote.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+                content.add_widget(mnote)
+                self.frost_row(content, self.t("msg_notif_sys"), False, lambda *_: self.msg_open_notif_settings(), 46, center=True)
                 self.frost_row(content, self.t("msg_clear"), False, lambda *_: (self.msg_clear(), self.open_section("messages")), 48,
                                tint=(1.0, 0.36, 0.42), center=True)
             content.add_widget(Widget())
@@ -13269,6 +13650,7 @@ class JarvisApp(App):
         Clock.schedule_interval(self._msg_poll, 4.0)
         Clock.schedule_interval(self._net_tick, 5.0)
         Clock.schedule_once(lambda dt: self._wake_server(), 1.0)
+        Clock.schedule_once(lambda dt: self._note_autoregen(), 8.0)
         if self.server_token.strip():
             Clock.schedule_once(lambda dt: self.pull_chats(), 3.0)
             Clock.schedule_once(lambda dt: self.refresh_session(), 5.0)
@@ -13354,6 +13736,13 @@ class JarvisApp(App):
     def on_pause(self):
         self._paused_at = time.time()
         self.app_paused = True
+        try:
+            self.close_artifact()
+            fg = os.path.join(self._files_dir(), "app_fg")
+            if os.path.exists(fg):
+                os.remove(fg)
+        except Exception:
+            pass
         if self.live_mode:
             self.toggle_live(False)
         if self._busy:
