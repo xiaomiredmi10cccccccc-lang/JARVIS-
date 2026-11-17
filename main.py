@@ -7976,7 +7976,7 @@ class JarvisApp(App):
         self.root_layout.clear_widgets()
         theme = THEMES[self.theme_index]
         tint = hex_color(theme["accent"])[:3]
-        main = BoxLayout(orientation="vertical", padding=[dp(4), dp(8), dp(4), 0], spacing=dp(5))        # small gaps like in messengers
+        main = BoxLayout(orientation="vertical", padding=[dp(4), dp(8), dp(4), dp(6)], spacing=dp(5))        # small gaps like in messengers
         self.root_layout.add_widget(main)
 
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
@@ -8001,7 +8001,7 @@ class JarvisApp(App):
         main.add_widget(self.visual_area)
         self.build_theme_layout()
 
-        chat_panel = BoxLayout(orientation="vertical", padding=[dp(10), dp(10), dp(10), 0],
+        chat_panel = BoxLayout(orientation="vertical", padding=dp(10),
                                spacing=dp(4), size_hint_y=1)
         self.response_title = make_label(self.chat_title(), 10, theme["accent"], True,
                                          size_hint_y=None, height=dp(18))
@@ -8022,13 +8022,9 @@ class JarvisApp(App):
         main.add_widget(chat_panel)
         self.render_chat()
 
-        row_min = max(dp(54), min(dp(62), Window.height * 0.07))       # taller on bigger phones: room under the hint text
+        row_min = max(dp(64), min(dp(90), Window.height * 0.085))       # taller on bigger phones: room under the hint text
         command_row = BoxLayout(orientation="horizontal", spacing=dp(7),
                                 size_hint_y=None, height=row_min)
-        with command_row.canvas.before:          # the chat shows through the bar: a soft backing keeps the text readable
-            Color(*hex_color(theme["background"])[:3], 0.90)
-            _cb = RoundedRectangle(pos=command_row.pos, size=command_row.size, radius=[dp(26)])
-        command_row.bind(pos=lambda w, v: setattr(_cb, "pos", v), size=lambda w, v: setattr(_cb, "size", v))
         glass_style(command_row, tint, dp(26), fill=0.025, sheen=0.025, border=0.10)
         self.command_input = (NativeInput if NATIVE_INPUT else EmojiInput)(
             *([self] if NATIVE_INPUT else []), hint_text=self.t("input"), multiline=True, size_hint_x=1,
@@ -8081,26 +8077,19 @@ class JarvisApp(App):
         self.attach_strip = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=0,
                                       padding=(dp(10), dp(6), dp(8), dp(6)), opacity=0)
         frost(self.attach_strip, 20, tint, 0.10, 0.30)
+        main.add_widget(self.attach_strip)
         self.sugg_strip = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=0, opacity=0,
                                     padding=(dp(6), 0))
-        # The bar with the field floats at the bottom edge over the chat: messages run down to the end of the screen
-        # and can be scrolled up above the bar (the chat keeps a free space under the last message).
-        bottom = BoxLayout(orientation="vertical", size_hint=(1, None), pos_hint={"x": 0, "y": 0},
-                           padding=[dp(4), 0, dp(4), dp(2)], spacing=dp(4))
-        bottom.bind(minimum_height=bottom.setter("height"))
-        bottom.add_widget(self.attach_strip)
-        bottom.add_widget(self.sugg_strip)
-        bottom.add_widget(command_row)
-        footer = make_label(self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"],
-                            9, (*hex_color(theme["text"])[:3], 0.7), False,
-                            size_hint_y=None, height=dp(13))
-        bottom.add_widget(footer)
-        self.footer_label = footer
-        self.root_layout.add_widget(bottom)
-        self.chat_box.padding = [0, 0, 0, dp(10)]
-        bottom.bind(height=lambda w, h: setattr(self.chat_box, "padding", [0, 0, 0, h + dp(10)]))
+        main.add_widget(self.sugg_strip)
+        main.add_widget(command_row)
         self._refresh_attach_strip()
         self._sync_action_mode()
+
+        footer = make_label(self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"],
+                            10, (*hex_color(theme["text"])[:3], 0.7), False,
+                            size_hint_y=None, height=dp(20))
+        main.add_widget(footer)
+        self.footer_label = footer
 
     def hide_intro(self):
         """After the first command: the greeting under the orb fades and slides away, and the chat grows up to the orb."""
