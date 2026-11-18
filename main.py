@@ -45,6 +45,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
+from kivy.uix.behaviors import ButtonBehavior
 
 # ==========================================================================
 # VOICE LAYER
@@ -600,6 +601,16 @@ TEXTS = {
         "cancel_sent": "Дархости бекор кардан ба барномаи соат фиристода шуд. Агар соат онро дастгирӣ накунад, дар худи соат бекор кунед.",
         "cancel_torch": "Чароғак хомӯш шуд.",
         "cancel_none": "Чизе барои бекор кардан нест.",
+        "aud_text": "Матн",
+        "aud_head": "Матни аудио:",
+        "aud_fail": "Аудиоро кушода ё ба матн табдил дода натавонистам.",
+        "aud_big": "Аудио аз 19 МБ калон аст.",
+        "aud_empty": "Дар аудио гап ёфт нашуд.",
+        "aud_login": "Барои табдил ба матн ворид шавед.",
+        "att_camera": "Камера",
+        "att_gallery": "Галерея",
+        "att_file": "Файл",
+        "att_add": "Илова ({})",
         "al_set": "Инҳоро ман танзим кардам:",
         "al_none_set": "Ман ягон будилник ё таймер танзим накардаам.",
         "al_timer": "таймер {d} (боқӣ {r})",
@@ -981,6 +992,16 @@ TEXTS = {
         "cancel_sent": "Запрос на отмену отправлен в приложение «Часы». Если оно не поддерживает отмену, отмените в самих часах.",
         "cancel_torch": "Фонарик выключен.",
         "cancel_none": "Нечего отменять.",
+        "aud_text": "Текст",
+        "aud_head": "Текст аудио:",
+        "aud_fail": "Не удалось открыть аудио или перевести его в текст.",
+        "aud_big": "Аудио больше 19 МБ.",
+        "aud_empty": "В аудио не найдено речи.",
+        "aud_login": "Войдите, чтобы перевести в текст.",
+        "att_camera": "Камера",
+        "att_gallery": "Галерея",
+        "att_file": "Файл",
+        "att_add": "Добавить ({})",
         "al_set": "Это поставил я:",
         "al_none_set": "Я не ставил ни будильников, ни таймеров.",
         "al_timer": "таймер {d} (осталось {r})",
@@ -1362,6 +1383,16 @@ TEXTS = {
         "cancel_sent": "A cancel request was sent to the Clock app. If it does not support cancelling, cancel in the clock itself.",
         "cancel_torch": "The torch is off.",
         "cancel_none": "Nothing to cancel.",
+        "aud_text": "Text",
+        "aud_head": "Audio text:",
+        "aud_fail": "Could not play the audio or turn it into text.",
+        "aud_big": "The audio is larger than 19 MB.",
+        "aud_empty": "No speech found in the audio.",
+        "aud_login": "Sign in to turn audio into text.",
+        "att_camera": "Camera",
+        "att_gallery": "Gallery",
+        "att_file": "File",
+        "att_add": "Add ({})",
         "al_set": "These I set:",
         "al_none_set": "I have not set any alarm or timer.",
         "al_timer": "timer {d} ({r} left)",
@@ -5017,6 +5048,8 @@ def icon_texture(kind):
         buf[3::4] = alpha
         tex = Texture.create(size=(ICON_SIZE, ICON_SIZE), colorfmt="rgba")
         tex.blit_buffer(bytes(buf), colorfmt="rgba", bufferfmt="ubyte")
+        if kind in ICON_EXTRA:                       # these masks were drawn top row first: turn them the right way up
+            tex.flip_vertical()
         tex.mag_filter = "linear"
         tex.min_filter = "linear"
     except Exception:
@@ -6437,15 +6470,61 @@ class IconRow(FrostButton):
         with self.canvas.after:
             self._ic_col = Color(*icon_rgba)
             self._ic = Rectangle(texture=icon_texture(icon), size=(dp(24), dp(24)))
-            self._ch_col = Color(icon_rgba[0], icon_rgba[1], icon_rgba[2], 0.45)
-            self._ch = Rectangle(texture=icon_texture("chevron"), size=(dp(18), dp(18))) if chevron else None
-        self.bind(pos=self._place, size=self._place)
-        self._place()
+            self._ch_col = Color(icon_rgba[0], icon_rgba[1], icon_rgba[2], 0.55)
+            self._ch = Line(points=[0, 0, 0, 0, 0, 0], width=dp(1.6), cap="round", joint="round") if chevron else None
+        self.bind(pos=self._place_icons, size=self._place_icons)
+        self._place_icons()
+        for delay in (0.05, 0.3, 0.9):
+            Clock.schedule_once(self._place_icons, delay)
 
-    def _place(self, *_):
+    def _place_icons(self, *_):
         self._ic.pos = (self.x + dp(14), self.center_y - dp(12))
         if self._ch is not None:
-            self._ch.pos = (self.right - dp(32), self.center_y - dp(9))
+            cx, cy, u = self.right - dp(22), self.center_y, dp(5)
+            self._ch.points = [cx - u * 0.6, cy + u, cx + u * 0.6, cy, cx - u * 0.6, cy - u]
+
+
+class AudioCard(BoxLayout):
+    """A sent audio file in the chat: play / pause, name, time, a thin progress line and a 'to text' button."""
+
+    def __init__(self, app, path, tint, text_color, **kwargs):
+        super().__init__(orientation="horizontal", size_hint_y=None, height=dp(60), spacing=dp(8),
+                         padding=[dp(8), dp(6), dp(8), dp(6)], **kwargs)
+        self.app, self.path, self.frac = app, path, 0.0
+        frost(self, 16, tint, 0.14, 0.34)
+        self.btn = IconButton(kind="play", tint=tint, alpha=0.34, radius=22, icon_rgba=(1, 1, 1, 0.95), size_hint=(None, None),
+                              size=(dp(46), dp(46)), pos_hint={"center_y": 0.5})
+        self.btn.bind(on_release=lambda *_: app.audio_toggle(self))
+        col = BoxLayout(orientation="vertical", spacing=dp(1))
+        name = os.path.basename(path).split("__", 1)[-1]
+        self.name = make_label(name, 13, text_color, True, halign="left", shorten=True, shorten_from="right")
+        self.name.bind(size=lambda w, sz: setattr(w, "text_size", (sz[0], None)))
+        self.time = make_label("0:00", 11, "#9FB4D4", False, halign="left")
+        self.time.bind(size=lambda w, sz: setattr(w, "text_size", (sz[0], None)))
+        col.add_widget(self.name)
+        col.add_widget(self.time)
+        self.to_text = FrostButton(tint=tint, alpha=0.14, radius=14, text=app.t("aud_text"), font_size=dp(12), color=hex_color(THEMES[app.theme_index]["text"]),
+                                   halign="center", size_hint=(None, None), size=(dp(64), dp(36)), pos_hint={"center_y": 0.5})
+        self.to_text.bind(on_release=lambda *_: app.audio_transcribe(self))
+        self.add_widget(self.btn)
+        self.add_widget(col)
+        self.add_widget(self.to_text)
+        with self.canvas.after:
+            self._lc = Color(tint[0], tint[1], tint[2], 0.9)
+            self._line = Line(points=[0, 0, 0, 0], width=dp(1.6), cap="round")
+        self.bind(pos=self._place, size=self._place)
+
+    def _place(self, *_):
+        x0, x1, y = self.x + dp(14), self.right - dp(14), self.y + dp(4)
+        self._line.points = [x0, y, x0 + max(0.0, (x1 - x0) * self.frac), y] if self.frac > 0 else [0, 0, 0, 0]
+
+    def set_state(self, playing, frac=None, time_text=None):
+        self.btn.set_kind("pause" if playing else "play")
+        if frac is not None:
+            self.frac = max(0.0, min(1.0, frac))
+            self._place()
+        if time_text is not None:
+            self.time.text = time_text
 
 
 class IconBadge(Widget):
@@ -6484,6 +6563,94 @@ class StatusPill(Label):
             Color(rgb[0], rgb[1], rgb[2], 0.94)
             self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(15)])
         self.bind(pos=lambda *_: setattr(self._bg, "pos", self.pos), size=lambda *_: setattr(self._bg, "size", self.size))
+
+
+class MediaTile(ButtonBehavior, FloatLayout):
+    """A square tile: a picture, a video (with a play mark and length), a file (type + name), an audio file, or the camera button.
+    Used in the attach panel (can be selected), above the field before sending, and in the chat after sending."""
+
+    def __init__(self, side, tint=(0.45, 0.65, 1.0), icon=None, label="", **kwargs):
+        super().__init__(size_hint=(None, None), size=(side, side), **kwargs)
+        self.tint = tint
+        self.selected = False
+        self._img = None
+        self._play = None
+        with self.canvas.before:
+            Color(tint[0], tint[1], tint[2], 0.16)
+            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
+        with self.canvas.after:
+            self._shade_c = Color(0, 0, 0, 0)
+            self._shade = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
+            self._ring_c = Color(tint[0], tint[1], tint[2], 0)
+            self._ring = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(12)), width=dp(2))
+            self._dot_c = Color(tint[0], tint[1], tint[2], 0)
+            self._dot = Ellipse(pos=self.pos, size=(dp(22), dp(22)))
+            self._chk_c = Color(1, 1, 1, 0)
+            self._chk = Line(points=[0, 0, 0, 0, 0, 0], width=dp(1.8), cap="round", joint="round")
+            self._pl_c = Color(1, 1, 1, 0)
+            self._pl = Triangle(points=[0, 0, 0, 0, 0, 0])
+            self._pd_c = Color(0, 0, 0, 0)
+            self._ic_c = Color(1, 1, 1, 0.92 if icon else 0)
+            self._ic = Rectangle(texture=icon_texture(icon) if icon else None, size=(dp(30), dp(30)))
+        self._text = None
+        if label:
+            self.set_text(label)
+        self.bind(pos=self._sync, size=self._sync)
+        self._sync()
+
+    def set_text(self, text, size=11):
+        if self._text is None:
+            self._text = make_label(text, size, "#FFFFFF", True, size_hint=(1, None), height=dp(22), pos_hint={"x": 0, "y": 0.02},
+                                    shorten=True, shorten_from="right")
+            self._text.bind(size=lambda w, sz: setattr(w, "text_size", (sz[0] - dp(8), None)))
+            self.add_widget(self._text)
+        else:
+            self._text.text = text
+
+    def set_center(self, text):
+        lab = make_label(text, 15, "#FFFFFF", True, size_hint=(1, None), height=dp(28), pos_hint={"x": 0, "center_y": 0.58})
+        self.add_widget(lab)
+
+    def set_image(self, path):
+        try:
+            from kivy.uix.image import Image as KivyImage
+            if self._img is None:
+                self._img = KivyImage(source=path, fit_mode="cover", size_hint=(1, 1), pos_hint={"x": 0, "y": 0}, nocache=True)
+                self.add_widget(self._img, index=len(self.children))
+            else:
+                self._img.source = path
+            self._ic_c.a = 0
+            self._shade_c.a = 0.10
+        except Exception:
+            pass
+
+    def set_video(self, length=""):
+        self._play = True
+        self._pl_c.a = 0.95
+        if length:
+            self.set_text(length)
+        self._sync()
+
+    def set_selected(self, on):
+        self.selected = bool(on)
+        self._ring_c.a = 1 if on else 0
+        self._dot_c.a = 1 if on else 0
+        self._chk_c.a = 1 if on else 0
+        self._shade_c.a = 0.30 if on else (0.10 if self._img is not None else 0)
+        self._sync()
+
+    def _sync(self, *_):
+        x, y, w, h = self.x, self.y, self.width, self.height
+        self._bg.pos, self._bg.size = (x, y), (w, h)
+        self._shade.pos, self._shade.size = (x, y), (w, h)
+        self._ring.rounded_rectangle = (x, y, w, h, dp(12))
+        self._dot.pos = (x + w - dp(27), y + h - dp(27))
+        cx, cy = x + w - dp(16), y + h - dp(16)
+        self._chk.points = [cx - dp(4.5), cy, cx - dp(1.2), cy - dp(3.4), cx + dp(4.5), cy + dp(3.6)]
+        self._ic.pos = (x + (w - dp(30)) / 2.0, y + (h - dp(30)) / 2.0 + (dp(6) if self._text is not None else 0))
+        if self._play:
+            mx, my, r = x + w / 2.0, y + h / 2.0 + dp(4), dp(11)
+            self._pl.points = [mx - r * 0.55, my + r, mx - r * 0.55, my - r, mx + r, my]
 
 
 class IconButton(FrostButton):
@@ -6543,6 +6710,9 @@ class IconButton(FrostButton):
                 items.append(Line(points=[cx - u * 0.95, cy + u * 0.55, cx + u * 0.95, cy + u * 0.55], width=w, cap="round"))
                 items.append(Line(points=[cx - u * 0.3, cy + u * 0.55, cx - u * 0.3, cy + u * 0.85, cx + u * 0.3, cy + u * 0.85, cx + u * 0.3, cy + u * 0.55], width=w, cap="round", joint="round"))
                 items.append(Line(points=[cx - u * 0.7, cy + u * 0.4, cx - u * 0.55, cy - u * 0.9, cx + u * 0.55, cy - u * 0.9, cx + u * 0.7, cy + u * 0.4], width=w, cap="round", joint="round"))
+            elif kind == "pause":
+                items.append(Line(points=[cx - u * 0.45, cy + u * 0.8, cx - u * 0.45, cy - u * 0.8], width=w * 1.5, cap="round"))
+                items.append(Line(points=[cx + u * 0.45, cy + u * 0.8, cx + u * 0.45, cy - u * 0.8], width=w * 1.5, cap="round"))
             elif kind == "play":
                 items.append(Triangle(points=[cx - u * 0.55, cy + u * 0.85, cx - u * 0.55, cy - u * 0.85, cx + u * 0.9, cy]))
             elif kind == "apps":
@@ -7123,11 +7293,35 @@ class EmojiInput(TextInput):
             pass
         return super().insert_text(substring, from_undo=from_undo)
 
+    def _blank_one(self):
+        """Blank that takes the place of one emoji: ordinary spaces, as wide as the picture drawn over them."""
+        key = round(float(self.font_size), 1)
+        if getattr(self, "_blank_key", None) != key:
+            try:
+                sw = float(self._label_cached.get_extents(" ")[0]) or self.font_size * 0.3
+            except Exception:
+                sw = self.font_size * 0.3
+            self._blank_n = max(1, int(round(self.font_size * 1.1 / max(1.0, sw))))
+            self._blank_key = key
+        return " " * self._blank_n
+
+    def _blank_emoji(self, text):
+        if EMOJI_OVERLAY and emoji_pack()[0] and any(ord(ch) >= 0x203C for ch in text):
+            blank = self._blank_one()
+            return "".join(blank if k == "e" else v for k, v in split_emoji(text))
+        return text
+
+    def _get_text_width(self, text, tab_width, _label_cached):
+        try:
+            text = self._blank_emoji(text)
+        except Exception:
+            pass
+        return super()._get_text_width(text, tab_width, _label_cached)
+
     def _create_line_label(self, text, hint=False):
         """Draw the plain glyph of every emoji as blank space: only the coloured picture is visible."""
         try:
-            if EMOJI_OVERLAY and emoji_pack()[0] and any(ord(ch) >= 0x203C for ch in text):
-                text = "".join("\u2003" * len(v) if k == "e" else v for k, v in split_emoji(text))
+            text = self._blank_emoji(text)
         except Exception:
             pass
         return super()._create_line_label(text, hint)
@@ -7159,7 +7353,7 @@ class EmojiInput(TextInput):
                             before += value
                             continue
                         tex = emoji_texture(value)
-                        blank = "\u2003" * len(value)           # what is really drawn in the field for this emoji
+                        blank = self._blank_one()               # what is really drawn in the field for this emoji
                         start = label.get_extents(before)[0] if before else 0
                         width = label.get_extents(blank)[0]
                         before += blank
@@ -8055,11 +8249,13 @@ class JarvisApp(App):
         self.attach_btn = Button(text="+", font_size=dp(28), size_hint_x=None, width=dp(36),
                                  background_normal="", background_color=(0, 0, 0, 0),
                                  color=hex_color(theme["accent"]))
-        self.attach_btn.bind(on_release=self.pick_attachment)
-        self.stop_speech_btn = Button(text="\u00d7", font_size=dp(30), size_hint_x=None, width=dp(32),
-                                      background_normal="", background_color=(0, 0, 0, 0),
-                                      color=hex_color(theme["text"]))
+        self.attach_btn.bind(on_release=self.toggle_attach_panel)
+        self.stop_speech_btn = IconButton(kind="cross", tint=tint, alpha=0.14, radius=14, icon_rgba=hex_color(theme["text"]),
+                                          size_hint_x=None, width=dp(40))
         self.stop_speech_btn.bind(on_release=self.stop_speaking)
+        self.stop_speech_btn.opacity = 0
+        self.stop_speech_btn.disabled = True
+        Clock.schedule_interval(self._sync_stop_btn, 0.4)
         self.action_btn = SendWaveButton(tint_rgb=tint, icon_rgba=hex_color(theme["text"]),
                                        size_hint_x=None, width=dp(52))
         self.action_btn.bind(on_release=self.on_action)
@@ -8090,6 +8286,15 @@ class JarvisApp(App):
         bottom.bind(minimum_height=bottom.setter("height"))
         bottom.add_widget(self.attach_strip)
         bottom.add_widget(self.sugg_strip)
+        self.attach_panel = BoxLayout(orientation="vertical", size_hint_y=None, height=0, opacity=0,
+                                      padding=[dp(10), dp(8), dp(10), dp(8)], spacing=dp(6))
+        with self.attach_panel.canvas.before:
+            Color(*hex_color(theme["background"])[:3], 0.94)
+            _pb = RoundedRectangle(pos=self.attach_panel.pos, size=self.attach_panel.size, radius=[dp(22)])
+        self.attach_panel.bind(pos=lambda w, v: setattr(_pb, "pos", v), size=lambda w, v: setattr(_pb, "size", v))
+        frost(self.attach_panel, 22, tint, 0.10, 0.34)
+        self._attach_open = False
+        bottom.add_widget(self.attach_panel)
         bottom.add_widget(command_row)
         footer = make_label(self.t("online") + "  \u2022  " + THEMES[self.theme_index]["name"],
                             9, (*hex_color(theme["text"])[:3], 0.7), False,
@@ -8265,14 +8470,59 @@ class JarvisApp(App):
                 media_items = []
         if not user_media and not rich:
             bubble.add_widget(label)
-        for kind_m, path_m in media_items:
+        if user_media:
+            try:
+                paths = [pm.strip() for km, pm in media_items if os.path.isfile(pm.strip())]
+                squares = [pm for pm in paths if self._kind_of_path(pm) != "audio"]
+                for pm in paths:
+                    if self._kind_of_path(pm) == "audio":
+                        bubble.add_widget(AudioCard(self, pm, accent, hex_color(theme["text"])))
+                if squares:
+                    cols = 1 if len(squares) == 1 else 2 if len(squares) in (2, 4) else 3
+                    grid = GridLayout(cols=cols, spacing=dp(6), size_hint_y=None)
+                    tiles = [self._media_tile(dp(90), pm, "", self.open_media) for pm in squares]
+                    for tl in tiles:
+                        grid.add_widget(tl)
+
+                    def fit_grid(inst, width, tl_list=tiles, c=cols):
+                        side = (width - dp(6) * (c - 1)) / float(c)
+                        side = max(dp(60), min(side, dp(210) if c == 1 else dp(150)))
+                        for tl in tl_list:
+                            tl.size = (side, side)
+                        rows = int(math.ceil(len(tl_list) / float(c)))
+                        inst.height = rows * side + (rows - 1) * dp(6)
+                        inst.cols = c
+                        inst.size_hint_x = None
+                        inst.width = c * side + (c - 1) * dp(6)
+                    grid.bind(width=fit_grid)
+                    holder = AnchorLayout(anchor_x="right", size_hint_y=None, height=dp(100))
+                    holder.add_widget(grid)
+                    bubble.add_widget(holder)
+                    bubble.bind(width=lambda inst, w, g=grid, h=holder, f=fit_grid: (f(g, w - dp(24)), setattr(h, "height", g.height)))
+                    fit_grid(grid, dp(270))
+                    holder.height = grid.height
+                state = getattr(self, "_delivery", {}).get(paths[-1]) if paths else None
+                if state:
+                    dl = make_label("", 11, "#8FA6C8", False, size_hint_y=None, height=dp(16), halign="right")
+                    dl.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+                    for pm in paths:
+                        self._delivery_labels[pm] = dl
+                    self._paint_delivery(dl, state)
+                    if state == "sending":
+                        bar = IndeterminateBar(color=accent)
+                        self._delivery_bars[paths[-1]] = bar
+                        bubble.add_widget(bar)
+                    bubble.add_widget(dl)
+            except Exception:
+                save_crash("Media bubble failed:\n" + traceback.format_exc())
+        else:
+          for kind_m, path_m in media_items:
             path_m = path_m.strip()
             if not os.path.isfile(path_m):
                 continue
             try:
                 if kind_m == "img":
                     from kivy.uix.image import Image as KivyImage
-                    from kivy.uix.behaviors import ButtonBehavior
 
                     class TapImage(ButtonBehavior, KivyImage):
                         pass
@@ -8285,28 +8535,6 @@ class JarvisApp(App):
                                            size_hint_y=None, height=dp(40), font_size=dp(13), color=hex_color(theme["text"]))
                     open_btn.bind(on_release=lambda btn, pth=path_m: self.open_media(pth))
                     bubble.add_widget(open_btn)
-                btn_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(38), spacing=dp(6))
-                if kind_m == "img":
-                    view_btn = GlassButton(text=self.t("open_btn"), tint=accent, active=False, radius=10, font_size=dp(13),
-                                           color=hex_color(theme["text"]))
-                    view_btn.bind(on_release=lambda btn, pth=path_m: self.open_media(pth))
-                    btn_row.add_widget(view_btn)
-                save_btn = GlassButton(text=self.t("save_btn"), tint=accent, active=False, radius=10, font_size=dp(13),
-                                       color=hex_color(theme["text"]))
-                save_btn.bind(on_release=lambda btn, pth=path_m: self.save_media(pth))
-                btn_row.add_widget(save_btn)
-                bubble.add_widget(btn_row)
-                state = getattr(self, "_delivery", {}).get(path_m)
-                if user and state:
-                    dl = make_label("", 11, "#8FA6C8", False, size_hint_y=None, height=dp(16), halign="right")
-                    dl.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
-                    self._delivery_labels[path_m] = dl
-                    self._paint_delivery(dl, state)
-                    if state == "sending":
-                        bar = IndeterminateBar(color=accent)
-                        self._delivery_bars[path_m] = bar
-                        bubble.add_widget(bar)
-                    bubble.add_widget(dl)
             except Exception:
                 save_crash("Media bubble failed:\n" + traceback.format_exc())
         if user_media and strip_media(text):
@@ -9866,7 +10094,187 @@ class JarvisApp(App):
                                      font_size=dp(16), halign="center", size_hint_y=None, height=dp(52),
                                      color=(1, 1, 1, 1), on_release=done))
 
-    def pick_attachment(self, *_):
+    # ---------------------------------------------------------------- attach panel (+): camera, gallery, file
+    def _media_perm(self):
+        try:
+            from jnius import autoclass
+            from android.permissions import check_permission
+            sdk = int(autoclass("android.os.Build$VERSION").SDK_INT)
+            perms = (["android.permission.READ_MEDIA_IMAGES", "android.permission.READ_MEDIA_VIDEO"] if sdk >= 33
+                     else ["android.permission.READ_EXTERNAL_STORAGE"])
+            return perms, all(check_permission(x) for x in perms)
+        except Exception:
+            return [], False
+
+    def toggle_attach_panel(self, *_):
+        if getattr(self, "_attach_open", False):
+            self.close_attach_panel()
+        else:
+            self.open_attach_panel()
+
+    def close_attach_panel(self, *_):
+        panel = getattr(self, "attach_panel", None)
+        self._attach_open = False
+        self._attach_gen = getattr(self, "_attach_gen", 0) + 1
+        if panel is not None:
+            panel.clear_widgets()
+            panel.height = 0
+            panel.opacity = 0
+        self._attach_sel = []
+
+    def open_attach_panel(self):
+        panel = getattr(self, "attach_panel", None)
+        if panel is None:
+            self.pick_attachment()
+            return
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        self._attach_open = True
+        self._attach_sel = []
+        self._attach_tiles = {}
+        self._attach_gen = getattr(self, "_attach_gen", 0) + 1
+        gen = self._attach_gen
+        panel.clear_widgets()
+        panel.height = dp(188)
+        panel.opacity = 1
+        side = dp(84)
+        scroll = ScrollView(do_scroll_y=False, size_hint_y=None, height=side + dp(4), bar_width=0)
+        row = BoxLayout(orientation="horizontal", size_hint=(None, 1), spacing=dp(8))
+        row.bind(minimum_width=row.setter("width"))
+        self._attach_row = row
+        cam = MediaTile(side, tint=tint, icon="camera", label=self.t("att_camera"))
+        cam.bind(on_release=lambda *_: (self.close_attach_panel(), self.open_camera_ask()))
+        row.add_widget(cam)
+        perms, ok = self._media_perm()
+        if not ok:
+            gal = MediaTile(side, tint=tint, icon="grid", label=self.t("att_gallery"))
+
+            def ask(*_):
+                try:
+                    from android.permissions import request_permissions
+
+                    def done(p, g):
+                        Clock.schedule_once(lambda dt: (self.open_attach_panel() if getattr(self, "_attach_open", False) else None), 0.3)
+                    request_permissions(perms, done)
+                except Exception:
+                    self.close_attach_panel()
+                    self.pick_attachment(media=True)
+            gal.bind(on_release=ask)
+            row.add_widget(gal)
+        scroll.add_widget(row)
+        panel.add_widget(scroll)
+        bar = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(46), spacing=dp(8))
+        file_btn = IconRow(icon="doc", chevron=False, icon_rgba=(1, 1, 1, 0.92), tint=tint, alpha=0.12, font_size=dp(15),
+                           color=hex_color(theme["text"]), text=self.t("att_file"))
+        file_btn.bind(on_release=lambda *_: (self.close_attach_panel(), self.pick_attachment()))
+        self._attach_add = FrostButton(tint=tint, alpha=0.30, radius=16, text=self.t("att_add").format(0), font_size=dp(15),
+                                       color=hex_color(theme["text"]), halign="center")
+        self._attach_add.disabled = True
+        self._attach_add.bind(on_release=lambda *_: self._attach_add_selected())
+        bar.add_widget(file_btn)
+        bar.add_widget(self._attach_add)
+        panel.add_widget(bar)
+        if ok:
+            threading.Thread(target=self._attach_load_gallery, args=(gen,), daemon=True).start()
+
+    def _attach_toggle(self, uri, tile):
+        sel = self._attach_sel
+        room = 8 - len(getattr(self, "_pending_list", None) or [])
+        if uri in sel:
+            sel.remove(uri)
+            tile.set_selected(False)
+        elif len(sel) < room:
+            sel.append(uri)
+            tile.set_selected(True)
+        else:
+            self._media_notice(self.t("attach_max"))
+        n = len(sel)
+        try:
+            self._attach_add.text = self.t("att_add").format(n)
+            self._attach_add.disabled = n == 0
+        except Exception:
+            pass
+
+    def _attach_add_tile(self, gen, uri, thumb, is_video, length):
+        if gen != getattr(self, "_attach_gen", -1) or not getattr(self, "_attach_open", False):
+            return
+        theme = THEMES[self.theme_index]
+        tile = MediaTile(dp(84), tint=hex_color(theme["accent"])[:3])
+        tile.set_image(thumb)
+        if is_video:
+            tile.set_video(length)
+        tile.bind(on_release=lambda t, u=uri: self._attach_toggle(u, t))
+        self._attach_row.add_widget(tile)
+
+    def _attach_load_gallery(self, gen):
+        """Background thread: the newest pictures and videos of the phone as small thumbnails."""
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            resolver = activity.getContentResolver()
+            MediaStore = autoclass("android.provider.MediaStore")
+            ContentUris = autoclass("android.content.ContentUris")
+            Compress = autoclass("android.graphics.Bitmap$CompressFormat")
+            FileOutputStream = autoclass("java.io.FileOutputStream")
+            Size = autoclass("android.util.Size")
+            sdk = int(autoclass("android.os.Build$VERSION").SDK_INT)
+            files = MediaStore.Files.getContentUri("external")
+            cur = resolver.query(files, ["_id", "media_type", "duration"], "media_type IN (1,3)", None, "date_added DESC")
+            cache = os.path.join(self.user_data_dir, "thumbs")
+            os.makedirs(cache, exist_ok=True)
+            count = 0
+            while cur is not None and cur.moveToNext() and count < 36:
+                if gen != getattr(self, "_attach_gen", -1):
+                    break
+                try:
+                    mid, mtype, dur = int(cur.getLong(0)), int(cur.getInt(1)), int(cur.getLong(2) or 0)
+                    is_video = mtype == 3
+                    base = (MediaStore.Video.Media if is_video else MediaStore.Images.Media).EXTERNAL_CONTENT_URI
+                    uri = ContentUris.withAppendedId(base, mid)
+                    bmp = None
+                    if sdk >= 29:
+                        bmp = resolver.loadThumbnail(uri, Size(256, 256), None)
+                    else:
+                        th = MediaStore.Video.Thumbnails if is_video else MediaStore.Images.Thumbnails
+                        bmp = th.getThumbnail(resolver, mid, 1, None)
+                    if bmp is None:
+                        continue
+                    path = os.path.join(cache, ("v" if is_video else "i") + str(mid) + ".jpg")
+                    out = FileOutputStream(path)
+                    bmp.compress(Compress.JPEG, 82, out)
+                    out.close()
+                    length = ("%d:%02d" % (dur // 60000, (dur // 1000) % 60)) if is_video and dur else ""
+                    Clock.schedule_once(lambda dt, u=str(uri.toString()), pth=path, v=is_video, ln=length:
+                                        self._attach_add_tile(gen, u, pth, v, ln), 0)
+                    count += 1
+                except Exception:
+                    continue
+            if cur is not None:
+                cur.close()
+        except Exception:
+            save_crash("Gallery load failed:\n" + traceback.format_exc())
+
+    def _attach_add_selected(self):
+        sel = list(getattr(self, "_attach_sel", []))
+        self.close_attach_panel()
+        if not sel:
+            return
+
+        def job():
+            from jnius import autoclass
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            Uri = autoclass("android.net.Uri")
+            for u in sel:
+                try:
+                    item = self._read_picked(resolver, Uri.parse(u))
+                    Clock.schedule_once(lambda dt, it=item: self._attachment_ui(*it), 0)
+                except Exception as exc:
+                    save_crash("Gallery item failed:\n" + traceback.format_exc())
+                    message = self.friendly_error(exc)
+                    Clock.schedule_once(lambda dt, m=message: self.show_response(self.t("file_read_failed").format(m)), 0)
+        threading.Thread(target=job, daemon=True).start()
+
+    def pick_attachment(self, *_, media=False):
         self._external()
         """Open Android document picker and send the selected image/text file to JARVIS."""
         try:
@@ -9876,6 +10284,8 @@ class JarvisApp(App):
             intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.setType("*/*")
+            if media:
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, ["image/*", "video/*"])
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             self._attachment_pending = True
@@ -9961,11 +10371,7 @@ class JarvisApp(App):
             if not raw:
                 raise RuntimeError("empty photo")
 
-            def go(dt):
-                self._attachment_ui("photo_%d.jpg" % int(time.time()), "image/jpeg", raw)
-                self.command_input.text = self.t("cam_prompt")
-                Clock.schedule_once(lambda d2: self.send_command(), 0.25)
-            Clock.schedule_once(go, 0)
+            Clock.schedule_once(lambda dt: self._attachment_ui("photo_%d.jpg" % int(time.time()), "image/jpeg", raw), 0)
         except Exception:
             save_crash("Camera result failed:\n" + traceback.format_exc())
             Clock.schedule_once(lambda dt: self.show_response(self.t("cam_failed")), 0)
@@ -10127,6 +10533,225 @@ class JarvisApp(App):
             save_crash("Video frames failed:\n" + traceback.format_exc())
             return b""
 
+    # ---------------------------------------------------------------- media tiles, audio player, audio to text
+    def _kind_of_path(self, path, mime=""):
+        low = str(path).lower()
+        mime = str(mime or "")
+        if mime.startswith("image/") or low.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic")):
+            return "image"
+        if mime.startswith("video/") or low.endswith((".mp4", ".3gp", ".mkv", ".webm", ".mov", ".avi")):
+            return "video"
+        if mime.startswith("audio/") or low.endswith((".mp3", ".m4a", ".wav", ".ogg", ".oga", ".aac", ".flac", ".opus", ".amr")):
+            return "audio"
+        return "file"
+
+    def _media_tile(self, side, path, mime="", tap=None):
+        """One square for any file: picture, video (poster + play mark), audio, or a file with its type."""
+        theme = THEMES[self.theme_index]
+        accent = hex_color(theme["accent"])[:3]
+        kind = self._kind_of_path(path, mime)
+        name = os.path.basename(path).split("__", 1)[-1]
+        if kind == "image":
+            tile = MediaTile(side, tint=accent)
+            tile.set_image(path)
+        elif kind == "video":
+            tile = MediaTile(side, tint=accent)
+            tile.set_video("")
+            self._video_poster_async(path, tile)
+        elif kind == "audio":
+            tile = MediaTile(side, tint=accent, icon="speaker", label=name)
+        else:
+            tile = MediaTile(side, tint=accent, label=name)
+            tile.set_center((os.path.splitext(name)[1][1:5] or "FILE").upper())
+        if tap is not None:
+            tile.bind(on_release=lambda *_: tap(path))
+        return tile
+
+    def _video_poster_async(self, path, tile):
+        def job():
+            try:
+                import hashlib
+                from jnius import autoclass
+                cache = os.path.join(self.user_data_dir, "thumbs")
+                os.makedirs(cache, exist_ok=True)
+                key = hashlib.md5(path.encode("utf-8")).hexdigest()[:12]
+                out_path, meta = os.path.join(cache, "vp_" + key + ".jpg"), os.path.join(cache, "vp_" + key + ".txt")
+                length = ""
+                if not os.path.exists(out_path):
+                    Retriever = autoclass("android.media.MediaMetadataRetriever")
+                    Compress = autoclass("android.graphics.Bitmap$CompressFormat")
+                    r = Retriever()
+                    r.setDataSource(path)
+                    dur = int(r.extractMetadata(Retriever.METADATA_KEY_DURATION) or 0)
+                    frame = r.getFrameAtTime(min(1000000, dur * 500) if dur else 0, Retriever.OPTION_CLOSEST_SYNC)
+                    r.release()
+                    if frame is None:
+                        return
+                    fos = autoclass("java.io.FileOutputStream")(out_path)
+                    frame.compress(Compress.JPEG, 80, fos)
+                    fos.close()
+                    length = "%d:%02d" % (dur // 60000, (dur // 1000) % 60) if dur else ""
+                    with open(meta, "w") as handle:
+                        handle.write(length)
+                else:
+                    try:
+                        length = open(meta).read().strip()
+                    except Exception:
+                        length = ""
+
+                def apply(dt):
+                    tile.set_image(out_path)
+                    tile.set_video(length)
+                Clock.schedule_once(apply, 0)
+            except Exception:
+                pass
+        threading.Thread(target=job, daemon=True).start()
+
+    def _fmt_ms(self, ms):
+        ms = max(0, int(ms))
+        return "%d:%02d" % (ms // 60000, (ms // 1000) % 60)
+
+    def audio_toggle(self, card):
+        """Play / pause a sent audio file with the phone's own player."""
+        try:
+            from jnius import autoclass
+            cur = getattr(self, "_aplayer", None)
+            if cur is not None and getattr(self, "_acard", None) is card:
+                if cur.isPlaying():
+                    cur.pause()
+                    card.set_state(False)
+                else:
+                    cur.start()
+                    card.set_state(True)
+                    self._audio_tick_start()
+                return
+            self.audio_stop()
+            self.stop_speaking()
+            mp = autoclass("android.media.MediaPlayer")()
+            mp.setDataSource(card.path)
+            mp.prepare()
+            mp.start()
+            self._aplayer, self._acard = mp, card
+            card.set_state(True, 0.0, "0:00 / " + self._fmt_ms(mp.getDuration()))
+            self._audio_tick_start()
+        except Exception:
+            save_crash("Audio play failed:\n" + traceback.format_exc())
+            self._media_notice(self.t("aud_fail"))
+
+    def _audio_tick_start(self):
+        ev = getattr(self, "_audio_ev", None)
+        if ev is not None:
+            ev.cancel()
+        self._audio_ev = Clock.schedule_interval(self._audio_tick, 0.25)
+
+    def _audio_tick(self, dt):
+        mp, card = getattr(self, "_aplayer", None), getattr(self, "_acard", None)
+        if mp is None or card is None:
+            return False
+        try:
+            dur, pos = int(mp.getDuration()), int(mp.getCurrentPosition())
+            playing = bool(mp.isPlaying())
+            card.set_state(playing, (pos / float(dur)) if dur else 0.0, self._fmt_ms(pos) + " / " + self._fmt_ms(dur))
+            if not playing and dur and pos >= dur - 300:
+                self.audio_stop()
+                return False
+        except Exception:
+            self.audio_stop()
+            return False
+        return True
+
+    def audio_stop(self):
+        ev = getattr(self, "_audio_ev", None)
+        if ev is not None:
+            ev.cancel()
+            self._audio_ev = None
+        mp, card = getattr(self, "_aplayer", None), getattr(self, "_acard", None)
+        self._aplayer = self._acard = None
+        if mp is not None:
+            try:
+                mp.stop()
+                mp.release()
+            except Exception:
+                pass
+        if card is not None:
+            try:
+                card.set_state(False, 0.0, "0:00")
+            except Exception:
+                pass
+
+    def _transcribe_file(self, path):
+        """Audio file -> text through the server (Whisper, Tajik included). Raises on failure."""
+        import ssl
+        size = os.path.getsize(path)
+        if size > 19 * 1024 * 1024:
+            raise LocalizedError(self.t("aud_big"))
+        with open(path, "rb") as handle:
+            audio = handle.read()
+        name = os.path.basename(path).split("__", 1)[-1].replace('"', "_")
+        low = name.lower()
+        ctype = ("audio/mpeg" if low.endswith(".mp3") else "audio/wav" if low.endswith(".wav") else "audio/ogg" if low.endswith((".ogg", ".oga", ".opus"))
+                 else "audio/flac" if low.endswith(".flac") else "audio/mp4")
+        boundary = "----SAIAudio" + uuid.uuid4().hex
+        body = (("--" + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + name + '"\r\nContent-Type: ' + ctype + "\r\n\r\n").encode("utf-8")
+                + audio + ("\r\n--" + boundary + '\r\nContent-Disposition: form-data; name="language"\r\n\r\n'
+                          + (self.language if self.language in ("tg", "ru", "en") else "tg") + "\r\n--" + boundary + "--\r\n").encode("utf-8"))
+        request = urllib.request.Request(SERVER_BASE + "/transcribe", data=body, method="POST", headers={
+            "Content-Type": "multipart/form-data; boundary=" + boundary, "Authorization": "Bearer " + self.server_token, "Accept": "application/json"})
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            ctx = ssl.create_default_context()
+        with urllib.request.urlopen(request, timeout=120, context=ctx) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        text = str(result.get("text", "")).strip() if isinstance(result, dict) else ""
+        if not text:
+            raise LocalizedError(self.t("aud_empty"))
+        return text
+
+    def audio_transcribe(self, card):
+        """The 'to text' button of an audio card: the text of the recording appears in the chat."""
+        chat_id = self.chats.current_id
+        card.to_text.disabled = True
+        card.to_text.text = "..."
+
+        def job():
+            try:
+                text = self._transcribe_file(card.path)
+                Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", self.t("aud_head") + "\n" + text), 0)
+            except urllib.error.HTTPError as exc:
+                msg = self.t("aud_login") if exc.code in (401, 403) else self.t("aud_fail")
+                Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", msg), 0)
+            except Exception as exc:
+                msg = self.friendly_error(exc)
+                Clock.schedule_once(lambda dt: self.add_chat_message(chat_id, "jarvis", msg), 0)
+            finally:
+                def back(dt):
+                    card.to_text.disabled = False
+                    card.to_text.text = self.t("aud_text")
+                Clock.schedule_once(back, 0)
+        threading.Thread(target=job, daemon=True).start()
+
+    def _audio_to_ai(self, chat_id, att, prompt):
+        """An audio file is sent with the send button: it is turned into text; with an instruction the AI works with the text."""
+        def job():
+            try:
+                text = self._transcribe_file(att["path"])
+            except Exception as exc:
+                msg = self.friendly_error(exc)
+                Clock.schedule_once(lambda dt: (self._set_delivery(att.get("path"), "failed"), self._attachment_answer(chat_id, msg)), 0)
+                return
+
+            def next_step(dt):
+                self._set_delivery(att.get("path"), "sent")
+                self._send_ok()
+                self._attachment_answer(chat_id, self.t("aud_head") + "\n" + text)
+                if prompt:
+                    self.command_input.text = prompt + ":\n" + text
+                    Clock.schedule_once(lambda d2: self.send_command(), 0.4)
+            Clock.schedule_once(next_step, 0)
+        threading.Thread(target=job, daemon=True).start()
+
     def _attachment_ui(self, name, mime, raw, vpath=None, sheet=b""):
         """Kivy thread: picked pictures/files/videos wait above the input field; they go to the AI with the send button."""
         stage = "save"
@@ -10165,48 +10790,49 @@ class JarvisApp(App):
         self._refresh_attach_strip()
         self._sync_action_mode()
 
+    def _attach_remove(self, index):
+        queue = getattr(self, "_pending_list", None) or []
+        if 0 <= index < len(queue):
+            queue.pop(index)
+        self._pending_attachment = queue[0] if queue else None
+        self._refresh_attach_strip()
+        self._sync_action_mode()
+
     def _refresh_attach_strip(self):
-        """The preview row above the input: thumbnail or file type, name, a hint and a remove button."""
+        """The preview row above the input: a small square for every waiting file, each with its own remove button."""
         strip = getattr(self, "attach_strip", None)
         if strip is None:
             return
         strip.clear_widgets()
-        att = getattr(self, "_pending_attachment", None)
-        if not att:
+        queue = getattr(self, "_pending_list", None) or []
+        if not queue:
             strip.height = 0
             strip.opacity = 0
             return
-        theme = THEMES[self.theme_index]
-        tint = hex_color(theme["accent"])[:3]
-        strip.height = dp(68)
+        side = dp(62)
+        strip.height = side + dp(10)
         strip.opacity = 1
-        thumb = None
-        if att["mime"].startswith("image/"):
-            try:
-                from kivy.uix.image import Image as KivyImage
-                thumb = KivyImage(source=att["path"], size_hint=(None, 1), width=dp(56), fit_mode="cover", nocache=True)
-            except Exception:
-                thumb = None
-        if thumb is None:
-            ext = (os.path.splitext(att["name"])[1][1:5] or "FILE").upper()
-            thumb = make_label(ext, 13, theme["accent"], True, size_hint=(None, 1), width=dp(56))
-            frost(thumb, 14, tint, 0.16, 0.4)
-        strip.add_widget(thumb)
-        text = BoxLayout(orientation="vertical", spacing=dp(2))
-        count = len(getattr(self, "_pending_list", None) or [])
-        title = att["name"] if count <= 1 else self.t("attach_many").format(count)
-        text.add_widget(make_label(title, 13, theme["text"], True, halign="left"))
-        text.add_widget(make_label(self.t("attach_ready"), 11, muted(), False, halign="left"))
-        strip.add_widget(text)
-        gone = IconButton(kind="cross", tint=(1.0, 0.42, 0.48), alpha=0.14, radius=16, icon_rgba=hex_color(theme["text"]),
-                          size_hint=(None, None), size=(dp(44), dp(44)), pos_hint={"center_y": 0.5})
-        gone.bind(on_release=self.clear_attachment)
-        strip.add_widget(gone)
+        scroll = ScrollView(do_scroll_y=False, bar_width=0)
+        row = BoxLayout(orientation="horizontal", size_hint=(None, 1), spacing=dp(8), padding=[dp(4), dp(4), dp(4), dp(2)])
+        row.bind(minimum_width=row.setter("width"))
+        for i, att in enumerate(queue):
+            tile = self._media_tile(side, att["path"], att.get("mime", ""))
+            rm = IconButton(kind="cross", tint=(1.0, 0.42, 0.48), alpha=0.85, radius=11, icon_rgba=(1, 1, 1, 1),
+                            size_hint=(None, None), size=(dp(22), dp(22)), pos_hint={"right": 1.0, "top": 1.0})
+            rm.bind(on_release=lambda *_, k=i: self._attach_remove(k))
+            tile.add_widget(rm)
+            row.add_widget(tile)
+        scroll.add_widget(row)
+        strip.add_widget(scroll)
 
     def _process_attachment(self, chat_id, att, prompt, force=None):
         name, mime, raw = att["name"], att["mime"], att["raw"]
         self._last_att = (chat_id, att, prompt)
         self._set_delivery(att.get("path"), "sending")
+        if self._kind_of_path(att.get("path") or name, mime) == "audio" and not force:
+            self._set_busy(self.t("server_thinking"))
+            self._audio_to_ai(chat_id, att, prompt)
+            return
         if mime.startswith("video/"):
             if att.get("sheet"):
                 name, mime, raw = "frames.jpg", "image/jpeg", att["sheet"]
@@ -11598,6 +12224,7 @@ class JarvisApp(App):
         if not command_text and not pending:
             return
         self._chips_hide()
+        self.close_attach_panel()
         self.command_input.text = ""
         self.command_input.clear_native()
         self.ensure_notification_permission()
@@ -12190,6 +12817,19 @@ class JarvisApp(App):
             threading.Thread(target=self._request_server_speech, args=(text, True), daemon=True).start()
         else:
             self._speak_local_fallback(text, force=True)
+
+    def _sync_stop_btn(self, *_):
+        btn = getattr(self, "stop_speech_btn", None)
+        if btn is None:
+            return
+        on = getattr(self, "orb_state", "") == "speaking"
+        btn.disabled = not on
+        btn.opacity = 1 if on else 0
+        try:
+            if btn.parent is not None:
+                btn.parent.width = dp(40) if on else 0       # no empty gap in the bar while nothing is spoken
+        except Exception:
+            pass
 
     def stop_speaking(self, *_):
         self._tajik_gen = getattr(self, "_tajik_gen", 0) + 1      # also stops a running Tajik read-out
@@ -12853,6 +13493,9 @@ class JarvisApp(App):
         if getattr(self, "_art_root", None) is not None:
             self.close_artifact()
             return True
+        if getattr(self, "_attach_open", False):
+            self.close_attach_panel()
+            return True
         for widget in Window.children:          # the first child is the top one
             if isinstance(widget, (GlassSheet, MediaViewer)) and not widget.closing:
                 widget.dismiss()
@@ -12886,8 +13529,8 @@ class JarvisApp(App):
         accent = theme["accent"].lstrip("#")
         body = BoxLayout(orientation="vertical", spacing=dp(8))
         sheet = GlassSheet(self, dotted_name(self.assistant_name or "S.A.I"), body,
-                           anchor="menu", height=590)
-        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat), ("menu_camera", self.open_camera_ask),
+                           anchor="menu", height=520)
+        items = (("menu_chats", self.show_chats), ("menu_new", self.new_chat),
                  ("menu_library", self.show_library), ("menu_settings", self.show_settings), ("menu_about", self.show_about))
         icons = {"menu_chats": "chat", "menu_new": "plus", "menu_camera": "camera", "menu_library": "book", "menu_settings": "gear", "menu_about": "info"}
         for key, action in items:
@@ -13416,6 +14059,11 @@ class JarvisApp(App):
             self.frost_row(content, text, active, callback, height)
 
         if section == "main":
+            main_scroll = ScrollView(do_scroll_x=False, bar_width=0)
+            inner = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
+            inner.bind(minimum_height=inner.setter("height"))
+            main_scroll.add_widget(inner)
+            real_content, content = content, inner
             for key, target in (("sec_profile", "profile"), ("sec_theme", "theme"), ("sec_mode", "mode"),
                                 ("sec_lang", "language"), ("sec_voice", "voice"), ("sec_apps", "apps"), ("sec_security", "security"),
                                 ("sec_messages", "messages"), ("sec_account", "account"), ("sec_diag", "diag")):
@@ -13424,7 +14072,8 @@ class JarvisApp(App):
                 self.icon_row(content, ic, self.t(key), lambda inst, s=target: self.open_section(s), 54)
             self.icon_row(content, "bolt", self.t("live_title"),
                           lambda inst: (self.settings_popup.dismiss(), self.show_response(self.toggle_live())), 54, active=self.live_mode)
-            content.add_widget(Widget())
+            real_content.add_widget(main_scroll)
+            content = real_content
         elif section == "me":
             first, last = profile_person([f["text"] for f in self.profile.facts])
             row = BoxLayout(size_hint_y=None, height=dp(130))
