@@ -486,6 +486,54 @@ def health_providers():
     return {"providers": ai_tools.provider_status()}
 
 
+BACKUP_TABLES = ("users", "chats")
+
+
+def dump_database(conn) -> bytes:
+    """All rows of the account tables as gzip-compressed JSON (used by the weekly backup)."""
+    import gzip
+    tables = {}
+    for table in BACKUP_TABLES:
+        cur = conn.execute("SELECT * FROM " + table)
+        columns = [col.name for col in cur.description]
+        tables[table] = {"columns": columns, "rows": [list(row.values()) if isinstance(row, dict) else list(row) for row in cur.fetchall()]}
+    payload = {"version": 1, "created": datetime.now(timezone.utc).isoformat(), "tables": tables}
+    return gzip.compress(json.dumps(payload, default=str, ensure_ascii=False).encode("utf-8"))
+
+
+@app.get("/health/db")
+def health_db():
+    """Is the database reachable? (no data is shown)"""
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            conn.execute("SELECT 1")
+        return {"db": "ok"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Database check failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is unavailable")
+
+
+@app.get("/admin/backup")
+def admin_backup(request: Request, authorization: str | None = Header(default=None)):
+    """A copy of the accounts and chats for the weekly backup job. Needs BACKUP_TOKEN (at least 32 characters) in the server settings."""
+    expected = os.environ.get("BACKUP_TOKEN", "")
+    given = (authorization or "").removeprefix("Bearer ").strip()
+    check_auth_rate_limit(client_ip(request))
+    if len(expected) < 32 or not given or not hmac.compare_digest(given, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10, row_factory=dict_row) as conn:
+            data = dump_database(conn)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Backup failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Backup is unavailable")
+    return Response(content=data, media_type="application/gzip", headers={"Cache-Control": "no-store"})
+
+
 @app.post("/auth/delete")
 def delete_account(authorization: str | None = Header(default=None)):
     """Permanently delete the signed-in account (required for Google Play)."""
