@@ -1,1 +1,40 @@
+name: Weekly backup
 
+# Every Monday the server's accounts and chats are downloaded, locked with a password and kept as a GitHub artifact for 90 days.
+# Needed in the repository: Settings > Secrets and variables > Actions > New repository secret
+#   BACKUP_TOKEN  - the same value as BACKUP_TOKEN in the Render settings (32+ characters)
+#   BACKUP_KEY    - a long password only you know: it locks the backup file (keep a copy of it safe!)
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the backup from the server
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: |
+          set -e
+          test -n "$BACKUP_TOKEN" || { echo "BACKUP_TOKEN is not set"; exit 1; }
+          curl -sS --fail --retry 6 --retry-delay 20 --retry-all-errors -m 180 \
+            -H "Authorization: Bearer $BACKUP_TOKEN" \
+            https://jarvis-ai-server-3vuo.onrender.com/admin/backup -o backup.json.gz
+          gzip -t backup.json.gz
+          echo "Backup size: $(stat -c %s backup.json.gz) bytes"
+      - name: Lock the file with the password
+        env:
+          BACKUP_KEY: ${{ secrets.BACKUP_KEY }}
+        run: |
+          set -e
+          test -n "$BACKUP_KEY" || { echo "BACKUP_KEY is not set"; exit 1; }
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_KEY -in backup.json.gz -out backup.json.gz.enc
+          rm backup.json.gz
+      - name: Keep it for 90 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: sai-backup-${{ github.run_id }}
+          path: backup.json.gz.enc
+          retention-days: 90
