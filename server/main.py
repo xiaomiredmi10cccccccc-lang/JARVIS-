@@ -147,6 +147,7 @@ def init_database() -> None:
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile TEXT",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS library TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS fish_voice VARCHAR(64)",
                 "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower ON users (LOWER(username))",
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL",
@@ -196,7 +197,7 @@ def verify_token(token: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-QUOTAS = {"chat": 150, "speak": 300, "analyze": 40, "stt": 100, "image": 15, "search": 60, "edit": 30}
+QUOTAS = {"chat": 150, "speak": 300, "analyze": 40, "stt": 100, "image": 15, "search": 60, "edit": 30, "clone": 4}
 usage_counts = defaultdict(int)
 usage_day = {"day": ""}
 
@@ -552,6 +553,9 @@ def delete_account(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=400, detail="Nothing to delete")
     try:
         with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            _row = conn.execute("SELECT fish_voice FROM users WHERE id = %s", (user["id"],)).fetchone()
+            if _row and _row[0]:
+                _fish_delete_voice(_row[0])
             conn.execute("DELETE FROM users WHERE id = %s", (user["id"],))
         _user_cache[user["id"]] = (time.monotonic(), False)
     except HTTPException:
@@ -1266,6 +1270,115 @@ def _fish_synthesize(text: str, voice_id: str | None, language: str) -> bytes:
     return data
 
 
+FISH_CLONE_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _fish_delete_voice(voice_id: str) -> None:
+    """Best effort: remove a cloned voice from Fish Audio (never raises)."""
+    if not voice_id or not _fish_key() or not re.fullmatch(r"[0-9a-fA-F]{8,64}", voice_id):
+        return
+    try:
+        req = urllib.request.Request(FISH_MODEL_URL + "/" + voice_id, method="DELETE", headers={"Authorization": "Bearer " + _fish_key()})
+        urllib.request.urlopen(req, timeout=20).read()
+    except Exception as exc:
+        print("Fish voice delete failed:", type(exc).__name__, str(exc)[:100])
+
+
+def _fish_create_voice(title: str, filename: str, audio: bytes, audio_type: str) -> dict:
+    """Blocking: a private 'fast' voice model made from one recording. Returns the JSON of Fish."""
+    boundary = "----SAI" + os.urandom(12).hex()
+    parts = []
+    for name, value in (("type", "tts"), ("title", title), ("train_mode", "fast"), ("visibility", "private"), ("enhance_audio_quality", "true")):
+        parts.append(("--" + boundary + '\r\nContent-Disposition: form-data; name="' + name + '"\r\n\r\n' + value + "\r\n").encode("utf-8"))
+    parts.append(("--" + boundary + '\r\nContent-Disposition: form-data; name="voices"; filename="' + filename + '"\r\nContent-Type: ' + audio_type + "\r\n\r\n").encode("utf-8"))
+    parts.append(audio)
+    parts.append(("\r\n--" + boundary + "--\r\n").encode("utf-8"))
+    req = urllib.request.Request(FISH_MODEL_URL, data=b"".join(parts), method="POST", headers={
+        "Authorization": "Bearer " + _fish_key(), "Content-Type": "multipart/form-data; boundary=" + boundary})
+    with urllib.request.urlopen(req, timeout=90) as response:
+        return json.loads(response.read(1_000_000).decode("utf-8"))
+
+
+@app.get("/voice/mine")
+def my_voice_get(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            row = conn.execute("SELECT fish_voice FROM users WHERE id = %s", (user["id"],)).fetchone()
+    except Exception as exc:
+        print("My voice read failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"voice_id": (row[0] if row and row[0] else "")}
+
+
+@app.post("/voice/clone")
+async def my_voice_clone(http_request: Request, consent: int = 0, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Makes a PRIVATE voice from the user's own recording (multipart field 'file'). The user must confirm that it is their own voice."""
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    if consent != 1:
+        raise HTTPException(status_code=400, detail="Consent is required: the voice must be your own")
+    if not _fish_key():
+        raise HTTPException(status_code=503, detail="Voice service is not configured")
+    check_quota(user, "clone")
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    if len(body) > FISH_CLONE_MAX_BYTES + 4096:
+        raise HTTPException(status_code=413, detail="Recording is too large")
+    filename, audio, audio_type, _lang = _parse_multipart(content_type, body)
+    if len(audio) > FISH_CLONE_MAX_BYTES or len(audio) < 20000:
+        raise HTTPException(status_code=400, detail="Recording is too short or too large")
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            row = conn.execute("SELECT fish_voice FROM users WHERE id = %s", (user["id"],)).fetchone()
+        old_id = row[0] if row and row[0] else ""
+    except Exception as exc:
+        print("My voice read failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    try:
+        result = await asyncio.wait_for(asyncio.to_thread(_fish_create_voice, "SAI-user-%s" % user["id"], filename, audio, audio_type), timeout=100)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read(300).decode("utf-8", "ignore")
+        except Exception:
+            pass
+        print("Fish voice create failed:", exc.code, detail[:200])
+        raise HTTPException(status_code=502, detail="Voice service refused the recording (%s)" % exc.code)
+    except Exception as exc:
+        print("Fish voice create failed:", type(exc).__name__, str(exc)[:160])
+        raise HTTPException(status_code=502, detail="Voice service is temporarily unavailable")
+    new_id = str(result.get("_id", ""))
+    if not re.fullmatch(r"[0-9a-fA-F]{8,64}", new_id):
+        raise HTTPException(status_code=502, detail="Voice service gave no voice id")
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            conn.execute("UPDATE users SET fish_voice = %s WHERE id = %s", (new_id, user["id"]))
+    except Exception as exc:
+        _fish_delete_voice(new_id)
+        print("My voice save failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    if old_id and old_id != new_id:
+        await asyncio.to_thread(_fish_delete_voice, old_id)
+    return {"voice_id": new_id, "state": str(result.get("state", ""))}
+
+
+@app.delete("/voice/mine")
+async def my_voice_delete(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    user = _chat_user(authorization, x_jarvis_token, http_request)
+    try:
+        with psycopg.connect(database_url(), connect_timeout=10) as conn:
+            row = conn.execute("SELECT fish_voice FROM users WHERE id = %s", (user["id"],)).fetchone()
+            conn.execute("UPDATE users SET fish_voice = NULL WHERE id = %s", (user["id"],))
+    except Exception as exc:
+        print("My voice delete failed:", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    if row and row[0]:
+        await asyncio.to_thread(_fish_delete_voice, row[0])
+    return {"ok": True}
+
+
 @app.get("/voices")
 async def list_voices(http_request: Request, q: str = "", language: str = "", page: int = 1, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Voices from the Fish Audio library for the 'Settings -> Voice' list (title, languages, a short sample)."""
@@ -1745,71 +1858,4 @@ async def image_remix(http_request: Request, x_jarvis_token: str | None = Header
         data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, 1024, 1024)
     except Exception as exc:
         print("Remix generation failed:", type(exc).__name__, str(exc)[:200])
-        raise HTTPException(status_code=502, detail=("Image services failed: " + str(exc))[:300])
-    ext = ".png" if "png" in ctype else ".webp" if "webp" in ctype else ".jpg"
-    safe_summary = base64.b64encode(plan.encode("utf-8")).decode("ascii")
-    return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
-
-
-@app.post("/edit-text")
-async def edit_text(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
-    """Edit a text file, or create a new one when no file is sent. Returns {filename, text}."""
-    user = require_auth(authorization, x_jarvis_token)
-    check_quota(user, "edit")
-    check_rate_limit(rate_key(user, http_request))
-    content_type = http_request.headers.get("content-type", "")
-    if not content_type.lower().startswith("multipart/form-data"):
-        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
-    body = await http_request.body()
-    if len(body) > 2 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Text file is too large (2 MB maximum)")
-    fields = _read_form(content_type, body)
-    instruction = _form_text(fields, "prompt")
-    if not instruction:
-        raise HTTPException(status_code=400, detail="Describe what to do with the file")
-    language = _lang(_form_text(fields, "language", "tg"))
-    filename = os.path.basename((fields.get("file", (b"", "", ""))[1] or "file.txt").replace("\\", "/"))
-    content = ""
-    if "file" in fields and fields["file"][0]:
-        if not filename.lower().endswith(ai_tools.TEXT_EXTENSIONS):
-            raise HTTPException(status_code=415, detail="Only text files can be edited (TXT, MD, CSV, JSON, code, HTML)")
-        try:
-            content = fields["file"][0].decode("utf-8-sig")
-        except UnicodeDecodeError:
-            raise HTTPException(status_code=415, detail="Text file must use UTF-8 encoding")
-    try:
-        name, text, model = await asyncio.to_thread(ai_tools.edit_text_file, filename, content, instruction, language)
-    except ai_tools.NoProvider as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:
-        print("Text edit failed:", type(exc).__name__, str(exc)[:200])
-        raise HTTPException(status_code=502, detail="The AI could not edit the file")
-    return {"filename": name, "text": text, "model": model, "created": not bool(content)}
-
-
-@app.post("/transcribe")
-async def transcribe(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
-    """Transcribe audio recorded within the Android app, including Tajik (tg)."""
-    user = require_auth(authorization, x_jarvis_token)
-    check_quota(user, "stt")
-    check_rate_limit(rate_key(user, http_request))
-    content_type = http_request.headers.get("content-type", "")
-    if not content_type.lower().startswith("multipart/form-data"):
-        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
-    body = await http_request.body()
-    if len(body) > MAX_TRANSCRIPTION_BYTES + 64 * 1024:
-        raise HTTPException(status_code=413, detail="Audio request is too large")
-    filename, audio, audio_type, language = _parse_multipart(content_type, body)
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Groq API key is not configured")
-    try:
-        transcript, model = await asyncio.to_thread(_call_groq_transcription, api_key, filename, audio, audio_type, language)
-        if not transcript:
-            raise HTTPException(status_code=502, detail="Speech was not recognized")
-        return {"text": transcript, "language": language, "model": model}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        print("Groq transcription failed:", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="The speech recognition service could not complete the request")
+        raise HTTPException(stat
