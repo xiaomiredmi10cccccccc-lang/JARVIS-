@@ -903,6 +903,27 @@ TEXTS = {
         "voice_lib_fail": "Рӯйхати овозҳо кушода нашуд. Интернетро санҷед ва боз кӯшиш кунед.",
         "voice_lib_empty": "Дар ин забон овоз ёфт нашуд. Забони дигарро санҷед.",
         "voice_note_fish": "Овози интихобшуда ҳама ҷавобҳоро мехонад. Бе интернет овози телефон ё классикӣ истифода мешавад.",
+        "voice_search_hint": "Ҷустуҷӯи овоз (ном) ва «Enter»",
+        "myvoice_title": "Овози ман",
+        "myvoice_info": "Овози худро 15–30 сония бо овози баланд ва дар ҷои ором сабт кунед. Аз он овози хусусӣ сохта мешавад ва танҳо барои шумо мехонад. Онро дар ҳар вақт нест карда метавонед.",
+        "myvoice_text": "Салом! Номи ман ... аст. Имрӯз ҳаво хеле хуб аст ва ман мехоҳам, ки ёвари ман бо овози ман сухан гӯяд. Душанбе пойтахти Тоҷикистон аст. Як, ду, се, чор, панҷ. Ташаккур барои диққати шумо ва то дидор!",
+        "myvoice_consent": "Тасдиқ мекунам, ки ин овози худи ман аст ва ба ман иҷозат аст онро истифода барам.",
+        "myvoice_rec": "● Сабт кардан",
+        "myvoice_stop": "■ Бас",
+        "myvoice_send": "Сохтани овози ман",
+        "myvoice_use": "Истифодаи овози ман",
+        "myvoice_delete": "Нест кардани овози ман",
+        "myvoice_recording": "Сабт мешавад... {} сония",
+        "myvoice_ready": "Сабт тайёр аст ({} сония). «Сохтани овози ман»-ро пахш кунед.",
+        "myvoice_short": "Сабт хеле кӯтоҳ аст (камтар аз 8 сония). Боз сабт кунед.",
+        "myvoice_noperm": "Иҷозати микрофон нест. Дар танзимоти телефон иҷозат диҳед.",
+        "myvoice_fail_rec": "Сабт оғоз нашуд.",
+        "myvoice_stop_first": "Аввал сабтро бас кунед.",
+        "myvoice_need_consent": "Аввал тасдиқ кунед, ки ин овози худи шумост.",
+        "myvoice_need_rec": "Аввал овози худро сабт кунед.",
+        "myvoice_sending": "Овоз сохта мешавад, каме интизор шавед...",
+        "myvoice_done": "Тайёр! Акнун ҷавобҳо бо овози шумо хонда мешаванд.",
+        "myvoice_fail_send": "Овоз сохта нашуд. Интернет ва кӯшиши дубора.",
         "voice_hint": "Овоз дар дохили JARVIS сабт шуда, бо ёрии зеҳни сунъӣ ба матн табдил меёбад.",
         "voice_how": "Микрофонро пахш кунед, сухан гӯед ва барои анҷом боз пахш кунед.",
         "voice_note": "Ҷавобҳо бо овози Edge (мардона ё занона) хонда мешаванд; агар сервер кор накунад, овози телефон истифода мешавад.",
@@ -1305,6 +1326,27 @@ TEXTS = {
         "voice_lib_fail": "Список голосов не открылся. Проверьте интернет и повторите.",
         "voice_lib_empty": "Для этого языка голосов не найдено. Попробуйте другой язык.",
         "voice_note_fish": "Выбранный голос читает все ответы. Без интернета используется голос телефона или классический.",
+        "voice_search_hint": "Поиск голоса (имя) и «Enter»",
+        "myvoice_title": "Мой голос",
+        "myvoice_info": "Запишите свой голос 15–30 секунд, громко и в тихом месте. Из него создаётся личный голос, который читает только для вас. Его можно удалить в любой момент.",
+        "myvoice_text": "Привет! Меня зовут ... Сегодня очень хорошая погода, и я хочу, чтобы мой помощник говорил моим голосом. Москва — столица России. Раз, два, три, четыре, пять. Спасибо за внимание и до свидания!",
+        "myvoice_consent": "Подтверждаю, что это мой собственный голос и я вправе его использовать.",
+        "myvoice_rec": "● Записать",
+        "myvoice_stop": "■ Стоп",
+        "myvoice_send": "Создать мой голос",
+        "myvoice_use": "Использовать мой голос",
+        "myvoice_delete": "Удалить мой голос",
+        "myvoice_recording": "Идёт запись... {} с",
+        "myvoice_ready": "Запись готова ({} с). Нажмите «Создать мой голос».",
+        "myvoice_short": "Запись слишком короткая (меньше 8 секунд). Запишите ещё раз.",
+        "myvoice_noperm": "Нет доступа к микрофону. Разрешите в настройках телефона.",
+        "myvoice_fail_rec": "Запись не началась.",
+        "myvoice_stop_first": "Сначала остановите запись.",
+        "myvoice_need_consent": "Сначала подтвердите, что это ваш собственный голос.",
+        "myvoice_need_rec": "Сначала запишите свой голос.",
+        "myvoice_sending": "Голос создаётся, подождите...",
+        "myvoice_done": "Готово! Теперь ответы читаются вашим голосом.",
+        "myvoice_fail_send": "Голос не создан. Проверьте интернет и повторите.",
         "voice_hint": "Речь записывается внутри JARVIS и преобразуется в текст через ИИ-сервис.",
         "voice_how": "Нажмите микрофон, говорите, затем нажмите снова для завершения.",
         "voice_note": "Ответы озвучиваются голосом Edge (мужской или женский); если сервер недоступен, используется голос телефона.",
@@ -1707,6 +1749,27 @@ TEXTS = {
         "voice_lib_fail": "The voice list did not open. Check the internet and try again.",
         "voice_lib_empty": "No voices found for this language. Try another one.",
         "voice_note_fish": "The chosen voice reads all answers. Without internet the phone voice or the classic one is used.",
+        "voice_search_hint": "Search voice (name) and press Enter",
+        "myvoice_title": "My voice",
+        "myvoice_info": "Record your voice for 15-30 seconds, loudly and in a quiet place. A private voice is made from it and reads only for you. You can delete it at any time.",
+        "myvoice_text": "Hello! My name is ... Today the weather is very nice, and I want my assistant to speak with my voice. London is the capital of England. One, two, three, four, five. Thank you for listening, and goodbye!",
+        "myvoice_consent": "I confirm that this is my own voice and I have the right to use it.",
+        "myvoice_rec": "● Record",
+        "myvoice_stop": "■ Stop",
+        "myvoice_send": "Create my voice",
+        "myvoice_use": "Use my voice",
+        "myvoice_delete": "Delete my voice",
+        "myvoice_recording": "Recording... {} s",
+        "myvoice_ready": "Recording ready ({} s). Tap Create my voice.",
+        "myvoice_short": "The recording is too short (under 8 seconds). Record again.",
+        "myvoice_noperm": "No microphone access. Allow it in the phone settings.",
+        "myvoice_fail_rec": "Recording did not start.",
+        "myvoice_stop_first": "Stop the recording first.",
+        "myvoice_need_consent": "First confirm that this is your own voice.",
+        "myvoice_need_rec": "Record your voice first.",
+        "myvoice_sending": "Creating the voice, please wait...",
+        "myvoice_done": "Done! The answers are now read with your voice.",
+        "myvoice_fail_send": "The voice was not created. Check the internet and try again.",
         "voice_hint": "Speech is recorded inside JARVIS and transcribed by the AI service.",
         "voice_how": "Tap the mic, speak, then tap it again to finish.",
         "voice_note": "Replies are read with an Edge voice (male or female); the phone voice is used only if the server fails.",
@@ -8007,6 +8070,7 @@ class JarvisApp(App):
         self.voice_engine = "fish"                 # "fish" (Fish Audio via the server) or "classic" (Edge / own Tajik voice)
         self.fish_voice = ""                       # chosen voice id from the library ("" = the server's default voice)
         self.fish_voice_name = ""
+        self.my_voice_id = ""                      # the user's own cloned voice (private, made from their recording)
         self.voice_emotion = True                  # the answer may carry [sad] [laughing] ... for the voice
         self.ui_mode = "dark"
         self.speak_enabled = True
@@ -8146,6 +8210,7 @@ class JarvisApp(App):
             self.voice_engine = "classic" if data.get("voice_engine", "fish") == "classic" else "fish"
             self.fish_voice = str(data.get("fish_voice", ""))
             self.fish_voice_name = str(data.get("fish_voice_name", ""))
+            self.my_voice_id = str(data.get("my_voice_id", ""))
             self.voice_emotion = bool(data.get("voice_emotion", True))
             # Enable speech by default after the voice update, while preserving
             # the user's choice on later launches via the versioned preference.
@@ -8192,6 +8257,7 @@ class JarvisApp(App):
                        voice_engine=getattr(self, "voice_engine", "fish"),
                        fish_voice=getattr(self, "fish_voice", ""),
                        fish_voice_name=getattr(self, "fish_voice_name", ""),
+                       my_voice_id=getattr(self, "my_voice_id", ""),
                        voice_emotion=getattr(self, "voice_emotion", True),
                        speak=self.speak_enabled,
                        speak_v2=self.speak_enabled,
@@ -14330,6 +14396,8 @@ class JarvisApp(App):
             if self.voice_engine == "fish":
                 option(self.t("voice_pick") + ": " + (self.fish_voice_name or self.t("voice_default")), False,
                        lambda inst: (self.settings_popup.dismiss(), Clock.schedule_once(lambda dt: self.show_voice_library(), 0.15)))
+                option(self.t("myvoice_title") + (" \u2713" if self.my_voice_id else ""), False,
+                       lambda inst: (self.settings_popup.dismiss(), Clock.schedule_once(lambda dt: self.show_my_voice(), 0.15)))
                 option(self.t("voice_emotion_on") if self.voice_emotion else self.t("voice_emotion_off"),
                        self.voice_emotion, self.toggle_voice_emotion)
             else:
@@ -14362,6 +14430,216 @@ class JarvisApp(App):
     def choose_language(self, code, popup):
         popup.dismiss()
         Clock.schedule_once(lambda dt: self.set_language(code), 0.1)
+
+    # ------------------------------------------------------------ "My voice": the user's own voice reads the answers
+    def show_my_voice(self):
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        scroll = ScrollView(do_scroll_x=False)
+        inner = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
+        inner.bind(minimum_height=inner.setter("height"))
+        scroll.add_widget(inner)
+        body.add_widget(scroll)
+        ref = {"consent": False, "path": "", "t0": 0.0, "rec": None}
+        self._mv = ref
+        info = make_label(self.t("myvoice_info"), 12, muted(), False, size_hint_y=None, height=dp(96), halign="left")
+        info.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        inner.add_widget(info)
+        sample = make_label(self.t("myvoice_text"), 14, theme["text"], False, size_hint_y=None, height=dp(150), halign="left")
+        sample.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        inner.add_widget(sample)
+        ref["status"] = make_label("", 12, theme["accent"], False, size_hint_y=None, height=dp(44), halign="center")
+        ref["status"].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
+        inner.add_widget(ref["status"])
+
+        def consent_text():
+            return ("\u2611 " if ref["consent"] else "\u2610 ") + self.t("myvoice_consent")
+
+        consent = FrostButton(tint=tint, alpha=0.12, text=mk(consent_text()), font_size=dp(13), size_hint_y=None, height=dp(64),
+                              color=hex_color(theme["text"]))
+
+        def toggle_consent(*_):
+            ref["consent"] = not ref["consent"]
+            consent.text = mk(consent_text())
+        consent.bind(on_release=toggle_consent)
+        inner.add_widget(consent)
+        rec_btn = FrostButton(tint=(1.0, 0.42, 0.48), alpha=0.22, text=mk(self.t("myvoice_rec")), font_size=dp(15), size_hint_y=None,
+                              height=dp(54), color=hex_color(theme["text"]))
+        rec_btn.bind(on_release=lambda inst: self._mv_toggle(rec_btn, send_btn))
+        inner.add_widget(rec_btn)
+        send_btn = FrostButton(tint=tint, alpha=0.26, text=mk(self.t("myvoice_send")), font_size=dp(15), size_hint_y=None,
+                               height=dp(54), color=hex_color(theme["text"]))
+        send_btn.bind(on_release=lambda inst: self._mv_send(ref))
+        inner.add_widget(send_btn)
+        if self.my_voice_id:
+            use_btn = FrostButton(tint=tint, alpha=0.12, text=mk(self.t("myvoice_use")), font_size=dp(14), size_hint_y=None,
+                                  height=dp(50), color=hex_color(theme["text"]))
+            use_btn.bind(on_release=lambda inst: self._mv_use())
+            inner.add_widget(use_btn)
+            del_btn = FrostButton(tint=(1.0, 0.36, 0.42), alpha=0.14, text=mk(self.t("myvoice_delete")), font_size=dp(14),
+                                  size_hint_y=None, height=dp(50), color=hex_color(theme["text"]))
+            del_btn.bind(on_release=lambda inst: self._mv_delete())
+            inner.add_widget(del_btn)
+        ref["sheet"] = GlassSheet(self, self.t("myvoice_title"), body, height=int(min(Window.height / dp(1) * 0.92, 780)),
+                                  back=lambda: (self._mv_cancel(), self.open_section("voice")))
+        ref["sheet"].open()
+
+    def _mv_say(self, text):
+        try:
+            self._mv["status"].text = mk(text)
+        except Exception:
+            pass
+
+    def _mv_toggle(self, rec_btn, send_btn):
+        ref = self._mv
+        if ref.get("rec") is None:
+            def go(ok):
+                if not ok:
+                    self._mv_say(self.t("myvoice_noperm"))
+                    return
+                self._mv_start(rec_btn)
+            request_microphone(lambda ok: Clock.schedule_once(lambda dt: go(ok), 0))
+        else:
+            self._mv_stop(rec_btn)
+
+    def _mv_start(self, rec_btn):
+        ref = self._mv
+        try:
+            from jnius import autoclass
+            MediaRecorder = autoclass("android.media.MediaRecorder")
+            path = os.path.join(self.user_data_dir, "my_voice_" + uuid.uuid4().hex[:8] + ".m4a")
+            recorder = MediaRecorder()
+            recorder.setAudioSource(1)
+            recorder.setOutputFormat(2)
+            recorder.setAudioEncoder(3)
+            recorder.setAudioSamplingRate(44100)
+            recorder.setAudioEncodingBitRate(128000)
+            recorder.setMaxDuration(45000)
+            recorder.setOutputFile(path)
+            recorder.prepare()
+            recorder.start()
+            ref.update({"rec": recorder, "path": path, "t0": time.time()})
+            rec_btn.text = mk(self.t("myvoice_stop"))
+            ref["tick"] = Clock.schedule_interval(lambda dt: self._mv_say(self.t("myvoice_recording").format(int(time.time() - ref["t0"]))), 0.5)
+        except Exception:
+            save_crash("My voice record failed:\n" + traceback.format_exc())
+            self._mv_say(self.t("myvoice_fail_rec"))
+
+    def _mv_stop(self, rec_btn=None):
+        ref = self._mv
+        recorder = ref.get("rec")
+        ref["rec"] = None
+        try:
+            if ref.get("tick") is not None:
+                ref["tick"].cancel()
+        except Exception:
+            pass
+        if recorder is not None:
+            for fn in (recorder.stop, recorder.release):
+                try:
+                    fn()
+                except Exception:
+                    pass
+        seconds = time.time() - ref.get("t0", time.time())
+        if rec_btn is not None:
+            rec_btn.text = mk(self.t("myvoice_rec"))
+        if seconds < 8:
+            ref["path"] = ""
+            self._mv_say(self.t("myvoice_short"))
+        else:
+            self._mv_say(self.t("myvoice_ready").format(int(seconds)))
+
+    def _mv_cancel(self):
+        ref = getattr(self, "_mv", None)
+        if ref and ref.get("rec") is not None:
+            self._mv_stop()
+
+    def _mv_send(self, ref):
+        if ref.get("rec") is not None:
+            self._mv_say(self.t("myvoice_stop_first"))
+            return
+        if not ref.get("consent"):
+            self._mv_say(self.t("myvoice_need_consent"))
+            return
+        path = ref.get("path", "")
+        if not path or not os.path.exists(path):
+            self._mv_say(self.t("myvoice_need_rec"))
+            return
+        self._mv_say(self.t("myvoice_sending"))
+
+        def job():
+            try:
+                import ssl
+                with open(path, "rb") as handle:
+                    audio = handle.read()
+                boundary = "----SAIVoice" + uuid.uuid4().hex
+                body = (("--" + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="my_voice.m4a"\r\nContent-Type: audio/mp4\r\n\r\n').encode("utf-8")
+                        + audio + ("\r\n--" + boundary + "--\r\n").encode("utf-8"))
+                request = urllib.request.Request(SERVER_BASE + "/voice/clone?consent=1", data=body, method="POST", headers={
+                    "Content-Type": "multipart/form-data; boundary=" + boundary, "Authorization": "Bearer " + self.server_token,
+                    "Accept": "application/json"})
+                try:
+                    import certifi
+                    ctx = ssl.create_default_context(cafile=certifi.where())
+                except Exception:
+                    ctx = None
+                with urllib.request.urlopen(request, timeout=120, context=ctx) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                voice_id = str(result.get("voice_id", ""))
+                if not voice_id:
+                    raise RuntimeError("no voice id")
+
+                def done(dt):
+                    self.my_voice_id = voice_id
+                    self.fish_voice = voice_id
+                    self.fish_voice_name = self.t("myvoice_title")
+                    self.voice_engine = "fish"
+                    self.save_settings()
+                    try:
+                        os.remove(path)
+                    except Exception:
+                        pass
+                    self._mv_say(self.t("myvoice_done"))
+                Clock.schedule_once(done, 0)
+            except Exception as exc:
+                detail = ""
+                try:
+                    detail = exc.read(300).decode("utf-8", "ignore") if hasattr(exc, "read") else ""
+                except Exception:
+                    pass
+                save_crash("My voice upload failed: " + type(exc).__name__ + " " + detail + "\n" + traceback.format_exc())
+                msg = self.t("myvoice_fail_send") + " [" + type(exc).__name__ + (" " + str(getattr(exc, "code", "")) if hasattr(exc, "code") else "") + "]"
+                Clock.schedule_once(lambda dt: self._mv_say(msg), 0)
+        threading.Thread(target=job, daemon=True).start()
+
+    def _mv_use(self):
+        self.fish_voice = self.my_voice_id
+        self.fish_voice_name = self.t("myvoice_title")
+        self.voice_engine = "fish"
+        self.save_settings()
+        self._mv_say(self.t("myvoice_done"))
+
+    def _mv_delete(self):
+        def job():
+            try:
+                self._json_call("DELETE", "/voice/mine", None, timeout=40)
+                def done(dt):
+                    if self.fish_voice == self.my_voice_id:
+                        self.fish_voice = ""
+                        self.fish_voice_name = ""
+                    self.my_voice_id = ""
+                    self.save_settings()
+                    try:
+                        self._mv["sheet"].dismiss()
+                    except Exception:
+                        pass
+                    Clock.schedule_once(lambda d: self.show_my_voice(), 0.2)
+                Clock.schedule_once(done, 0)
+            except Exception:
+                save_crash("My voice delete failed:\n" + traceback.format_exc())
+                Clock.schedule_once(lambda dt: self._mv_say(self.t("myvoice_fail_send")), 0)
+        threading.Thread(target=job, daemon=True).start()
 
     def _tts_extra(self):
         """Fields added to every /speak request: which engine, which Fish voice, whether emotion tags are kept."""
@@ -14412,11 +14690,18 @@ class JarvisApp(App):
         for code, label in (("", self.t("lib_all")), ("tg", "Тоҷикӣ"), ("ru", "Русский"), ("en", "English")):
             chip = FrostButton(tint=tint, alpha=0.30 if lang == code else 0.08, radius=16, text=mk(label), font_size=dp(13),
                                halign="center", size_hint=(None, 1), width=dp(92), color=hex_color(theme["text"]))
-            chip.bind(on_release=lambda inst, c=code: (sheet_ref["s"].dismiss(), Clock.schedule_once(lambda dt: self.show_voice_library(c), 0.15)))
+            chip.bind(on_release=lambda inst, c=code: (sheet_ref["s"].dismiss(), Clock.schedule_once(lambda dt: self.show_voice_library(c, 1, query), 0.15)))
             chips.add_widget(chip)
         chip_scroll = ScrollView(do_scroll_y=False, size_hint_y=None, height=dp(40), bar_width=0)
         chip_scroll.add_widget(chips)
         body.add_widget(chip_scroll)
+        search = TextInput(text=query, hint_text=self.t("voice_search_hint"), multiline=False, size_hint_y=None, height=dp(44),
+                           font_size=dp(14), padding=[dp(12), dp(12), dp(12), dp(8)], background_color=(1, 1, 1, 0.08),
+                           foreground_color=hex_color(theme["text"]), hint_text_color=(1, 1, 1, 0.45),
+                           cursor_color=hex_color(theme["accent"]))
+        search.bind(on_text_validate=lambda inst: (sheet_ref["s"].dismiss(),
+                                                   Clock.schedule_once(lambda dt: self.show_voice_library(lang, 1, inst.text.strip()), 0.15)))
+        body.add_widget(search)
         scroll = ScrollView(do_scroll_x=False)
         grid = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
