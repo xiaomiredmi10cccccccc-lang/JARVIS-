@@ -924,6 +924,7 @@ TEXTS = {
         "myvoice_sending": "Овоз сохта мешавад, каме интизор шавед...",
         "myvoice_done": "Тайёр! Акнун ҷавобҳо бо овози шумо хонда мешаванд.",
         "myvoice_fail_send": "Овоз сохта нашуд. Интернет ва кӯшиши дубора.",
+        "voice_more": "Бештар овозҳо...",
         "voice_hint": "Овоз дар дохили JARVIS сабт шуда, бо ёрии зеҳни сунъӣ ба матн табдил меёбад.",
         "voice_how": "Микрофонро пахш кунед, сухан гӯед ва барои анҷом боз пахш кунед.",
         "voice_note": "Ҷавобҳо бо овози Edge (мардона ё занона) хонда мешаванд; агар сервер кор накунад, овози телефон истифода мешавад.",
@@ -1347,6 +1348,7 @@ TEXTS = {
         "myvoice_sending": "Голос создаётся, подождите...",
         "myvoice_done": "Готово! Теперь ответы читаются вашим голосом.",
         "myvoice_fail_send": "Голос не создан. Проверьте интернет и повторите.",
+        "voice_more": "Ещё голоса...",
         "voice_hint": "Речь записывается внутри JARVIS и преобразуется в текст через ИИ-сервис.",
         "voice_how": "Нажмите микрофон, говорите, затем нажмите снова для завершения.",
         "voice_note": "Ответы озвучиваются голосом Edge (мужской или женский); если сервер недоступен, используется голос телефона.",
@@ -1770,6 +1772,7 @@ TEXTS = {
         "myvoice_sending": "Creating the voice, please wait...",
         "myvoice_done": "Done! The answers are now read with your voice.",
         "myvoice_fail_send": "The voice was not created. Check the internet and try again.",
+        "voice_more": "More voices...",
         "voice_hint": "Speech is recorded inside JARVIS and transcribed by the AI service.",
         "voice_how": "Tap the mic, speak, then tap it again to finish.",
         "voice_note": "Replies are read with an Edge voice (male or female); the phone voice is used only if the server fails.",
@@ -14670,6 +14673,7 @@ class JarvisApp(App):
         self.open_section("voice")
 
     def pick_fish_voice(self, voice_id, name, sheet_ref):
+        self._sample_stop()
         self.fish_voice = voice_id or ""
         self.fish_voice_name = name or ""
         self.save_settings()
@@ -14711,51 +14715,181 @@ class JarvisApp(App):
         grid.add_widget(status)
         sheet_ref["s"] = GlassSheet(self, self.t("voice_lib_title"), body, height=int(min(Window.height / dp(1) * 0.9, 760)),
                                     back=lambda: self.open_section("voice"))
+        try:
+            sheet_ref["s"].bind(on_dismiss=lambda *_: self._sample_stop())
+        except Exception:
+            pass
         sheet_ref["s"].open()
 
-        def fill(items, error):
+        state = {"page": page, "seen": set(), "more": None}
+
+        def add_items(items):
+            for it in items:
+                if it["id"] in state["seen"]:
+                    continue
+                state["seen"].add(it["id"])
+                row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(64))
+                on = it["id"] == self.fish_voice
+                label = "[b]" + mk(it["title"][:40]) + "[/b]\n[size=11sp][color=" + muted() + "]" + \
+                        mk(", ".join(it.get("languages", [])[:4]) + ("  \u00b7  " + it["author"] if it.get("author") else "")) + "[/color][/size]"
+                pick = FrostButton(tint=tint, alpha=0.26 if on else 0.10, text=label, font_size=dp(14), color=hex_color(theme["text"]))
+                pick.bind(on_release=lambda inst, i=it: self.pick_fish_voice(i["id"], i["title"], sheet_ref))
+                row.add_widget(pick)
+                if it.get("sample"):
+                    play = IconButton(kind="play", tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
+                                      size_hint_x=None, width=dp(56))
+                    play._row_pick = pick
+                    play.bind(on_release=lambda inst, u=it["sample"]: self._voice_sample(u, inst))
+                    row.add_widget(play)
+                grid.add_widget(row)
+
+        def fill(items, error, has_more=False, append=False):
             try:
-                grid.clear_widgets()
-                default_row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(56))
-                default_btn = FrostButton(tint=tint, alpha=0.26 if not self.fish_voice else 0.10, text=mk(self.t("voice_default")),
-                                          font_size=dp(14), color=hex_color(theme["text"]))
-                default_btn.bind(on_release=lambda inst: self.pick_fish_voice("", "", sheet_ref))
-                default_row.add_widget(default_btn)
-                grid.add_widget(default_row)
-                if error or not items:
+                if state["more"] is not None:
+                    try:
+                        grid.remove_widget(state["more"])
+                    except Exception:
+                        pass
+                    state["more"] = None
+                if not append:
+                    grid.clear_widgets()
+                    state["seen"].clear()
+                    default_row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(56))
+                    default_btn = FrostButton(tint=tint, alpha=0.26 if not self.fish_voice else 0.10, text=mk(self.t("voice_default")),
+                                              font_size=dp(14), color=hex_color(theme["text"]))
+                    default_btn.bind(on_release=lambda inst: self.pick_fish_voice("", "", sheet_ref))
+                    default_row.add_widget(default_btn)
+                    grid.add_widget(default_row)
+                if error or (not items and not append):
                     grid.add_widget(make_label(self.t("voice_lib_fail" if error else "voice_lib_empty"), 13, theme["text"], False,
                                                size_hint_y=None, height=dp(70), text_size=(Window.width * 0.7, None)))
                     return
-                for it in items:
-                    row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(64))
-                    on = it["id"] == self.fish_voice
-                    label = "[b]" + mk(it["title"][:40]) + "[/b]\n[size=11sp][color=" + muted() + "]" + \
-                            mk(", ".join(it.get("languages", [])[:4]) + ("  \u00b7  " + it["author"] if it.get("author") else "")) + "[/color][/size]"
-                    pick = FrostButton(tint=tint, alpha=0.26 if on else 0.10, text=label, font_size=dp(14), color=hex_color(theme["text"]))
-                    pick.bind(on_release=lambda inst, i=it: self.pick_fish_voice(i["id"], i["title"], sheet_ref))
-                    row.add_widget(pick)
-                    if it.get("sample"):
-                        play = IconButton(kind="play", tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
-                                          size_hint_x=None, width=dp(56))
-                        play.bind(on_release=lambda inst, u=it["sample"]: self._voice_sample(u))
-                        row.add_widget(play)
-                    grid.add_widget(row)
+                add_items(items)
+                if has_more:
+                    more = FrostButton(tint=tint, alpha=0.18, text=mk(self.t("voice_more")), font_size=dp(14), size_hint_y=None,
+                                       height=dp(50), color=hex_color(theme["text"]))
+                    more.bind(on_release=lambda inst: load(state["page"] + 1, True))
+                    state["more"] = more
+                    grid.add_widget(more)
             except Exception:
                 save_crash("Voice list failed:\n" + traceback.format_exc())
 
-        def job():
-            try:
-                import urllib.parse as _up
-                path = "/voices?" + _up.urlencode({"language": lang, "page": page, "q": query})
-                data = self._json_call("GET", path, None, timeout=40)
-                items = [i for i in data.get("items", []) if isinstance(i, dict) and i.get("id")]
-                Clock.schedule_once(lambda dt: fill(items, False), 0)
-            except Exception:
-                Clock.schedule_once(lambda dt: fill([], True), 0)
-        threading.Thread(target=job, daemon=True).start()
+        def load(pg, append=False):
+            if append and state["more"] is not None:
+                state["more"].text = mk(self.t("voice_lib_loading"))
+                state["more"].disabled = True
 
-    def _voice_sample(self, url):
-        """Plays the short sample of a library voice (downloaded once, then kept on the phone)."""
+            def job():
+                try:
+                    import urllib.parse as _up
+                    path = "/voices?" + _up.urlencode({"language": lang, "page": pg, "q": query})
+                    data = self._json_call("GET", path, None, timeout=40)
+                    items = [i for i in data.get("items", []) if isinstance(i, dict) and i.get("id")]
+                    more = bool(data.get("has_more")) or len(items) >= 20
+                    def done(dt):
+                        state["page"] = pg
+                        fill(items, False, more, append)
+                    Clock.schedule_once(done, 0)
+                except Exception:
+                    Clock.schedule_once(lambda dt: fill([], True, False, append), 0)
+            threading.Thread(target=job, daemon=True).start()
+        load(page, False)
+
+    @staticmethod
+    def _row_glow(play_btn, on):
+        """The row of the playing sample gets a brighter glass body and edge."""
+        pick = getattr(play_btn, "_row_pick", None)
+        if pick is None:
+            return
+        try:
+            if not hasattr(pick, "_glow_base"):
+                pick._glow_base = (pick._fr_a0, pick._fr_edge_c.a)
+            base_a, base_edge = pick._glow_base
+            pick._fr_a0 = min(0.92, base_a + 0.26) if on else base_a
+            pick._fr_body_c.a = pick._fr_a0
+            pick._fr_edge_c.a = 1.0 if on else base_edge
+            pick._fr_edge_a = pick._fr_edge_c.a
+        except Exception:
+            pass
+
+    def _sample_stop(self):
+        """Stops the library sample (if any) and turns its button back into a play triangle."""
+        player = getattr(self, "_sample_player", None)
+        btn = getattr(self, "_sample_btn", None)
+        tick = getattr(self, "_sample_tick", None)
+        self._sample_player = self._sample_btn = self._sample_tick = None
+        self._sample_token = None
+        if tick is not None:
+            try:
+                tick.cancel()
+            except Exception:
+                pass
+        if player is not None:
+            for fn in (player.stop, player.release):
+                try:
+                    fn()
+                except Exception:
+                    pass
+        if btn is not None:
+            try:
+                self._row_glow(btn, False)
+                btn.opacity = 1.0
+                btn.set_kind("play")
+            except Exception:
+                pass
+
+    def _voice_sample(self, url, btn=None):
+        """Play / pause button of a library voice: tap = play (the icon becomes ||), tap again = stop.
+        The sample is downloaded once and then kept on the phone."""
+        if btn is not None and getattr(self, "_sample_btn", None) is btn:
+            self._sample_stop()
+            return
+        self._sample_stop()
+        if btn is not None:
+            self._sample_btn = btn
+            btn.opacity = 0.55                      # downloading
+        token = object()
+        self._sample_token = token
+
+        def start_play(path):
+            if getattr(self, "_sample_token", None) is not token:
+                return                              # the user tapped something else meanwhile
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                MediaPlayer = autoclass("android.media.MediaPlayer")
+                File = autoclass("java.io.File")
+                Uri = autoclass("android.net.Uri")
+                player = MediaPlayer.create(PythonActivity.mActivity, Uri.fromFile(File(path)))
+                if player is None:
+                    raise RuntimeError("cannot open sample")
+                old = getattr(self, "_server_speech_player", None)
+                if old is not None:
+                    try:
+                        old.stop()
+                    except Exception:
+                        pass
+                self._sample_player = player
+                player.start()
+                if btn is not None:
+                    btn.opacity = 1.0
+                    btn.set_kind("pause")
+                    self._row_glow(btn, True)
+
+                def poll(dt):
+                    p = getattr(self, "_sample_player", None)
+                    try:
+                        playing = p is not None and p is player and p.isPlaying()
+                    except Exception:
+                        playing = False
+                    if not playing:
+                        self._sample_stop()
+                self._sample_tick = Clock.schedule_interval(poll, 0.3)
+            except Exception:
+                save_crash("Voice sample play failed:\n" + traceback.format_exc())
+                self._sample_stop()
+                self._media_notice(self.t("voice_lib_fail"))
+
         def job():
             try:
                 import hashlib
@@ -14775,10 +14909,13 @@ class JarvisApp(App):
                         raise RuntimeError("empty sample")
                     with open(path, "wb") as out:
                         out.write(audio)
-                Clock.schedule_once(lambda dt: self._play_server_audio(path), 0)
+                Clock.schedule_once(lambda dt: start_play(path), 0)
             except Exception:
                 save_crash("Voice sample failed:\n" + traceback.format_exc())
-                Clock.schedule_once(lambda dt: self._media_notice(self.t("voice_lib_fail")), 0)
+                def fail(dt):
+                    self._sample_stop()
+                    self._media_notice(self.t("voice_lib_fail"))
+                Clock.schedule_once(fail, 0)
         threading.Thread(target=job, daemon=True).start()
 
     def choose_voice(self, name, popup):
