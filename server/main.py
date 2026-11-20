@@ -7,6 +7,7 @@ import threading
 import asyncio
 import json
 import urllib.request
+import urllib.parse
 import urllib.error
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -30,6 +31,10 @@ except Exception as _exc:  # onnxruntime/numpy missing: Tajik voice simply stays
     tajik_tts = None
 from openai import OpenAI
 import ai_tools
+try:
+    import tajik_text as _tajik_text
+except Exception:
+    _tajik_text = None
 
 try:
     import edge_tts
@@ -70,6 +75,7 @@ class ChatRequest(BaseModel):
     web_search: bool = False
     language: Literal["tg", "ru", "en"] = "tg"
     assistant_name: str = Field(default="S.A.I", max_length=30)
+    emotion_tags: bool = False
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_SPEECH_CHARS)
@@ -78,6 +84,10 @@ class SpeechRequest(BaseModel):
     voice_profile: Literal["classic", "aura"] | None = None
     # When true, return JSON {audio_base64, words} so the app can show text in sync with speech.
     timings: bool = False
+    # Fish Audio: "fish" (default when FISH_API_KEY is set) or "classic" (Edge/Tajik engine). fish_voice = voice id from /voices.
+    engine: Literal["fish", "classic"] | None = None
+    fish_voice: str | None = Field(default=None, max_length=64, pattern=r"^[0-9a-fA-F]{8,64}$")
+    emotion: bool = True
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
@@ -1133,7 +1143,14 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
                 "APPS: when the user asks you to make an app, tool, calculator, game, animation, web page, chart or visual demo, write ONE complete "
                 "self-contained HTML file in a single ```html block (all CSS and JavaScript inline; external libraries only from cdnjs.cloudflare.com; "
                 "no images from other sites, no forms that send data anywhere), then add one short sentence. The app shows a Run button for it.")
-    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name) + no_files}]
+    voice_style = ""
+    if request.emotion_tags:
+        voice_style = (" VOICE: your answer is read aloud by an expressive voice. Speak like a warm, polite, well-mannered person: address the user respectfully, "
+                       "thank and apologise when it fits, never be rude. You may put ONE short emotion tag in square brackets at the START of a sentence when the feeling is real, "
+                       "using only these English tags: [happy] [sad] [calm] [excited] [whispering] [laughing] [sighing] [soft tone] [break]. "
+                       "Use at most one tag per sentence and not in every sentence; ordinary factual sentences get no tag. Never put a tag inside code, tables, links or HTML. "
+                       "The text after a tag stays in the user's language.")
+    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name) + no_files + voice_style}]
     messages.extend({"role": item.role, "content": item.content} for item in request.history)
     searched, sources, search_error = False, [], None
     if should_search_web(request):
@@ -1217,19 +1234,118 @@ async def _synthesize_edge_tts(text: str, voice: str) -> tuple[bytes, list[list[
     return b"".join(chunks), words
 
 
+FISH_TTS_URL = "https://api.fish.audio/v1/tts"
+FISH_MODEL_URL = "https://api.fish.audio/model"
+EMOTION_TAG_RE = re.compile(r"\[(?:[A-Za-z][A-Za-z\- ]{1,30})\]")
+_voices_cache = {}
+
+
+def strip_emotion_tags(text: str) -> str:
+    """[sad] [laughing] ... are for Fish Audio only: every other engine must not read them aloud."""
+    return re.sub(r"[ \t]{2,}", " ", EMOTION_TAG_RE.sub("", text)).strip()
+
+
+def _fish_key() -> str:
+    return os.environ.get("FISH_API_KEY", "").strip()
+
+
+def _fish_synthesize(text: str, voice_id: str | None, language: str) -> bytes:
+    """Blocking call to Fish Audio; returns MP3 bytes. The key comes only from the FISH_API_KEY environment variable."""
+    body = {"text": text, "format": "mp3", "mp3_bitrate": 128, "latency": "balanced", "normalize": True}
+    if voice_id:
+        body["reference_id"] = voice_id
+    if language in ("ru", "en"):
+        body["language"] = language
+    req = urllib.request.Request(FISH_TTS_URL, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST", headers={
+        "Authorization": "Bearer " + _fish_key(), "Content-Type": "application/json",
+        "model": os.environ.get("FISH_MODEL", "s2.1-pro-free").strip() or "s2.1-pro-free"})
+    with urllib.request.urlopen(req, timeout=60) as response:
+        data = response.read(MAX_SPEECH_AUDIO_BYTES + 1)
+    if not data or len(data) > MAX_SPEECH_AUDIO_BYTES:
+        raise ValueError("empty or too large")
+    return data
+
+
+@app.get("/voices")
+async def list_voices(http_request: Request, q: str = "", language: str = "", page: int = 1, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Voices from the Fish Audio library for the 'Settings -> Voice' list (title, languages, a short sample)."""
+    user = require_auth(authorization, x_jarvis_token)
+    check_rate_limit(rate_key(user, http_request))
+    if not _fish_key():
+        raise HTTPException(status_code=503, detail="Voice library is not configured")
+    q = q.strip()[:60]
+    language = language.strip().lower()[:8] if language.strip().lower() in ("tg", "ru", "en") else ""
+    page = max(1, min(int(page), 50))
+    cache_key = (q, language, page)
+    now = time.monotonic()
+    hit = _voices_cache.get(cache_key)
+    if hit and now - hit[0] < 600:
+        return hit[1]
+    params = {"page_size": "20", "page_number": str(page), "sort_by": "score"}
+    if q:
+        params["title"] = q
+    if language:
+        params["language"] = language
+    url = FISH_MODEL_URL + "?" + urllib.parse.urlencode(params)
+
+    def fetch():
+        req = urllib.request.Request(url, headers={"Authorization": "Bearer " + _fish_key()})
+        with urllib.request.urlopen(req, timeout=20) as response:
+            return json.loads(response.read(4_000_000).decode("utf-8"))
+    try:
+        raw = await asyncio.wait_for(asyncio.to_thread(fetch), timeout=25)
+    except Exception as exc:
+        print("Fish voice list failed:", type(exc).__name__, str(exc)[:120])
+        raise HTTPException(status_code=502, detail="The voice library is temporarily unavailable")
+    items = []
+    for item in raw.get("items", []):
+        if item.get("state") not in (None, "trained") or item.get("dmca_taken_down"):
+            continue
+        samples = item.get("samples") or []
+        sample = ""
+        if samples and isinstance(samples[0], dict):
+            sample = str(samples[0].get("audio") or "")
+        items.append({"id": str(item.get("_id", "")), "title": str(item.get("title", ""))[:80],
+                      "languages": [str(x) for x in (item.get("languages") or [])][:6],
+                      "description": str(item.get("description", ""))[:160], "sample": sample,
+                      "author": str((item.get("author") or {}).get("nickname", ""))[:40], "likes": int(item.get("like_count") or 0)})
+    result = {"items": [i for i in items if i["id"]], "has_more": bool(raw.get("has_more")), "page": page}
+    _voices_cache[cache_key] = (now, result)
+    if len(_voices_cache) > 200:
+        _voices_cache.clear()
+    return result
+
+
 @app.post("/speak")
 async def speak(request: SpeechRequest, http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
     """Generate speech audio (MP3) with Edge TTS. Never substitutes another language for Tajik."""
     user = require_auth(authorization, x_jarvis_token)
     check_quota(user, "speak")
     check_rate_limit(rate_key(user, http_request))
-    if edge_tts is None:
-        raise HTTPException(status_code=503, detail="edge-tts is not installed on the server")
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is empty")
     language = request.language or detect_speech_language(text)
     profile = request.voice_profile or "aura"
+    if _fish_key() and request.engine != "classic" and os.environ.get("FISH_ENABLED", "1") != "0":
+        fish_text = text if request.emotion else strip_emotion_tags(text)
+        if language == "tg" and _tajik_text is not None:
+            try:
+                fish_text = _tajik_text.spell_numbers(fish_text)        # numbers -> Tajik words (Fish only normalises ru/en)
+            except Exception:
+                pass
+        voice_id = request.fish_voice or os.environ.get("FISH_DEFAULT_VOICE", "").strip() or None
+        try:
+            audio = await asyncio.wait_for(asyncio.to_thread(_fish_synthesize, fish_text, voice_id, language), timeout=70)
+            if request.timings:
+                return {"audio_base64": base64.b64encode(audio).decode("ascii"), "words": [],
+                        "voice": voice_id or "fish-default", "language": language, "profile": profile, "engine": "fish"}
+            return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store", "X-TTS-Voice": voice_id or "fish-default", "X-TTS-Language": language, "X-TTS-Engine": "fish"})
+        except Exception as exc:                  # no balance, limit, network, bad voice id: the old engines take over
+            print("Fish TTS failed, using the classic engine:", type(exc).__name__, str(exc)[:160])
+    text = strip_emotion_tags(text) or text
+    if edge_tts is None:
+        raise HTTPException(status_code=503, detail="edge-tts is not installed on the server")
     if language == "tg" and tajik_tts is not None and tajik_tts.available():
         try:
             wav = await asyncio.wait_for(asyncio.to_thread(tajik_tts.synthesize, text), timeout=120)
