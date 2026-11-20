@@ -1858,4 +1858,71 @@ async def image_remix(http_request: Request, x_jarvis_token: str | None = Header
         data, ctype = await asyncio.to_thread(ai_tools.generate_image, prompt_en, 1024, 1024)
     except Exception as exc:
         print("Remix generation failed:", type(exc).__name__, str(exc)[:200])
-        raise HTTPException(stat
+        raise HTTPException(status_code=502, detail=("Image services failed: " + str(exc))[:300])
+    ext = ".png" if "png" in ctype else ".webp" if "webp" in ctype else ".jpg"
+    safe_summary = base64.b64encode(plan.encode("utf-8")).decode("ascii")
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "no-store", "X-Edit-Summary-B64": safe_summary, "X-Edit-Ext": ext})
+
+
+@app.post("/edit-text")
+async def edit_text(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Edit a text file, or create a new one when no file is sent. Returns {filename, text}."""
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "edit")
+    check_rate_limit(rate_key(user, http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    if len(body) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Text file is too large (2 MB maximum)")
+    fields = _read_form(content_type, body)
+    instruction = _form_text(fields, "prompt")
+    if not instruction:
+        raise HTTPException(status_code=400, detail="Describe what to do with the file")
+    language = _lang(_form_text(fields, "language", "tg"))
+    filename = os.path.basename((fields.get("file", (b"", "", ""))[1] or "file.txt").replace("\\", "/"))
+    content = ""
+    if "file" in fields and fields["file"][0]:
+        if not filename.lower().endswith(ai_tools.TEXT_EXTENSIONS):
+            raise HTTPException(status_code=415, detail="Only text files can be edited (TXT, MD, CSV, JSON, code, HTML)")
+        try:
+            content = fields["file"][0].decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=415, detail="Text file must use UTF-8 encoding")
+    try:
+        name, text, model = await asyncio.to_thread(ai_tools.edit_text_file, filename, content, instruction, language)
+    except ai_tools.NoProvider as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        print("Text edit failed:", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(status_code=502, detail="The AI could not edit the file")
+    return {"filename": name, "text": text, "model": model, "created": not bool(content)}
+
+
+@app.post("/transcribe")
+async def transcribe(http_request: Request, x_jarvis_token: str | None = Header(default=None), authorization: str | None = Header(default=None)):
+    """Transcribe audio recorded within the Android app, including Tajik (tg)."""
+    user = require_auth(authorization, x_jarvis_token)
+    check_quota(user, "stt")
+    check_rate_limit(rate_key(user, http_request))
+    content_type = http_request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    body = await http_request.body()
+    if len(body) > MAX_TRANSCRIPTION_BYTES + 64 * 1024:
+        raise HTTPException(status_code=413, detail="Audio request is too large")
+    filename, audio, audio_type, language = _parse_multipart(content_type, body)
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Groq API key is not configured")
+    try:
+        transcript, model = await asyncio.to_thread(_call_groq_transcription, api_key, filename, audio, audio_type, language)
+        if not transcript:
+            raise HTTPException(status_code=502, detail="Speech was not recognized")
+        return {"text": transcript, "language": language, "model": model}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Groq transcription failed:", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The speech recognition service could not complete the request")
