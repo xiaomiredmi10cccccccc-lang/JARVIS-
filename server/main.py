@@ -315,6 +315,11 @@ def should_search_web(request: ChatRequest) -> bool:
         r"\b(latest|today|current|currently|right now|this week|recent|news|price|weather|exchange rate|stock|score|schedule|source|sources|citation|search the web|search online|on the internet)\b",
         r"(имрӯз|ҳозир|ҳоло|охирин|навтарин|ахбор|хабарҳои|нарх|обу ҳаво|дар интернет|ҷустуҷӯ кун|манбаъ|манбаъҳо|қурби асъор)",
         r"(сегодня|сейчас|последн|свежие новости|новости|цена|погода|курс валют|источники|найди в интернете|поищи в интернете)",
+        r"\b(20(2[5-9]|3\d))\b",
+        r"\b(who is the (current )?(president|prime minister|ceo|leader)|who won|world cup|election results)\b",
+        r"(президент(и|ӣ)? (кист|кӣ)|раиси ҷумҳур|кӣ (ғолиб|барнда)|ғолиб шуд|интихобот|ҷоми ҷаҳон)",
+        r"(президент|раис|сарвазир|вазир|директор|роҳбар).{0,30}(кист|кӣ)",
+        r"(кто (сейчас )?президент|кто победил|кто выиграл|выборы|чемпионат мира)",
     )
     return any(re.search(pattern, text) for pattern in patterns)
 
@@ -1154,7 +1159,11 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
                        "using only these English tags: [happy] [sad] [calm] [excited] [whispering] [laughing] [sighing] [soft tone] [break]. "
                        "Use at most one tag per sentence and not in every sentence; ordinary factual sentences get no tag. Never put a tag inside code, tables, links or HTML. "
                        "The text after a tag stays in the user's language.")
-    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name) + no_files + voice_style}]
+    now_local = datetime.now(timezone(timedelta(hours=5)))
+    date_note = (" TODAY'S DATE: " + now_local.strftime("%Y-%m-%d") + " (" + now_local.strftime("%A") + "). Your training data ends earlier than today, so you may not know recent events, "
+                 "new people in office, prices or versions. Never assume the current year is 2024. For anything that may have changed (news, who holds a position, prices, rates, "
+                 "software versions, sports results) rely on the web research supplied below; if none is supplied, say honestly that you may be out of date instead of guessing.")
+    messages = [{"role": "system", "content": instructions[request.language].replace("JARVIS", assistant_name) + date_note + no_files + voice_style}]
     messages.extend({"role": item.role, "content": item.content} for item in request.history)
     searched, sources, search_error = False, [], None
     if should_search_web(request):
