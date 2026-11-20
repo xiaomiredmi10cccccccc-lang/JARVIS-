@@ -892,6 +892,17 @@ TEXTS = {
         "tts_unavailable": "Хондани ҷавоб ҳоло кор намекунад.",
         "speak_on": "Ҷавобҳо бо овоз: фаъол",
         "speak_off": "Ҷавобҳо бо овоз: хомӯш",
+        "voice_engine_fish": "Овози Fish (табиӣ, бо ҳиссиёт)",
+        "voice_engine_classic": "Овози классикӣ (кӯҳна)",
+        "voice_pick": "Интихоби овоз",
+        "voice_default": "Овози пешфарз",
+        "voice_emotion_on": "Ҳиссиёт дар овоз: фаъол",
+        "voice_emotion_off": "Ҳиссиёт дар овоз: ғайрифаъол",
+        "voice_lib_title": "Овозҳо",
+        "voice_lib_loading": "Овозҳо бор мешаванд...",
+        "voice_lib_fail": "Рӯйхати овозҳо кушода нашуд. Интернетро санҷед ва боз кӯшиш кунед.",
+        "voice_lib_empty": "Дар ин забон овоз ёфт нашуд. Забони дигарро санҷед.",
+        "voice_note_fish": "Овози интихобшуда ҳама ҷавобҳоро мехонад. Бе интернет овози телефон ё классикӣ истифода мешавад.",
         "voice_hint": "Овоз дар дохили JARVIS сабт шуда, бо ёрии зеҳни сунъӣ ба матн табдил меёбад.",
         "voice_how": "Микрофонро пахш кунед, сухан гӯед ва барои анҷом боз пахш кунед.",
         "voice_note": "Ҷавобҳо бо овози Edge (мардона ё занона) хонда мешаванд; агар сервер кор накунад, овози телефон истифода мешавад.",
@@ -1283,6 +1294,17 @@ TEXTS = {
         "tts_unavailable": "Озвучивание не работает.",
         "speak_on": "Озвучивать ответы: вкл.",
         "speak_off": "Озвучивать ответы: выкл.",
+        "voice_engine_fish": "Голос Fish (естественный, с эмоциями)",
+        "voice_engine_classic": "Классический голос (старый)",
+        "voice_pick": "Выбор голоса",
+        "voice_default": "Голос по умолчанию",
+        "voice_emotion_on": "Эмоции в голосе: вкл.",
+        "voice_emotion_off": "Эмоции в голосе: выкл.",
+        "voice_lib_title": "Голоса",
+        "voice_lib_loading": "Голоса загружаются...",
+        "voice_lib_fail": "Список голосов не открылся. Проверьте интернет и повторите.",
+        "voice_lib_empty": "Для этого языка голосов не найдено. Попробуйте другой язык.",
+        "voice_note_fish": "Выбранный голос читает все ответы. Без интернета используется голос телефона или классический.",
         "voice_hint": "Речь записывается внутри JARVIS и преобразуется в текст через ИИ-сервис.",
         "voice_how": "Нажмите микрофон, говорите, затем нажмите снова для завершения.",
         "voice_note": "Ответы озвучиваются голосом Edge (мужской или женский); если сервер недоступен, используется голос телефона.",
@@ -1674,6 +1696,17 @@ TEXTS = {
         "tts_unavailable": "TTS unavailable.",
         "speak_on": "Voice: on",
         "speak_off": "Voice: off",
+        "voice_engine_fish": "Fish voice (natural, with emotions)",
+        "voice_engine_classic": "Classic voice (old)",
+        "voice_pick": "Choose a voice",
+        "voice_default": "Default voice",
+        "voice_emotion_on": "Emotions in voice: on",
+        "voice_emotion_off": "Emotions in voice: off",
+        "voice_lib_title": "Voices",
+        "voice_lib_loading": "Loading voices...",
+        "voice_lib_fail": "The voice list did not open. Check the internet and try again.",
+        "voice_lib_empty": "No voices found for this language. Try another one.",
+        "voice_note_fish": "The chosen voice reads all answers. Without internet the phone voice or the classic one is used.",
         "voice_hint": "Speech is recorded inside JARVIS and transcribed by the AI service.",
         "voice_how": "Tap the mic, speak, then tap it again to finish.",
         "voice_note": "Replies are read with an Edge voice (male or female); the phone voice is used only if the server fails.",
@@ -4709,6 +4742,14 @@ def strip_media(text):
 
 _FENCE_RE = re.compile(r"```([^\n`]*)\n(.*?)(?:```|\Z)", re.S)
 _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
+
+
+EMOTION_RE = re.compile(r"\[(?:[A-Za-z][A-Za-z\- ]{1,30})\]")
+
+
+def strip_emotion(text):
+    """[sad] / [laughing] ... are instructions for the Fish voice only: never shown and never read by another voice."""
+    return re.sub(r"[ \t]{2,}", " ", EMOTION_RE.sub("", str(text))).strip() if "[" in str(text) else str(text)
 
 
 def clean_md(text):
@@ -7963,6 +8004,10 @@ class JarvisApp(App):
         self.language = "tg"
         self.theme_index = 0
         self.voice_profile = "JARVIS Classic"
+        self.voice_engine = "fish"                 # "fish" (Fish Audio via the server) or "classic" (Edge / own Tajik voice)
+        self.fish_voice = ""                       # chosen voice id from the library ("" = the server's default voice)
+        self.fish_voice_name = ""
+        self.voice_emotion = True                  # the answer may carry [sad] [laughing] ... for the voice
         self.ui_mode = "dark"
         self.speak_enabled = True
         self.server_token = ""
@@ -8098,6 +8143,10 @@ class JarvisApp(App):
             self.voice_profile = data.get("voice_profile", "JARVIS Classic")
             if self.voice_profile not in VOICES:
                 self.voice_profile = "JARVIS Classic"
+            self.voice_engine = "classic" if data.get("voice_engine", "fish") == "classic" else "fish"
+            self.fish_voice = str(data.get("fish_voice", ""))
+            self.fish_voice_name = str(data.get("fish_voice_name", ""))
+            self.voice_emotion = bool(data.get("voice_emotion", True))
             # Enable speech by default after the voice update, while preserving
             # the user's choice on later launches via the versioned preference.
             self.speak_enabled = bool(data.get("speak_v2", True))
@@ -8140,6 +8189,10 @@ class JarvisApp(App):
         self.store.put("settings", language=self.language,
                        theme_v2=self.theme_index,
                        voice_profile=self.voice_profile,
+                       voice_engine=getattr(self, "voice_engine", "fish"),
+                       fish_voice=getattr(self, "fish_voice", ""),
+                       fish_voice_name=getattr(self, "fish_voice_name", ""),
+                       voice_emotion=getattr(self, "voice_emotion", True),
                        speak=self.speak_enabled,
                        speak_v2=self.speak_enabled,
                        server_token=getattr(self, "server_token", ""),
@@ -9513,8 +9566,8 @@ class JarvisApp(App):
                 folder = os.path.join(self.user_data_dir, "say_cache")
                 os.makedirs(folder, exist_ok=True)
                 tajik = self._wants_tajik_voice(text)
-                key = hashlib.md5((("t" if tajik else self.voice_profile) + "|" + text).encode("utf-8")).hexdigest()
-                cached = os.path.join(folder, key + (".wav" if tajik else ".mp3"))
+                key = hashlib.md5((("t" if tajik else self.voice_profile) + "|" + self._tts_sig() + "|" + text).encode("utf-8")).hexdigest()
+                cached = os.path.join(folder, key + (".snd" if tajik else ".mp3"))
                 if os.path.exists(cached) and os.path.getsize(cached) > 200:
                     path = cached
                 elif self.server_token.strip():
@@ -10212,13 +10265,17 @@ class JarvisApp(App):
             from jnius import autoclass
             activity = autoclass("org.kivy.android.PythonActivity").mActivity
             resolver = activity.getContentResolver()
-            MediaStore = autoclass("android.provider.MediaStore")
+            FilesStore = autoclass("android.provider.MediaStore$Files")
+            ImagesMedia = autoclass("android.provider.MediaStore$Images$Media")
+            VideoMedia = autoclass("android.provider.MediaStore$Video$Media")
+            ImagesThumbs = autoclass("android.provider.MediaStore$Images$Thumbnails")
+            VideoThumbs = autoclass("android.provider.MediaStore$Video$Thumbnails")
             ContentUris = autoclass("android.content.ContentUris")
             Compress = autoclass("android.graphics.Bitmap$CompressFormat")
             FileOutputStream = autoclass("java.io.FileOutputStream")
             Size = autoclass("android.util.Size")
             sdk = int(autoclass("android.os.Build$VERSION").SDK_INT)
-            files = MediaStore.Files.getContentUri("external")
+            files = FilesStore.getContentUri("external")
             cur = resolver.query(files, ["_id", "media_type", "duration"], "media_type IN (1,3)", None, "date_added DESC")
             cache = os.path.join(self.user_data_dir, "thumbs")
             os.makedirs(cache, exist_ok=True)
@@ -10229,13 +10286,13 @@ class JarvisApp(App):
                 try:
                     mid, mtype, dur = int(cur.getLong(0)), int(cur.getInt(1)), int(cur.getLong(2) or 0)
                     is_video = mtype == 3
-                    base = (MediaStore.Video.Media if is_video else MediaStore.Images.Media).EXTERNAL_CONTENT_URI
+                    base = (VideoMedia if is_video else ImagesMedia).EXTERNAL_CONTENT_URI
                     uri = ContentUris.withAppendedId(base, mid)
                     bmp = None
                     if sdk >= 29:
                         bmp = resolver.loadThumbnail(uri, Size(256, 256), None)
                     else:
-                        th = MediaStore.Video.Thumbnails if is_video else MediaStore.Images.Thumbnails
+                        th = VideoThumbs if is_video else ImagesThumbs
                         bmp = th.getThumbnail(resolver, mid, 1, None)
                     if bmp is None:
                         continue
@@ -11530,7 +11587,7 @@ class JarvisApp(App):
                 ctx = ssl.create_default_context(cafile=certifi.where())
             except Exception:
                 ctx = None
-            payload = json.dumps({"text": text[:1200], "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")},
+            payload = json.dumps(dict({"text": self._speech_prep(text)[:1200], "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, **self._tts_extra()),
                                  ensure_ascii=False).encode("utf-8")
             req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/speak", data=payload, method="POST",
                                          headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.server_token,
@@ -12478,6 +12535,7 @@ class JarvisApp(App):
             "web_search": False,
             "language": self.language if self.language in ("tg", "ru", "en") else "tg",
             "assistant_name": self.assistant_name,
+            "emotion_tags": bool(self._emotion_active()),
         }
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         try:
@@ -12626,6 +12684,7 @@ class JarvisApp(App):
     def _speak_local_fallback(self, answer, force=False):
         """Use the Android TTS engine selected in system settings if server speech fails."""
         Clock.schedule_once(lambda dt: self._voice_ready(), 0)
+        answer = strip_emotion(answer)
         if (not self.speak_enabled and not force) or not answer:
             return
         self._last_spoken = answer
@@ -12654,6 +12713,8 @@ class JarvisApp(App):
         """Show a JARVIS answer. With server speech the words appear while they are spoken."""
         Clock.schedule_once(lambda dt: self._maybe_retitle(chat_id), 10)
         answer = self.brand(answer)
+        raw_answer = answer
+        answer = strip_emotion(answer)
         if RETRY_MARK not in str(answer):
             self._send_ok()
         if RETRY_MARK in str(answer):
@@ -12665,12 +12726,12 @@ class JarvisApp(App):
         if has_rich_blocks(answer):
             # code / tables: shown at once; only the words around them are read, never the code itself
             self.add_chat_message(chat_id, "jarvis", answer)
-            spoken = speech_text(answer)[:4000]
+            spoken = speech_text(raw_answer)[:4000]
             if spoken:
                 self.speak_answer(spoken)
             return
         answer = clean_md(answer)
-        text = strip_media(answer)[:4000]
+        text = strip_media(clean_md(raw_answer))[:4000]
         if self.speak_enabled and text and self.server_token.strip():
             threading.Thread(target=self._request_synced_speech,
                              args=(chat_id, answer, text), daemon=True).start()
@@ -12691,8 +12752,8 @@ class JarvisApp(App):
             self._edge_stream(text)
             return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
-        payload = json.dumps({"text": text, "timings": True,
-                              "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")},
+        payload = json.dumps(dict({"text": self._speech_prep(text), "timings": True,
+                                   "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, **self._tts_extra()),
                              ensure_ascii=False).encode("utf-8")
         try:
             try:
@@ -12857,7 +12918,7 @@ class JarvisApp(App):
             self._edge_stream(text, force)
             return
         url = "https://jarvis-ai-server-3vuo.onrender.com/speak"
-        payload = json.dumps({"text": text, "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, ensure_ascii=False).encode("utf-8")
+        payload = json.dumps(dict({"text": self._speech_prep(text), "voice_profile": VOICE_PROFILE_IDS.get(self.voice_profile, "aura")}, **self._tts_extra()), ensure_ascii=False).encode("utf-8")
         try:
             try:
                 import certifi
@@ -12909,7 +12970,7 @@ class JarvisApp(App):
             try:
                 folder = os.path.join(self.user_data_dir, "tts_cache")
                 os.makedirs(folder, exist_ok=True)
-                cache_file = os.path.join(folder, hashlib.md5(text.strip().lower().encode("utf-8")).hexdigest() + ".wav")
+                cache_file = os.path.join(folder, hashlib.md5((self._tts_sig() + "|" + text.strip().lower()).encode("utf-8")).hexdigest() + ".snd")
                 if os.path.exists(cache_file) and os.path.getsize(cache_file) > 1000:
                     return cache_file
             except Exception:
@@ -12920,14 +12981,15 @@ class JarvisApp(App):
                 ctx = ssl.create_default_context(cafile=certifi.where())
             except Exception:
                 ctx = None
-            payload = json.dumps({"text": text[:1500], "language": "tg"}, ensure_ascii=False).encode("utf-8")
+            payload = json.dumps(dict({"text": self._speech_prep(text)[:1500], "language": "tg"}, **self._tts_extra()), ensure_ascii=False).encode("utf-8")
             req = urllib.request.Request("https://jarvis-ai-server-3vuo.onrender.com/speak", data=payload, method="POST",
                                          headers={"Content-Type": "application/json",
                                                   "Authorization": "Bearer " + self.server_token})
             with urllib.request.urlopen(req, timeout=90, context=ctx) as response:
                 audio = response.read(30 * 1024 * 1024)
-            if not audio or audio[:4] != b"RIFF":
-                raise RuntimeError("not a WAV file")
+            is_wav = audio[:4] == b"RIFF"
+            if not audio or not (is_wav or audio[:3] == b"ID3" or (len(audio) > 2 and audio[0] == 0xFF and (audio[1] & 0xE0) == 0xE0)):
+                raise RuntimeError("not an audio file")
             if cache_file:
                 try:
                     with open(cache_file, "wb") as out:
@@ -12935,7 +12997,7 @@ class JarvisApp(App):
                     return cache_file
                 except Exception:
                     pass
-            fd, path = tempfile.mkstemp(prefix="jarvis_tg_", suffix=".wav")
+            fd, path = tempfile.mkstemp(prefix="jarvis_tg_", suffix=".wav" if is_wav else ".mp3")
             with os.fdopen(fd, "wb") as out:
                 out.write(audio)
             return path
@@ -14263,10 +14325,18 @@ class JarvisApp(App):
         elif section == "voice":
             option(self.t("speak_on") if self.speak_enabled else self.t("speak_off"),
                    self.speak_enabled, self.toggle_speak)
-            for name in VOICES:
-                option(VOICE_LABELS.get(name, name), self.voice_profile == name,
-                       lambda inst, n=name: self.choose_voice(n, self.settings_popup))
-            content.add_widget(make_label(self.t("voice_note"), 10, theme["accent2"]))
+            option(self.t("voice_engine_fish"), self.voice_engine == "fish", lambda inst: self.set_voice_engine("fish"))
+            option(self.t("voice_engine_classic"), self.voice_engine == "classic", lambda inst: self.set_voice_engine("classic"))
+            if self.voice_engine == "fish":
+                option(self.t("voice_pick") + ": " + (self.fish_voice_name or self.t("voice_default")), False,
+                       lambda inst: (self.settings_popup.dismiss(), Clock.schedule_once(lambda dt: self.show_voice_library(), 0.15)))
+                option(self.t("voice_emotion_on") if self.voice_emotion else self.t("voice_emotion_off"),
+                       self.voice_emotion, self.toggle_voice_emotion)
+            else:
+                for name in VOICES:
+                    option(VOICE_LABELS.get(name, name), self.voice_profile == name,
+                           lambda inst, n=name: self.choose_voice(n, self.settings_popup))
+            content.add_widget(make_label(self.t("voice_note_fish" if self.voice_engine == "fish" else "voice_note"), 10, theme["accent2"]))
             content.add_widget(make_label(self.t("voice_hint"), 10, theme["accent2"]))
             content.add_widget(Widget())
         else:
@@ -14292,6 +14362,139 @@ class JarvisApp(App):
     def choose_language(self, code, popup):
         popup.dismiss()
         Clock.schedule_once(lambda dt: self.set_language(code), 0.1)
+
+    def _tts_extra(self):
+        """Fields added to every /speak request: which engine, which Fish voice, whether emotion tags are kept."""
+        extra = {"engine": "classic" if getattr(self, "voice_engine", "fish") == "classic" else "fish",
+                 "emotion": bool(getattr(self, "voice_emotion", True))}
+        if getattr(self, "fish_voice", ""):
+            extra["fish_voice"] = self.fish_voice
+        return extra
+
+    def _tts_sig(self):
+        return "|".join((getattr(self, "voice_engine", "fish"), getattr(self, "fish_voice", ""), str(getattr(self, "voice_emotion", True))))
+
+    def _emotion_active(self):
+        return getattr(self, "voice_engine", "fish") == "fish" and bool(getattr(self, "voice_emotion", True)) and self.speak_enabled
+
+    def _speech_prep(self, text):
+        """The text that goes to the voice: tags stay only for Fish with emotions on."""
+        return text if self._emotion_active() else strip_emotion(text)
+
+    def set_voice_engine(self, engine):
+        self.voice_engine = engine
+        self.save_settings()
+        self.open_section("voice")
+
+    def toggle_voice_emotion(self, *_):
+        self.voice_emotion = not getattr(self, "voice_emotion", True)
+        self.save_settings()
+        self.open_section("voice")
+
+    def pick_fish_voice(self, voice_id, name, sheet_ref):
+        self.fish_voice = voice_id or ""
+        self.fish_voice_name = name or ""
+        self.save_settings()
+        try:
+            sheet_ref["s"].dismiss()
+        except Exception:
+            pass
+        Clock.schedule_once(lambda dt: self.open_section("voice"), 0.2)
+
+    def show_voice_library(self, lang="", page=1, query=""):
+        """Settings -> Voice -> choose a voice: a list from the Fish Audio library with a short sample for each."""
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        sheet_ref = {}
+        chips = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint=(None, 1))
+        chips.bind(minimum_width=chips.setter("width"))
+        for code, label in (("", self.t("lib_all")), ("tg", "Тоҷикӣ"), ("ru", "Русский"), ("en", "English")):
+            chip = FrostButton(tint=tint, alpha=0.30 if lang == code else 0.08, radius=16, text=mk(label), font_size=dp(13),
+                               halign="center", size_hint=(None, 1), width=dp(92), color=hex_color(theme["text"]))
+            chip.bind(on_release=lambda inst, c=code: (sheet_ref["s"].dismiss(), Clock.schedule_once(lambda dt: self.show_voice_library(c), 0.15)))
+            chips.add_widget(chip)
+        chip_scroll = ScrollView(do_scroll_y=False, size_hint_y=None, height=dp(40), bar_width=0)
+        chip_scroll.add_widget(chips)
+        body.add_widget(chip_scroll)
+        scroll = ScrollView(do_scroll_x=False)
+        grid = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        scroll.add_widget(grid)
+        body.add_widget(scroll)
+        status = make_label(self.t("voice_lib_loading"), 13, theme["text"], False, size_hint_y=None, height=dp(60))
+        grid.add_widget(status)
+        sheet_ref["s"] = GlassSheet(self, self.t("voice_lib_title"), body, height=int(min(Window.height / dp(1) * 0.9, 760)),
+                                    back=lambda: self.open_section("voice"))
+        sheet_ref["s"].open()
+
+        def fill(items, error):
+            try:
+                grid.clear_widgets()
+                default_row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(56))
+                default_btn = FrostButton(tint=tint, alpha=0.26 if not self.fish_voice else 0.10, text=mk(self.t("voice_default")),
+                                          font_size=dp(14), color=hex_color(theme["text"]))
+                default_btn.bind(on_release=lambda inst: self.pick_fish_voice("", "", sheet_ref))
+                default_row.add_widget(default_btn)
+                grid.add_widget(default_row)
+                if error or not items:
+                    grid.add_widget(make_label(self.t("voice_lib_fail" if error else "voice_lib_empty"), 13, theme["text"], False,
+                                               size_hint_y=None, height=dp(70), text_size=(Window.width * 0.7, None)))
+                    return
+                for it in items:
+                    row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(64))
+                    on = it["id"] == self.fish_voice
+                    label = "[b]" + mk(it["title"][:40]) + "[/b]\n[size=11sp][color=" + muted() + "]" + \
+                            mk(", ".join(it.get("languages", [])[:4]) + ("  \u00b7  " + it["author"] if it.get("author") else "")) + "[/color][/size]"
+                    pick = FrostButton(tint=tint, alpha=0.26 if on else 0.10, text=label, font_size=dp(14), color=hex_color(theme["text"]))
+                    pick.bind(on_release=lambda inst, i=it: self.pick_fish_voice(i["id"], i["title"], sheet_ref))
+                    row.add_widget(pick)
+                    if it.get("sample"):
+                        play = IconButton(kind="play", tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
+                                          size_hint_x=None, width=dp(56))
+                        play.bind(on_release=lambda inst, u=it["sample"]: self._voice_sample(u))
+                        row.add_widget(play)
+                    grid.add_widget(row)
+            except Exception:
+                save_crash("Voice list failed:\n" + traceback.format_exc())
+
+        def job():
+            try:
+                import urllib.parse as _up
+                path = "/voices?" + _up.urlencode({"language": lang, "page": page, "q": query})
+                data = self._json_call("GET", path, None, timeout=40)
+                items = [i for i in data.get("items", []) if isinstance(i, dict) and i.get("id")]
+                Clock.schedule_once(lambda dt: fill(items, False), 0)
+            except Exception:
+                Clock.schedule_once(lambda dt: fill([], True), 0)
+        threading.Thread(target=job, daemon=True).start()
+
+    def _voice_sample(self, url):
+        """Plays the short sample of a library voice (downloaded once, then kept on the phone)."""
+        def job():
+            try:
+                import hashlib
+                import ssl
+                folder = os.path.join(self.user_data_dir, "voice_samples")
+                os.makedirs(folder, exist_ok=True)
+                path = os.path.join(folder, hashlib.md5(url.encode("utf-8")).hexdigest() + ".mp3")
+                if not (os.path.exists(path) and os.path.getsize(path) > 500):
+                    try:
+                        import certifi
+                        ctx = ssl.create_default_context(cafile=certifi.where())
+                    except Exception:
+                        ctx = None
+                    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "SAI"}), timeout=30, context=ctx) as response:
+                        audio = response.read(6 * 1024 * 1024)
+                    if len(audio) < 500:
+                        raise RuntimeError("empty sample")
+                    with open(path, "wb") as out:
+                        out.write(audio)
+                Clock.schedule_once(lambda dt: self._play_server_audio(path), 0)
+            except Exception:
+                save_crash("Voice sample failed:\n" + traceback.format_exc())
+                Clock.schedule_once(lambda dt: self._media_notice(self.t("voice_lib_fail")), 0)
+        threading.Thread(target=job, daemon=True).start()
 
     def choose_voice(self, name, popup):
         self.voice_profile = name
