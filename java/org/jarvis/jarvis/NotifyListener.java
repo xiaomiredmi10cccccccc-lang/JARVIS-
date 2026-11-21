@@ -207,8 +207,8 @@ public class NotifyListener extends NotificationListenerService {
         String url = cfg.optString("url", "");
         if (token.length() > 0 && url.length() > 0 && online(ctx)) {
             try {
-                File a = fetchAudio(ctx, url, token, head, lang, "a");
-                File b = fetchAudio(ctx, url, token, say, bodyLang, "b");
+                File a = fetchAudio(ctx, url, token, head, lang, "a", cfg);
+                File b = fetchAudio(ctx, url, token, say, bodyLang, "b", cfg);
                 play(ctx, a);
                 play(ctx, b);
                 a.delete();
@@ -229,7 +229,7 @@ public class NotifyListener extends NotificationListenerService {
         }
     }
 
-    private static File fetchAudio(Context ctx, String url, String token, String text, String language, String tag) throws Exception {
+    private static File fetchAudio(Context ctx, String url, String token, String text, String language, String tag, JSONObject cfg) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setRequestMethod("POST");
         c.setConnectTimeout(8000);
@@ -240,6 +240,10 @@ public class NotifyListener extends NotificationListenerService {
         JSONObject o = new JSONObject();
         o.put("text", text);
         o.put("language", language);
+        String fv = cfg.optString("fish_voice", "");   // овози интихобшуда
+        if (fv.length() > 0) o.put("fish_voice", fv);
+        o.put("engine", cfg.optString("engine", "fish"));
+        o.put("emotion", cfg.optBoolean("emotion", true));
         byte[] payload = o.toString().getBytes("UTF-8");
         OutputStream os = c.getOutputStream();
         os.write(payload);
