@@ -7179,7 +7179,7 @@ class MediaViewer(FloatLayout):
         self.add_widget(self.toast_label)
 
     def _fit_zoom(self, *_):
-        if self.zoom is not None:
+        if self.zoom is not None and hasattr(self.zoom, "reset"):  # zoom: виджети акс (на адад)
             self.zoom.size = self.area.size
             self.zoom.reset()
 
@@ -7307,12 +7307,12 @@ class BlockViewer(MediaViewer):
             pass
 
     def _fill(self):
-        if not isinstance(getattr(self, "zoom", None), (int, float)):  # MediaViewer ставит zoom=None: тоза мекунем
-            self.zoom = 1.0
+        if not isinstance(getattr(self, "zf", None), (int, float)):  # масштаб (адад) ҷудо аз self.zoom-и виджет
+            self.zf = 1.0
         self._build_content()
 
     def _on_zoom(self, factor):
-        self.zoom = max(0.6, min(3.0, self.zoom * factor))
+        self.zf = max(0.6, min(3.0, self.zf * factor))
         old = getattr(self, "_scroll", None)
         pos = (old.scroll_x, old.scroll_y) if old is not None else (0, 1)
         self.area.clear_widgets()
@@ -7324,7 +7324,7 @@ class BlockViewer(MediaViewer):
     def _build_content(self):
         app = self.app
         theme = THEMES[app.theme_index]
-        z = self.zoom
+        z = self.zf
         if self.kind == "table":
             block = TableBlock(app, self.payload, full=True, zoom=z, on_zoom=self._on_zoom, pos_hint={"x": 0, "y": 0})
             self._scroll = block.scroll
