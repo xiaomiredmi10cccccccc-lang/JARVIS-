@@ -1292,7 +1292,7 @@ def _fish_synthesize(text: str, voice_id: str | None, language: str) -> bytes:  
 
 FISH_CLONE_MAX_BYTES = 10 * 1024 * 1024  # ҳадди калонии сабти овоз барои клон: 10 МБ
 ABOUT_APP = (  # матни дастур ба AI дар бораи худаш ва барнома
-    " ABOUT YOU AND THE APP: you are the assistant inside the Android app S.A.I. The app was created by Safarkhon Amirov from Tajikistan. "  # AI ёвари дохили барномаи S.A.I аст, созанда Сафархон Амиров аз Тоҷикистон
+    " ABOUT YOU AND THE APP: you are the assistant inside the Android app S.A.I. The app was created by Safarkhon Amirov from Tajikistan; in Tajik and Russian always write his name in Cyrillic exactly as 'Сафархон Амиров'. "  # AI ёвари дохили барномаи S.A.I аст, созанда Сафархон Амиров аз Тоҷикистон
     "If asked who made you or the app, say so; do not mention the age of the creator or any other private detail, and do not claim to be a human. "  # агар пурсанд, созандаро ном мебарад; синну соли ӯро намегӯяд ва худро одам намешуморад
     "The app does these things itself when the user writes or says a command, so NEVER say you cannot do them: set / list / cancel alarms and timers; "  # амалҳои барнома: будилник ва таймер (гузоштан, рӯйхат, бекор кардан)
     "flashlight; open Wi-Fi, Bluetooth, volume and brightness controls; open installed apps; take a photo with the camera; start a phone call (the dialer opens with the number); "  # чароғак, танзимоти Wi-Fi/Bluetooth/овоз/равшанӣ, барномаҳо, камера, занг
@@ -1401,6 +1401,8 @@ async def my_voice_clone(http_request: Request, consent: int = 0, x_jarvis_token
         except Exception:  # агар хондан нашавад
             pass  # хомӯш мегузарем
         print("Fish voice create failed:", exc.code, detail[:200])  # рамз ва матни хаторо дар лог менависем
+        if exc.code == 403 and "limit" in detail.lower():  # Fish: сохтани модел тавассути API маҳдуд аст
+            raise HTTPException(status_code=502, detail="CLONE_UNAVAILABLE")  # барнома паёми фаҳмо нишон медиҳад
         raise HTTPException(status_code=502, detail="Voice service refused the recording (%s)" % exc.code)  # ба барнома мегӯем, ки Fish сабтро рад кард ва рамзи хато
     except Exception as exc:  # хатои дигар (интернет, вақт ва ғайра)
         print("Fish voice create failed:", type(exc).__name__, str(exc)[:160])  # хаторо дар лог менависем
@@ -1443,9 +1445,10 @@ async def list_voices(http_request: Request, q: str = "", language: str = "", pa
     if not _fish_key():  # агар калиди Fish танзим нашудааст
         raise HTTPException(status_code=503, detail="Voice library is not configured")  # хабар медиҳем, ки китобхонаи овозҳо танзим нашудааст
     q = q.strip()[:60]  # матни ҷустуҷӯро тоза ва то 60 аломат маҳдуд мекунем
+    mine = language.strip().lower() == "mine"  # «Овозҳои ман»: танҳо овозҳои аккаунти Fish-и худи мо
     language = language.strip().lower()[:8] if language.strip().lower() in ("tg", "ru", "en") else ""  # забон танҳо tg, ru ё en иҷозат дорад
     page = max(1, min(int(page), 50))  # рақами саҳифа аз 1 то 50
-    cache_key = (q, language, page)  # калиди хотираи муваққатӣ аз се параметр
+    cache_key = (q, language, page, mine)  # калиди хотираи муваққатӣ аз се параметр
     now = time.monotonic()  # вақти ҳозира барои санҷиши кӯҳна шудани хотира
     hit = _voices_cache.get(cache_key)  # аз хотира ҷавоби пештара мегирем
     if hit and now - hit[0] < 600:  # агар ҷавоб аз 10 дақиқа кам кӯҳна бошад
@@ -1453,6 +1456,8 @@ async def list_voices(http_request: Request, q: str = "", language: str = "", pa
     params = {"page_size": "20", "page_number": str(page), "sort_by": "score"}  # параметрҳои дархост: 20 овоз дар як саҳифа, аз рӯи маъруфият
     if q:  # агар ҷустуҷӯи ном ҳаст
         params["title"] = q  # онро ба параметрҳо илова мекунем
+    if mine:  # танҳо овозҳои шахсии аккаунт
+        params["self"] = "true"
     if language:  # агар забон интихоб шудааст
         params["language"] = language  # онро ба параметрҳо илова мекунем
     url = FISH_MODEL_URL + "?" + urllib.parse.urlencode(params)  # суроғаи пурраи дархост бо параметрҳо
