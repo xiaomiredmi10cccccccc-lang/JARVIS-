@@ -761,6 +761,7 @@ TEXTS = {
         "view_type": "Навъ",
         "view_nopreview": "Намоиши пешакӣ барои ин файл нест",
         "view_actions": "Амалҳо",
+        "link_ask": "Кушодан?", "link_open": "Кушодан", "voice_mine": "Овозҳои ман", "voice_mine_empty": "Дар аккаунти Fish овози шахсӣ нест. Онро дар сайти fish.audio созед.", "myvoice_unavail": "Сохтани овоз аз барнома ҳоло дастнорас аст. Овозро дар сайти fish.audio созед ва дар рӯйхати овозҳо «Овозҳои ман»-ро интихоб кунед.",
         "view_failed": "Кушодан натавонист",
         "pf_title": "Бо шумо наздиктар шавем",
         "pf_first": "Ном",
@@ -1190,6 +1191,7 @@ TEXTS = {
         "view_type": "Тип",
         "view_nopreview": "Для этого файла нет предпросмотра",
         "view_actions": "Действия",
+        "link_ask": "Открыть?", "link_open": "Открыть", "voice_mine": "Мои голоса", "voice_mine_empty": "В аккаунте Fish нет личных голосов. Создайте голос на сайте fish.audio.", "myvoice_unavail": "Создание голоса из приложения сейчас недоступно. Создайте голос на сайте fish.audio и выберите «Мои голоса» в списке голосов.",
         "view_failed": "Не удалось открыть",
         "pf_title": "Давайте познакомимся",
         "pf_first": "Имя",
@@ -1619,6 +1621,7 @@ TEXTS = {
         "view_type": "Type",
         "view_nopreview": "No preview for this file",
         "view_actions": "Actions",
+        "link_ask": "Open?", "link_open": "Open", "voice_mine": "My voices", "voice_mine_empty": "There are no personal voices in your Fish account. Create one on fish.audio.", "myvoice_unavail": "Creating a voice from the app is not available right now. Create the voice on fish.audio and pick My voices in the voice list.",
         "view_failed": "Could not open",
         "pf_title": "Let us get acquainted",
         "pf_first": "First name",
@@ -2092,10 +2095,18 @@ def link_markup(text, links):
             url = shown
             if not shown:
                 continue
-        out.append(markup_escape(text[last:m.start()]))
+        prefix = text[last:m.start()]
+        end = m.start() + len(m.group(0)) - (len(trail) if not m.group(1) else 0)
+        if not m.group(1):
+            if re.match(r"^(?:https?://|www\.)", shown):  # суроғаи хом: танҳо номи сайтро нишон медиҳем
+                shown = re.sub(r"^(?:https?://)?(?:www\.)?", "", shown).split("/")[0]
+            if prefix.endswith("(") and trail.startswith(")"):  # қавсҳои гирду атрофро мебарем
+                prefix = prefix[:-1]
+                end += 1
+        out.append(markup_escape(prefix))
         out.append("[color=%s][u][ref=l%d]%s[/ref][/u][/color]" % (acc, len(links), markup_escape(shown)))
         links.append(url)
-        last = m.start() + len(m.group(0)) - (len(trail) if not m.group(1) else 0)
+        last = end
     out.append(markup_escape(text[last:]))
     return "".join(out)
 
@@ -2116,7 +2127,11 @@ class EmojiLabel(Label):
 
     def _ref_pressed(self, label, ref):
         if ref.startswith("l") and ref[1:].isdigit() and int(ref[1:]) < len(self._links):
-            open_url(self._links[int(ref[1:])])
+            url = self._links[int(ref[1:])]
+            try:
+                App.get_running_app().confirm_link(url)  # аввал мепурсем: кушодан ё нусха
+            except Exception:
+                open_url(url)
 
     def _nbsp_count(self):
         if self._nb is None:
@@ -4875,7 +4890,8 @@ MY_VOICE_SCRIPTS = {  # матнҳои захиравӣ барои сабти о
 
 def strip_emotion(text):
     """[sad] / [laughing] ... are instructions for the Fish voice only: never shown and never read by another voice."""
-    return re.sub(r"[ \t]{2,}", " ", EMOTION_RE.sub("", str(text))).strip() if "[" in str(text) else str(text)
+    text = re.sub(r"\s*【[^】]*】", "", str(text))  # нишонаҳои сарчашмаи 【5†URL】-ро тоза мекунем
+    return re.sub(r"[ \t]{2,}", " ", EMOTION_RE.sub("", text)).strip() if "[" in text else text
 
 
 def clean_md(text):
@@ -7291,7 +7307,8 @@ class BlockViewer(MediaViewer):
             pass
 
     def _fill(self):
-        self.zoom = getattr(self, "zoom", 1.0)
+        if not isinstance(getattr(self, "zoom", None), (int, float)):  # MediaViewer ставит zoom=None: тоза мекунем
+            self.zoom = 1.0
         self._build_content()
 
     def _on_zoom(self, factor):
@@ -13702,6 +13719,32 @@ class JarvisApp(App):
         except Exception:
             pass
 
+    def confirm_link(self, url):
+        """Пахши ссилка: ду тугма, «Кушодан» ва «Нусха»."""
+        theme = THEMES[self.theme_index]
+        tint = hex_color(theme["accent"])[:3]
+        body = BoxLayout(orientation="vertical", spacing=dp(8))
+        sheet = GlassSheet(self, self.t("link_ask"), body, anchor="menu", height=250)
+        body.add_widget(make_label(url[:90], 12, muted(), False, size_hint_y=None, height=dp(40)))
+
+        def act(fn):
+            def run(*_):
+                sheet.dismiss()
+                Clock.schedule_once(lambda dt: fn(), 0.15)
+            return run
+
+        def do_copy():
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(url)
+            self.toast_msg(self.t("code_copied"))
+        for kind, key, fn in (("share", "link_open", lambda: open_url(url)), ("copy", "view_copy", do_copy)):
+            row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(52))
+            row.add_widget(IconButton(kind=kind, tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
+                                      size_hint=(None, 1), width=dp(52)))
+            self.frost_row(row, self.t(key), False, act(fn), height=52)
+            body.add_widget(row)
+        sheet.open()
+
     def toast_msg(self, text):
         try:
             self.deliver_answer(self.chats.current_id, str(text))
@@ -13898,6 +13941,7 @@ class JarvisApp(App):
         try:
             cfg = {"mode": self.msg_mode(), "token": self.server_token.strip(), "url": SERVER_BASE + "/speak",
                    "lang": self._lang_code(), "intro": self.t("msg_intro")}
+            cfg.update(self._tts_extra())  # овози интихобшуда низ барои хонандаи пасзамина
             text = json.dumps(cfg, ensure_ascii=False)
             if text == getattr(self, "_msg_cfg_last", None):
                 return
@@ -14802,6 +14846,8 @@ class JarvisApp(App):
                     reason = ""  # сабаб холӣ мемонад
                 code = (" " + str(getattr(exc, "code", ""))) if hasattr(exc, "code") else ""  # рамзи HTTP (масалан 502)
                 msg = self.t("myvoice_fail_send") + "\n(" + (reason or (type(exc).__name__ + code)) + ")"  # хабар бо сабаб дар қавс
+                if "CLONE_UNAVAILABLE" in reason:  # Fish сохтани овозро аз API иҷозат намедиҳад
+                    msg = self.t("myvoice_unavail")
                 Clock.schedule_once(lambda dt: self._mv_say(msg), 0)
         threading.Thread(target=job, daemon=True).start()
 
@@ -14881,9 +14927,9 @@ class JarvisApp(App):
         sheet_ref = {}
         chips = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint=(None, 1))
         chips.bind(minimum_width=chips.setter("width"))
-        for code, label in (("", self.t("lib_all")), ("tg", "Тоҷикӣ"), ("ru", "Русский"), ("en", "English")):
+        for code, label in (("", self.t("lib_all")), ("tg", "Тоҷикӣ"), ("ru", "Русский"), ("en", "English"), ("mine", self.t("voice_mine"))):
             chip = FrostButton(tint=tint, alpha=0.30 if lang == code else 0.08, radius=16, text=mk(label), font_size=dp(13),
-                               halign="center", size_hint=(None, 1), width=dp(92), color=hex_color(theme["text"]))
+                               halign="center", size_hint=(None, 1), width=dp(130) if code == "mine" else dp(92), color=hex_color(theme["text"]))
             chip.bind(on_release=lambda inst, c=code: (sheet_ref["s"].dismiss(), Clock.schedule_once(lambda dt: self.show_voice_library(c, 1, query), 0.15)))
             chips.add_widget(chip)
         chip_scroll = ScrollView(do_scroll_y=False, size_hint_y=None, height=dp(40), bar_width=0)
@@ -14951,7 +14997,7 @@ class JarvisApp(App):
                     default_row.add_widget(default_btn)
                     grid.add_widget(default_row)
                 if error or (not items and not append):
-                    grid.add_widget(make_label(self.t("voice_lib_fail" if error else "voice_lib_empty"), 13, theme["text"], False,
+                    grid.add_widget(make_label(self.t("voice_lib_fail" if error else ("voice_mine_empty" if lang == "mine" else "voice_lib_empty")), 13, theme["text"], False,
                                                size_hint_y=None, height=dp(70), text_size=(Window.width * 0.7, None)))
                     return
                 add_items(items)
