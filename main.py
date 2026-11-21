@@ -925,6 +925,11 @@ TEXTS = {
         "myvoice_done": "Тайёр! Акнун ҷавобҳо бо овози шумо хонда мешаванд.",
         "myvoice_fail_send": "Овоз сохта нашуд. Интернет ва кӯшиши дубора.",
         "voice_more": "Бештар овозҳо...",
+        "myvoice_newtext": "Матни нав",
+        "myvoice_newtext_wait": "Матни нав омода мешавад...",
+        "myvoice_file": "Файли овозӣ бор кардан",
+        "myvoice_file_big": "Файл хеле калон аст (то 10 МБ).",
+        "myvoice_file_ready": "Файл интихоб шуд. Тасдиқро гузоред ва «Сохтани овози ман»-ро пахш кунед.",
         "voice_hint": "Овоз дар дохили JARVIS сабт шуда, бо ёрии зеҳни сунъӣ ба матн табдил меёбад.",
         "voice_how": "Микрофонро пахш кунед, сухан гӯед ва барои анҷом боз пахш кунед.",
         "voice_note": "Ҷавобҳо бо овози Edge (мардона ё занона) хонда мешаванд; агар сервер кор накунад, овози телефон истифода мешавад.",
@@ -1349,6 +1354,11 @@ TEXTS = {
         "myvoice_done": "Готово! Теперь ответы читаются вашим голосом.",
         "myvoice_fail_send": "Голос не создан. Проверьте интернет и повторите.",
         "voice_more": "Ещё голоса...",
+        "myvoice_newtext": "Новый текст",
+        "myvoice_newtext_wait": "Готовлю новый текст...",
+        "myvoice_file": "Загрузить аудиофайл",
+        "myvoice_file_big": "Файл слишком большой (до 10 МБ).",
+        "myvoice_file_ready": "Файл выбран. Поставьте подтверждение и нажмите «Создать мой голос».",
         "voice_hint": "Речь записывается внутри JARVIS и преобразуется в текст через ИИ-сервис.",
         "voice_how": "Нажмите микрофон, говорите, затем нажмите снова для завершения.",
         "voice_note": "Ответы озвучиваются голосом Edge (мужской или женский); если сервер недоступен, используется голос телефона.",
@@ -1773,6 +1783,11 @@ TEXTS = {
         "myvoice_done": "Done! The answers are now read with your voice.",
         "myvoice_fail_send": "The voice was not created. Check the internet and try again.",
         "voice_more": "More voices...",
+        "myvoice_newtext": "New text",
+        "myvoice_newtext_wait": "Preparing a new text...",
+        "myvoice_file": "Upload an audio file",
+        "myvoice_file_big": "The file is too large (up to 10 MB).",
+        "myvoice_file_ready": "File chosen. Tick the confirmation and tap \u201cCreate my voice\u201d.",
         "voice_hint": "Speech is recorded inside JARVIS and transcribed by the AI service.",
         "voice_how": "Tap the mic, speak, then tap it again to finish.",
         "voice_note": "Replies are read with an Edge voice (male or female); the phone voice is used only if the server fails.",
@@ -4685,16 +4700,33 @@ BASE_WORDS = {
     "ru": "Привет Здравствуйте Спасибо Пожалуйста Хочу Можете Можно Команда Приложение Помощь Память Язык Сегодня Завтра Вчера Сейчас Почему Где Всегда Хорошо Да Нет Погода Курс План Перевод Напиши Расскажи Нарисуй Найди Открой Скачать Сообщение Сомони Доллар Рубль Город Душанбе Таджикистан Таджикский Русский Английский Информация Вопрос Ответ Школа Университет Работа Семья Друг Еда Любовь Путешествие Музыка Фильм Книга Читать Писать Слушать Говорить Объясни Коротко Подробно Пример".split(),
     "en": "Hello Thanks Please Want Could Would Command Application Help Memory Language Today Tomorrow Yesterday Now Why Where Always Good Yes No Weather Rate Plan Translate Write Tell Draw Find Open Download Message Dollar City Tajikistan Tajik Russian English Information Question Answer School University Work Family Friend Food Love Travel Music Movie Book Read Listen Speak Explain Short Detailed Example".split(),
 }
-BUSY_PHRASES = {
-    "tg": {"think": ["Интизор шавед…", "Фикр мекунам…", "Ҷавобро омода мекунам…", "Лаҳзае сабр кунед…", "Тақрибан тайёр аст…"],
-           "image": ["Акс месозам…", "Интизор шавед, ин каме вақт мегирад…", "Рангҳоро мувофиқ мекунам…", "Лаҳзае сабр кунед…", "Тақрибан тайёр аст…"],
-           "answer": ["Ҷавоб нишон дода мешавад…", "Лаҳзае сабр кунед…", "Ҳамааш ҳозир омода мешавад…"]},
-    "ru": {"think": ["Подождите, пожалуйста…", "Думаю…", "Готовлю ответ…", "Минуточку…", "Почти готово…"],
-           "image": ["Создаю изображение…", "Подождите, это займёт немного времени…", "Подбираю цвета…", "Минуточку…", "Почти готово…"],
-           "answer": ["Ответ появляется…", "Минуточку…", "Сейчас всё будет готово…"]},
-    "en": {"think": ["Please wait…", "Thinking…", "Preparing the answer…", "Just a moment…", "Almost ready…"],
-           "image": ["Creating the picture…", "Please wait, this takes a little time…", "Matching the colours…", "Just a moment…", "Almost ready…"],
-           "answer": ["The answer is appearing…", "Just a moment…", "Everything will be ready shortly…"]},
+BUSY_PHRASES = {  # ибораҳои интизорӣ: ҳар забон ва ҳар навъ рӯйхати калон дорад, то зуд такрор нашаванд
+    "tg": {  # забони тоҷикӣ
+        "think": ["Лаҳзае сабр кунед…", "Фикр мекунам…", "Ҷавобро омода мекунам…", "Маълумотро ҷамъ мекунам…",  # ибораҳои «фикр»
+                  "Масъаларо бодиққат мефаҳмам…", "Беҳтарин ҷавобро меёбам…", "Ҳамаи ҷиҳатҳоро баррасӣ мекунам…", "Ташаккур барои сабр…",
+                  "Дурустии ҷавобро месанҷам…", "Ибораҳоро мураттаб мекунам…", "Нукта ба нукта андеша мекунам…", "Дар хотира ҷустуҷӯ мекунам…",
+                  "Мантиқи ҷавобро мепайвандам…", "Тақрибан тайёр аст…", "Каме дигар, лутфан…", "Ҳоло ҷавоб тайёр мешавад…"],
+        "image": ["Акс месозам…", "Тарҳро кашида истодаам…", "Рангҳоро мувофиқ мекунам…", "Равшаниву сояро танзим мекунам…",  # ибораҳои «акс»
+                  "Тафсилотро илова мекунам…", "Таркиби аксро мечинам…", "Ин каме вақт мегирад, сабр кунед…", "Ранги охиринро мегузорам…",
+                  "Нури аксро месанҷам…", "Акс дар роҳ аст…", "Кори охирин боқӣ мондааст…", "Тақрибан тайёр аст…"],
+        "answer": ["Ҷавоб нишон дода мешавад…", "Ҳамааш ҳозир омода мешавад…", "Матнро дуруст мечинам…",  # ибораҳои «ҷавоб»
+                   "Ҷавоб ба шумо мерасад…", "Як лаҳза, ҷавоб пайдо мешавад…", "Тақрибан тамом шуд…"]},
+    "ru": {  # русский язык
+        "think": ["Подождите, пожалуйста…", "Думаю…", "Готовлю ответ…", "Собираю информацию…", "Внимательно разбираю вопрос…",
+                  "Подбираю лучший ответ…", "Взвешиваю все стороны…", "Проверяю точность ответа…", "Складываю формулировки…",
+                  "Ищу в памяти…", "Выстраиваю логику ответа…", "Почти готово…", "Ещё мгновение, пожалуйста…"],
+        "image": ["Создаю изображение…", "Набрасываю композицию…", "Подбираю цвета…", "Настраиваю свет и тени…", "Добавляю детали…",
+                  "Это займёт немного времени…", "Накладываю последние штрихи…", "Картинка уже в пути…", "Почти готово…"],
+        "answer": ["Ответ появляется…", "Сейчас всё будет готово…", "Аккуратно выстраиваю текст…", "Ответ уже идёт к вам…",
+                   "Ещё секунду, ответ появится…", "Почти закончил…"]},
+    "en": {  # English
+        "think": ["Please wait…", "Thinking…", "Preparing the answer…", "Gathering information…", "Looking at this carefully…",
+                  "Finding the best answer…", "Weighing all sides…", "Checking the answer…", "Putting the wording together…",
+                  "Searching my memory…", "Building the logic of the answer…", "Almost ready…", "Just a moment, please…"],
+        "image": ["Creating the picture…", "Sketching the composition…", "Matching the colours…", "Adjusting light and shadow…",
+                  "Adding the details…", "This takes a little time…", "Adding the final touches…", "The picture is on its way…", "Almost ready…"],
+        "answer": ["The answer is appearing…", "Everything will be ready shortly…", "Arranging the text neatly…", "The answer is on its way…",
+                   "One more second, it will appear…", "Almost done…"]},
 }
 TEXT_FILE_EXTS = (".txt", ".md", ".csv", ".json", ".log", ".py", ".html", ".css", ".js", ".xml", ".yaml", ".yml", ".ini", ".kv")
 
@@ -4811,6 +4843,34 @@ _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
 
 
 EMOTION_RE = re.compile(r"\[(?:[A-Za-z][A-Za-z\- ]{1,30})\]")
+
+
+MY_VOICE_SCRIPTS = {  # матнҳои захиравӣ барои сабти овоз (агар интернет набошад)
+    "tg": ["Субҳ барвақт аз хоб мехезам ва ба кӯча баромада, ҳавои тозаро нафас мекашам. Дар назди хона дарахтони сабз ва гулҳои сурх мешукуфанд. Шумо имрӯз чӣ нақша доред? Ман мехоҳам рӯзи хубе гузаронам!",
+           "Модарам барои хӯроки шом палав мепазад ва бӯи хуши он тамоми хонаро пур мекунад. Мо ҳама дар як дастурхон менишинем. Падарам чой мерезад ва ҳикояи хандаовар мекунад. Чӣ қадар хуш аст хонавода!",
+           "Дар кӯҳҳо ҳаво хунук ва софу беғубор аст. Рӯдхона аз байни сангҳо шӯхона ҷорӣ мешавад. Мо дар лаби дарё нишастем ва нони гарм хӯрдем. Магар ин ҷой аз ҳама зеботар нест?",
+           "Имрӯз ман китоби нав хондам, ки дар бораи сафар ба кишварҳои дур аст. Қаҳрамони асосӣ хеле ҷасур ва меҳрубон буд. Баъд аз хондан ба тиреза нигоҳ кардам ва шаби ситорабораро дидам. Чӣ осмони равшан!",
+           "Бозор пур аз меваҳои ширин аст: себ, ангур, анор ва зардолу. Фурӯшанда бо табассум салом дод ва нархҳоро гуфт. Ман ним кило ангур харидам. Оё шумо ҳам анор дӯст медоред?",
+           "Дирӯз дар мактаб дарси ҷолиб доштем ва муаллим дар бораи ситорагон нақл кард. Ҳамаи мо бодиққат гӯш мекардем. Баъд аз дарс бо дӯстон ба боғ рафтем. Ҳаво гарм буд ва ҳама хурсанд буданд.",
+           "Шаби зимистон барф оҳиста меборад ва кӯча хомӯш аст. Ман дар хона дар назди тиреза чой менӯшам. Аз берун сафедии барф дурахшон менамояд. Чӣ оромии хуб, ҳамин тавр не?",
+           "Дӯстам ба ман занг зад ва ба ҷашни рӯзи таваллуд даъват кард. Мо бо ҳам кулчаи калон пухтем ва шамъҳо афрӯхтем. Ҳама суруд хонданд ва ханданд. Ин рӯз хотираи фаромӯшнашаванда шуд!",
+           "Қатор аз Душанбе ба самти кӯҳсор мерафт ва аз тиреза манзараи зебо намоён буд. Мусофирон оромона сӯҳбат мекарданд. Ман ба китобам нигоҳ кардам ва ба фикр рафтам. Сафари хуб аст!",
+           "Ҳар саҳар ман як пиёла чойи гарм менӯшам ва ба хабарҳо гӯш медиҳам. Баъд ба кор меравам ва ба ҳамкорон салом мегӯям. Кори хуб ва муҳити меҳрубон рӯҳро болида мекунанд. Шумо чӣ гуна рӯзатонро оғоз мекунед?",
+           "Дар баҳор ҳама чиз ранги нав мегирад: боғҳо сабз мешаванд ва паррандагон бармегарданд. Ман ба боғи шаҳр рафтам ва дар зери гули бодом нишастам. Ин лаҳза хеле ором ва хушнудӣ буд. Бигзор ҳамеша баҳор бошад!",
+           "Телефони ман хеле муфид аст: он вақтро нишон медиҳад, ёдовар мешавад ва ба саволҳо ҷавоб медиҳад. Ман бо ёвари хуш сӯҳбат мекунам. Ташаккур, ки ба ман кӯмак мекунӣ. Рӯзат хайр бошад!"],
+    "ru": ["Утром я просыпаюсь рано и выхожу на улицу подышать свежим воздухом. Возле дома цветут яркие цветы. Какие у вас планы на сегодня? Я хочу провести этот день хорошо!",
+           "Мама готовит ужин, и запах разносится по всему дому. Мы садимся за стол всей семьёй. Папа наливает чай и рассказывает смешную историю. Как же приятно быть вместе!",
+           "В горах воздух чистый и прохладный. Ручей весело бежит между камнями. Мы сели у воды и ели тёплый хлеб. Разве не прекрасное место?",
+           "Сегодня я прочитал новую книгу о далёких путешествиях. Главный герой был смелым и добрым. Потом я посмотрел в окно и увидел звёздное небо. Какая ясная ночь!",
+           "На рынке много сладких фруктов: яблоки, виноград, гранаты и абрикосы. Продавец улыбнулся и назвал цены. Я купил полкило винограда. А вы любите гранаты?",
+           "Зимней ночью снег падает тихо, и на улице спокойно. Я пью чай у окна. Снаружи всё блестит белизной. Какая приятная тишина, правда?"],
+    "en": ["I wake up early in the morning and step outside to breathe the fresh air. Bright flowers bloom near my house. What are your plans for today? I hope to spend a really good day!",
+           "My mother cooks dinner and the lovely smell fills the whole house. We all sit at one table together. Dad pours the tea and tells a funny story. How good it is to be a family!",
+           "The air in the mountains is cool and clear. The stream runs happily between the stones. We sat by the water and ate warm bread. Isn't this the most beautiful place?",
+           "Today I read a new book about faraway journeys. The main hero was brave and kind. Then I looked out of the window and saw a sky full of stars. What a bright night!",
+           "The market is full of sweet fruit: apples, grapes, pomegranates and apricots. The seller smiled and told me the prices. I bought half a kilo of grapes. Do you like pomegranates too?",
+           "On a winter night the snow falls quietly and the street is calm. I drink tea by the window. Everything outside shines white. What a pleasant silence, don't you think?"],
+}
 
 
 def strip_emotion(text):
@@ -8073,6 +8133,7 @@ class JarvisApp(App):
         self.voice_engine = "fish"                 # "fish" (Fish Audio via the server) or "classic" (Edge / own Tajik voice)
         self.fish_voice = ""                       # chosen voice id from the library ("" = the server's default voice)
         self.fish_voice_name = ""
+        self.fish_voice_desc = ""                  # тавсифи овоз аз китобхона (барои оҳанги суханронии AI)
         self.my_voice_id = ""                      # the user's own cloned voice (private, made from their recording)
         self.voice_emotion = True                  # the answer may carry [sad] [laughing] ... for the voice
         self.ui_mode = "dark"
@@ -8213,6 +8274,7 @@ class JarvisApp(App):
             self.voice_engine = "classic" if data.get("voice_engine", "fish") == "classic" else "fish"
             self.fish_voice = str(data.get("fish_voice", ""))
             self.fish_voice_name = str(data.get("fish_voice_name", ""))
+            self.fish_voice_desc = str(data.get("fish_voice_desc", ""))[:200]
             self.my_voice_id = str(data.get("my_voice_id", ""))
             self.voice_emotion = bool(data.get("voice_emotion", True))
             # Enable speech by default after the voice update, while preserving
@@ -8260,6 +8322,7 @@ class JarvisApp(App):
                        voice_engine=getattr(self, "voice_engine", "fish"),
                        fish_voice=getattr(self, "fish_voice", ""),
                        fish_voice_name=getattr(self, "fish_voice_name", ""),
+                       fish_voice_desc=getattr(self, "fish_voice_desc", ""),
                        my_voice_id=getattr(self, "my_voice_id", ""),
                        voice_emotion=getattr(self, "voice_emotion", True),
                        speak=self.speak_enabled,
@@ -10513,6 +10576,10 @@ class JarvisApp(App):
             self._cam_pending = False
             self._camera_result(result_code)
             return
+        if request_code == 7416 and getattr(self, "_mv_file_pending", False):  # натиҷаи интихоби файли овозӣ барои «Овози ман»
+            self._mv_file_pending = False  # ишораро хомӯш мекунем
+            self._mv_file_picked(result_code, data)  # файлро коркард мекунем
+            return  # дигар коре нест
         if request_code == 7413 and getattr(self, "_avatar_pending", False):
             self._avatar_pending = False
             self._avatar_picked(result_code, data)
@@ -11050,19 +11117,33 @@ class JarvisApp(App):
     def busy_start(self, kind="think"):
         """While an answer is not fully shown, the status line cycles through several waiting phrases."""
         self._busy = True
-        phrases = BUSY_PHRASES.get(self.language, BUSY_PHRASES["tg"]).get(kind) or BUSY_PHRASES["tg"]["think"]
-        for ev in (self._busy_ev, self._busy_safety):
-            if ev is not None:
-                ev.cancel()
-        self._busy_i = 0
+        phrases = BUSY_PHRASES.get(self.language, BUSY_PHRASES["tg"]).get(kind) or BUSY_PHRASES["tg"]["think"]  # рӯйхати ибораҳо барои ин забон ва навъ
+        for ev in (self._busy_ev, self._busy_safety):  # ҳар ду таймери кӯҳнаро мебинем
+            if ev is not None:  # агар таймер ҳаст
+                ev.cancel()  # онро бекор мекунем
+        self._busy_i = 0  # ҳисобкунакро аз сифр оғоз мекунем
+        queue = []  # навбати ибораҳои омехташуда (аввал холӣ)
+        last = [getattr(self, "_busy_last", "")]  # ибораи охирине, ки пештар нишон дода шуда буд
+
+        def next_phrase():
+            if not queue:  # агар ҳама ибораҳо истифода шуданд
+                fresh = list(phrases)  # нусхаи рӯйхатро мегирем
+                random.shuffle(fresh)  # онро тасодуфӣ омехта мекунем
+                if len(fresh) > 1 and fresh[0] == last[0]:  # агар аввалин ибора ҳамонест, ки охирин буд
+                    fresh[0], fresh[-1] = fresh[-1], fresh[0]  # онро ба охир мегузаронем, то пай дар пай такрор нашавад
+                queue.extend(fresh)  # навбатро пур мекунем
+            phrase = queue.pop(0)  # ибораи навбатиро мегирем
+            last[0] = phrase  # ба ёд мегирем, ки охирин кадом буд
+            self._busy_last = phrase  # онро барои даври навбатӣ нигоҳ медорем
+            return phrase  # ибораро бармегардонем
 
         def tick(dt):
-            label = getattr(self, "status_label", None)
-            if label is None or not self._busy:
-                return False
-            label.text = phrases[self._busy_i % len(phrases)]
-            self._busy_i += 1
-            return True
+            label = getattr(self, "status_label", None)  # хати ҳолат (зери орб)
+            if label is None or not self._busy:  # агар хат нест ё интизорӣ тамом шуд
+                return False  # таймерро қатъ мекунем
+            label.text = next_phrase()  # ибораи навро менависем
+            self._busy_i += 1  # ҳисобкунакро зиёд мекунем
+            return True  # таймер идома меёбад
 
         tick(0)
         self._pulse_start()
@@ -12606,6 +12687,9 @@ class JarvisApp(App):
             "assistant_name": self.assistant_name,
             "emotion_tags": bool(self._emotion_active()),
         }
+        if self.voice_engine == "fish" and self.speak_enabled and self.fish_voice_name and self.fish_voice != getattr(self, "my_voice_id", "x"):
+            payload["voice_title"] = self.fish_voice_name[:60]  # номи овози интихобшуда (масалан Jarvis)
+            payload["voice_desc"] = (self.fish_voice_desc or "")[:200]  # тавсифи он аз китобхона
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         try:
             import certifi
@@ -14449,9 +14533,16 @@ class JarvisApp(App):
         info = make_label(self.t("myvoice_info"), 12, muted(), False, size_hint_y=None, height=dp(96), halign="left")
         info.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
         inner.add_widget(info)
-        sample = make_label(self.t("myvoice_text"), 14, theme["text"], False, size_hint_y=None, height=dp(150), halign="left")
-        sample.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
-        inner.add_widget(sample)
+        pool = MY_VOICE_SCRIPTS.get(self.language, MY_VOICE_SCRIPTS["tg"])  # матнҳои захиравӣ барои забони ҷорӣ
+        sample = make_label(self._mv_pick_script(pool), 14, theme["text"], False, size_hint_y=None, height=dp(150), halign="left")  # матни тасодуфӣ
+        sample.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))  # паҳнои матн ба паҳнои экран мувофиқ мешавад
+        sample.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1] + dp(12)))  # баландӣ аз рӯи матн иваз мешавад
+        inner.add_widget(sample)  # матнро ба саҳифа мегузорем
+        ref["sample"] = sample  # онро ба ёд мегирем, то тугмаи «Матни нав» иваз карда тавонад
+        new_text_btn = FrostButton(tint=tint, alpha=0.12, text=mk(self.t("myvoice_newtext")), font_size=dp(13), size_hint_y=None,
+                                   height=dp(44), color=hex_color(theme["text"]))  # тугмаи «Матни нав»
+        new_text_btn.bind(on_release=lambda inst: self._mv_new_text())  # пахш: матни нав аз AI меояд
+        inner.add_widget(new_text_btn)  # тугмаро ба саҳифа мегузорем
         ref["status"] = make_label("", 12, theme["accent"], False, size_hint_y=None, height=dp(44), halign="center")
         ref["status"].bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
         inner.add_widget(ref["status"])
@@ -14471,6 +14562,10 @@ class JarvisApp(App):
                               height=dp(54), color=hex_color(theme["text"]))
         rec_btn.bind(on_release=lambda inst: self._mv_toggle(rec_btn, send_btn))
         inner.add_widget(rec_btn)
+        file_btn = FrostButton(tint=tint, alpha=0.12, text=mk(self.t("myvoice_file")), font_size=dp(14), size_hint_y=None,
+                               height=dp(50), color=hex_color(theme["text"]))  # тугмаи «Файли овозӣ бор кардан»
+        file_btn.bind(on_release=lambda inst: self._mv_pick_file())  # пахш: интихоби файли овозӣ аз телефон
+        inner.add_widget(file_btn)  # тугмаро ба саҳифа мегузорем
         send_btn = FrostButton(tint=tint, alpha=0.26, text=mk(self.t("myvoice_send")), font_size=dp(15), size_hint_y=None,
                                height=dp(54), color=hex_color(theme["text"]))
         send_btn.bind(on_release=lambda inst: self._mv_send(ref))
@@ -14487,6 +14582,86 @@ class JarvisApp(App):
         ref["sheet"] = GlassSheet(self, self.t("myvoice_title"), body, height=int(min(Window.height / dp(1) * 0.92, 780)),
                                   back=lambda: (self._mv_cancel(), self.open_section("voice")))
         ref["sheet"].open()
+
+    def _mv_pick_script(self, pool):
+        """Матни тасодуфиро аз рӯйхат мегирад, ки бо матни дафъаи гузашта якхела набошад."""
+        choices = [t for t in pool if t != getattr(self, "_mv_last_script", "")] or list(pool)  # матнҳо бе матни охирин
+        text = random.choice(choices)  # як матни тасодуфӣ
+        self._mv_last_script = text  # онро ба ёд мегирем
+        return text  # матнро бармегардонем
+
+    def _mv_new_text(self):
+        """Матни нав: аввал аз AI (сервер), агар нашуд аз рӯйхати захиравӣ."""
+        ref = self._mv  # ҳолати саҳифаи «Овози ман»
+        self._mv_say(self.t("myvoice_newtext_wait"))  # менависем, ки матн омода мешавад
+
+        def job():
+            text = ""  # матни AI (аввал холӣ)
+            try:
+                data = self._json_call("GET", "/voice/script?language=" + self.language, None, timeout=30)  # аз сервер матн мепурсем
+                text = str(data.get("text", "")).strip()  # матни ҷавобро мегирем
+            except Exception:
+                save_crash("Voice script failed:\n" + traceback.format_exc())  # хаторо сабт мекунем
+            if not text or text == getattr(self, "_mv_last_script", ""):  # агар матн нест ё ҳамон пештара аст
+                text = self._mv_pick_script(MY_VOICE_SCRIPTS.get(self.language, MY_VOICE_SCRIPTS["tg"]))  # аз рӯйхати захиравӣ мегирем
+
+            def show(dt):
+                self._mv_last_script = text  # матни нишондодашударо ба ёд мегирем
+                try:
+                    ref["sample"].text = mk(text)  # матнро дар саҳифа менависем
+                except Exception:
+                    pass  # агар саҳифа баста шуда бошад, хомӯш мегузарем
+                self._mv_say("")  # хати ҳолатро тоза мекунем
+            Clock.schedule_once(show, 0)  # дар риштаи асосии экран нишон медиҳем
+        threading.Thread(target=job, daemon=True).start()  # корро дар риштаи алоҳида иҷро мекунем
+
+    def _mv_pick_file(self):
+        """Файли овозиро аз телефон интихоб мекунад (mp3, m4a, wav ва ғайра)."""
+        try:
+            from jnius import autoclass  # китобхонаи пайвастшавӣ ба Android
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")  # дарчаи асосии барнома
+            Intent = autoclass("android.content.Intent")  # ниятҳои Android
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)  # интихоби ҳуҷҷат
+            intent.addCategory(Intent.CATEGORY_OPENABLE)  # танҳо файлҳои кушодашаванда
+            intent.setType("audio/*")  # танҳо файлҳои овозӣ
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)  # иҷозати хондан
+            self._external()  # ба барнома мегӯем, ки ҳозир ба барномаи беруна мераванд (қулфи PIN халал нарасонад)
+            self._mv_file_pending = True  # ишора: интизори натиҷаи интихоб ҳастем
+            PythonActivity.mActivity.startActivityForResult(intent, 7416)  # интихобкунаки файлро мекушоем
+        except Exception:
+            save_crash("Voice file picker failed:\n" + traceback.format_exc())  # хаторо сабт мекунем
+            self._mv_say(self.t("file_picker_failed"))  # ба корбар хабар медиҳем
+
+    def _mv_file_picked(self, result_code, data):
+        """Файли интихобшударо ба папкаи барнома мекопия мекунад ва барои фиристодан омода мекунад."""
+        try:
+            from jnius import autoclass  # китобхонаи пайвастшавӣ ба Android
+            Activity = autoclass("android.app.Activity")  # барои RESULT_OK
+            if result_code != Activity.RESULT_OK or data is None or data.getData() is None:  # агар корбар бекор кард
+                return  # ҳеҷ кор намекунем
+            uri = data.getData()  # суроғаи файли интихобшуда
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()  # хонандаи ҳуҷҷатҳо
+            mime = str(resolver.getType(uri) or "audio/mp4")  # навъи файл
+            ext = {"audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav",
+                   "audio/ogg": "ogg", "audio/aac": "aac", "audio/flac": "flac"}.get(mime, "m4a")  # пасванд аз рӯи навъ
+            raw = self._read_uri_bytes(resolver, uri, 10 * 1024 * 1024)  # файлро то 10 МБ мехонем
+            if not raw or len(raw) > 10 * 1024 * 1024:  # агар холӣ ё хеле калон аст
+                Clock.schedule_once(lambda dt: self._mv_say(self.t("myvoice_file_big")), 0)  # огоҳӣ медиҳем
+                return  # қатъ мекунем
+            path = os.path.join(self.user_data_dir, "my_voice_file_" + uuid.uuid4().hex[:8] + "." + ext)  # ҷои нигоҳдорӣ
+            with open(path, "wb") as handle:  # файлро барои навиштан мекушоем
+                handle.write(raw)  # маълумотро менависем
+
+            def ready(dt):
+                ref = self._mv  # ҳолати саҳифа
+                ref["path"] = path  # роҳи файли нав
+                ref["fname"] = "my_voice." + ext  # номи файл барои фиристодан
+                ref["ctype"] = mime if mime.startswith("audio/") else "audio/mp4"  # навъи файл барои фиристодан
+                self._mv_say(self.t("myvoice_file_ready"))  # менависем, ки файл тайёр аст
+            Clock.schedule_once(ready, 0)  # дар риштаи асосии экран иҷро мекунем
+        except Exception:
+            save_crash("Voice file read failed:\n" + traceback.format_exc())  # хаторо сабт мекунем
+            Clock.schedule_once(lambda dt: self._mv_say(self.t("myvoice_fail_rec")), 0)  # ба корбар хабар медиҳем
 
     def _mv_say(self, text):
         try:
@@ -14522,7 +14697,7 @@ class JarvisApp(App):
             recorder.setOutputFile(path)
             recorder.prepare()
             recorder.start()
-            ref.update({"rec": recorder, "path": path, "t0": time.time()})
+            ref.update({"rec": recorder, "path": path, "t0": time.time(), "fname": "my_voice.m4a", "ctype": "audio/mp4"})
             rec_btn.text = mk(self.t("myvoice_stop"))
             ref["tick"] = Clock.schedule_interval(lambda dt: self._mv_say(self.t("myvoice_recording").format(int(time.time() - ref["t0"]))), 0.5)
         except Exception:
@@ -14577,7 +14752,7 @@ class JarvisApp(App):
                 with open(path, "rb") as handle:
                     audio = handle.read()
                 boundary = "----SAIVoice" + uuid.uuid4().hex
-                body = (("--" + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="my_voice.m4a"\r\nContent-Type: audio/mp4\r\n\r\n').encode("utf-8")
+                body = (("--" + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + ref.get("fname", "my_voice.m4a") + '"\r\nContent-Type: ' + ref.get("ctype", "audio/mp4") + '\r\n\r\n').encode("utf-8")
                         + audio + ("\r\n--" + boundary + "--\r\n").encode("utf-8"))
                 request = urllib.request.Request(SERVER_BASE + "/voice/clone?consent=1", data=body, method="POST", headers={
                     "Content-Type": "multipart/form-data; boundary=" + boundary, "Authorization": "Bearer " + self.server_token,
@@ -14597,6 +14772,7 @@ class JarvisApp(App):
                     self.my_voice_id = voice_id
                     self.fish_voice = voice_id
                     self.fish_voice_name = self.t("myvoice_title")
+                    self.fish_voice_desc = ""
                     self.voice_engine = "fish"
                     self.save_settings()
                     try:
@@ -14672,10 +14848,11 @@ class JarvisApp(App):
         self.save_settings()
         self.open_section("voice")
 
-    def pick_fish_voice(self, voice_id, name, sheet_ref):
-        self._sample_stop()
-        self.fish_voice = voice_id or ""
-        self.fish_voice_name = name or ""
+    def pick_fish_voice(self, voice_id, name, sheet_ref, desc=""):
+        self._sample_stop()  # намунаи шунавоӣ қатъ мешавад
+        self.fish_voice = voice_id or ""  # ID-и овози интихобшуда
+        self.fish_voice_name = name or ""  # номи овоз
+        self.fish_voice_desc = (desc or "")[:200]  # тавсифи овоз (барои оҳанги AI)
         self.save_settings()
         try:
             sheet_ref["s"].dismiss()
@@ -14733,7 +14910,7 @@ class JarvisApp(App):
                 label = "[b]" + mk(it["title"][:40]) + "[/b]\n[size=11sp][color=" + muted() + "]" + \
                         mk(", ".join(it.get("languages", [])[:4]) + ("  \u00b7  " + it["author"] if it.get("author") else "")) + "[/color][/size]"
                 pick = FrostButton(tint=tint, alpha=0.26 if on else 0.10, text=label, font_size=dp(14), color=hex_color(theme["text"]))
-                pick.bind(on_release=lambda inst, i=it: self.pick_fish_voice(i["id"], i["title"], sheet_ref))
+                pick.bind(on_release=lambda inst, i=it: self.pick_fish_voice(i["id"], i["title"], sheet_ref, i.get("description", "")))
                 row.add_widget(pick)
                 if it.get("sample"):
                     play = IconButton(kind="play", tint=tint, alpha=0.16, radius=16, icon_rgba=hex_color(theme["text"]),
