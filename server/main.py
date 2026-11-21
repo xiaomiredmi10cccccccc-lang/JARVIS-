@@ -1181,8 +1181,9 @@ def chat(request: ChatRequest, http_request: Request, x_jarvis_token: str | None
             sources = tavily_search(request.message, request.language)
             searched = True
             messages.append({"role": "system", "content": "Current web research for the user's question:\n" + format_search_context(sources)})
-        except RuntimeError as exc:
+        except RuntimeError as exc:  # агар ҷустуҷӯи интернет ба хато расад
             search_error = str(exc)
+            print("Web search failed:", search_error)  # сабаби хаторо дар лог менависем (масалан «Tavily returned HTTP 401»)
             messages.append({"role": "system", "content": "Web search was requested/appropriate but did not succeed. Do not claim to have searched the web or invent citations. Answer from existing knowledge and clearly state that live search is unavailable if freshness matters."})
     messages.append({"role": "user", "content": request.message})
     try:
