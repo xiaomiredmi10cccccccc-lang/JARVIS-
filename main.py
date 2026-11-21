@@ -9559,8 +9559,14 @@ class JarvisApp(App):
             intent.putExtra("sms_body", text)
             activity.startActivity(intent)
             return M["msg_ready"].format(a=(to or label))
-        if app == "whatsapp" and clean:
-            intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/%s?text=%s" % (clean, quote(text))))
+        try:  # матнро ба клипборд низ нусха мекунем: агар WhatsApp матнро нагирад, корбар онро часбонда метавонад
+            from kivy.core.clipboard import Clipboard  # клипборди Kivy
+            Clipboard.copy(text)  # матни паёмро нусха мекунем
+        except Exception:  # агар нусха нашуд
+            pass  # хомӯш мегузарем
+        save_crash("send_message info: app=%s to_len=%d number_len=%d text_len=%d" % (app, len(to), len(clean), len(text)))  # сабт барои ташхис (бе матни худи паём)
+        if app == "whatsapp" and clean and text.strip():  # агар рақам ва матн ҳаст
+            intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=%s&text=%s" % (clean, quote(text, safe=""))))  # суроғаи расмии WhatsApp бо матни пурра рамзшуда
             intent.setPackage("com.whatsapp")
             try:
                 activity.startActivity(intent)
@@ -14665,9 +14671,9 @@ class JarvisApp(App):
 
     def _mv_say(self, text):
         try:
-            self._mv["status"].text = mk(text)
-        except Exception:
-            pass
+            self._mv["status"].text = str(text)  # матнро бе мк() менависем: ин хат аломатҳои махсусро ба «&bl;» табдил намекунад
+        except Exception:  # агар саҳифа баста шуда бошад
+            pass  # хомӯш мегузарем
 
     def _mv_toggle(self, rec_btn, send_btn):
         ref = self._mv
@@ -14788,7 +14794,13 @@ class JarvisApp(App):
                 except Exception:
                     pass
                 save_crash("My voice upload failed: " + type(exc).__name__ + " " + detail + "\n" + traceback.format_exc())
-                msg = self.t("myvoice_fail_send") + " [" + type(exc).__name__ + (" " + str(getattr(exc, "code", "")) if hasattr(exc, "code") else "") + "]"
+                reason = ""  # сабаби хато аз ҷониби сервер (аввал холӣ)
+                try:  # кӯшиш мекунем, ки матни хатои серверро хонем
+                    reason = str(json.loads(detail).get("detail", ""))[:160]  # майдони «detail»-и ҷавоби JSON
+                except Exception:  # агар ҷавоб JSON набошад
+                    reason = ""  # сабаб холӣ мемонад
+                code = (" " + str(getattr(exc, "code", ""))) if hasattr(exc, "code") else ""  # рамзи HTTP (масалан 502)
+                msg = self.t("myvoice_fail_send") + "\n(" + (reason or (type(exc).__name__ + code)) + ")"  # хабар бо сабаб дар қавс
                 Clock.schedule_once(lambda dt: self._mv_say(msg), 0)
         threading.Thread(target=job, daemon=True).start()
 
