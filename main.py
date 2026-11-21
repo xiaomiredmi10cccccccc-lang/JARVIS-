@@ -14540,9 +14540,10 @@ class JarvisApp(App):
         info.bind(size=lambda inst, sz: setattr(inst, "text_size", (sz[0], None)))
         inner.add_widget(info)
         pool = MY_VOICE_SCRIPTS.get(self.language, MY_VOICE_SCRIPTS["tg"])  # матнҳои захиравӣ барои забони ҷорӣ
-        sample = make_label(self._mv_pick_script(pool), 14, theme["text"], False, size_hint_y=None, height=dp(150), halign="left")  # матни тасодуфӣ
-        sample.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))  # паҳнои матн ба паҳнои экран мувофиқ мешавад
-        sample.bind(texture_size=lambda inst, ts: setattr(inst, "height", ts[1] + dp(12)))  # баландӣ аз рӯи матн иваз мешавад
+        sample = Label(text=self._mv_pick_script(pool), font_size=dp(14), color=hex_color(theme["text"]), halign="left", valign="top",
+                       size_hint_y=None, height=dp(150))  # Label-и оддӣ (на make_label): он text_size-ро аз баландии худ намегирад ва ҳалқаи беохир намешавад
+        sample.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))  # паҳнои матн = паҳнои хат, баландӣ озод
+        sample.bind(texture_size=lambda inst, ts: setattr(inst, "height", max(dp(60), ts[1] + dp(12))))  # баландии хат аз баландии воқеии матн (як маротиба, бе афзоиш)
         inner.add_widget(sample)  # матнро ба саҳифа мегузорем
         ref["sample"] = sample  # онро ба ёд мегирем, то тугмаи «Матни нав» иваз карда тавонад
         new_text_btn = FrostButton(tint=tint, alpha=0.12, text=mk(self.t("myvoice_newtext")), font_size=dp(13), size_hint_y=None,
