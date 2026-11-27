@@ -23,6 +23,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Add the wake word screen to main.py (optional)
+        continue-on-error: true
+        shell: bash
+        run: |
+          python .github/workflows/apply_wake_patch.py main.py
+
       - name: Install Java and system dependencies
         shell: bash
         run: |
